@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import {
   Activity,
   ArrowLeft,
@@ -12,6 +12,7 @@ import {
   Gift,
   LayoutTemplate,
   Lightbulb,
+  LoaderCircle,
   Mic,
   MessageCircle,
   Music2,
@@ -24,6 +25,7 @@ import {
   WandSparkles,
 } from 'lucide-react'
 import './App.css'
+import { askGenie } from './services/genie'
 
 type AppView = 'onboarding' | 'prelive' | 'live'
 type Scene = 'quality' | 'interaction' | 'troubleshoot' | 'pk'
@@ -34,6 +36,11 @@ type Metric = {
   value: string
   score: number
   tone: 'good' | 'warn' | 'bad'
+}
+
+type ChatMessage = {
+  role: 'user' | 'assistant'
+  text: string
 }
 
 const sceneCopy: Record<Scene, { title: string; detail: string; action: string }> = {
@@ -91,6 +98,10 @@ function App() {
   const [cameraEnabled, setCameraEnabled] = useState(false)
   const [cameraError, setCameraError] = useState('')
   const [readyScore, setReadyScore] = useState(45)
+  const [genieInput, setGenieInput] = useState('')
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [genieError, setGenieError] = useState('')
+  const [isAskingGenie, setIsAskingGenie] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const cameraAttemptedRef = useRef(false)
@@ -134,6 +145,36 @@ function App() {
   const applySuggestion = () => {
     setApplied(true)
     if (view === 'prelive') setReadyScore((score) => Math.min(score + 18, 100))
+  }
+
+  const handleGenieSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const question = genieInput.trim()
+    if (!question || isAskingGenie) return
+
+    const context = view === 'prelive'
+      ? '当前处于开播准备阶段，直播主题是晚间唱歌聊天。'
+      : `当前处于直播中，诊断场景是${sceneCopy[scene].title}。`
+    const prompt = [
+      '你是 LIVE Studio Genie，一名专业、简洁的中文直播间助手。',
+      context,
+      '根据当前状态回答主播的问题。给出可直接执行的建议，保持在 120 个汉字以内。',
+      `主播问题：${question}`,
+    ].join('\n')
+
+    setChatMessages((messages) => [...messages, { role: 'user', text: question }])
+    setGenieInput('')
+    setGenieError('')
+    setIsAskingGenie(true)
+
+    try {
+      const result = await askGenie(prompt)
+      setChatMessages((messages) => [...messages, { role: 'assistant', text: result.text }])
+    } catch (error) {
+      setGenieError(error instanceof Error ? error.message : 'Genie 暂时无法响应。')
+    } finally {
+      setIsAskingGenie(false)
+    }
   }
 
   if (view === 'onboarding') {
@@ -252,10 +293,16 @@ function App() {
             <div><strong>{view === 'prelive' ? '为你生成了开播方案' : '我发现了一个机会点'}</strong><p>{view === 'prelive' ? '根据音乐聊天主题，已匹配舒适陪伴型场景。' : sceneCopy[scene].detail}</p></div>
           </div>
           {view === 'prelive' ? <PreliveRecommendation applied={applied} onApply={applySuggestion} /> : <SceneRecommendation scene={scene} applied={applied} onApply={applySuggestion} />}
-          <div className="genie-composer">
-            <input placeholder="问 Genie：帮我调整一下…" aria-label="向 Genie 提问" />
-            <button type="button" aria-label="发送消息"><Send size={16} /></button>
-          </div>
+          {chatMessages.length > 0 && <div className="genie-conversation" aria-live="polite">
+            {chatMessages.map((message, index) => <p key={`${message.role}-${index}`} className={message.role}>{message.text}</p>)}
+          </div>}
+          {genieError && <p className="genie-error">{genieError}</p>}
+          <form className="genie-composer" onSubmit={handleGenieSubmit}>
+            <input value={genieInput} onChange={(event) => setGenieInput(event.target.value)} placeholder="问 Genie：帮我调整一下…" aria-label="向 Genie 提问" />
+            <button type="submit" disabled={!genieInput.trim() || isAskingGenie} aria-label="发送消息">
+              {isAskingGenie ? <LoaderCircle size={16} className="loading-icon" /> : <Send size={16} />}
+            </button>
+          </form>
         </aside>
       </section>
     </main>
