@@ -294,11 +294,22 @@ function App() {
           </div>
           {view === 'prelive' ? <PreliveRecommendation applied={applied} onApply={applySuggestion} /> : <SceneRecommendation scene={scene} applied={applied} onApply={applySuggestion} />}
           {chatMessages.length > 0 && <div className="genie-conversation" aria-live="polite">
-            {chatMessages.map((message, index) => <p key={`${message.role}-${index}`} className={message.role}>{message.text}</p>)}
+            {chatMessages.map((message, index) => (
+              <article key={`${message.role}-${index}`} className={`chat-message ${message.role}`}>
+                <div className="chat-message-meta">
+                  <span>{message.role === 'assistant' ? 'Genie' : '你'}</span>
+                  <small>{message.role === 'assistant' ? '直播助手' : '刚刚'}</small>
+                </div>
+                <p>{message.text}</p>
+              </article>
+            ))}
           </div>}
           {genieError && <p className="genie-error">{genieError}</p>}
           <form className="genie-composer" onSubmit={handleGenieSubmit}>
-            <input value={genieInput} onChange={(event) => setGenieInput(event.target.value)} placeholder="问 Genie：帮我调整一下…" aria-label="向 Genie 提问" />
+            <div className="composer-field">
+              <input value={genieInput} onChange={(event) => setGenieInput(event.target.value)} placeholder="问 Genie：帮我调整一下…" aria-label="向 Genie 提问" />
+              <span>Enter 发送</span>
+            </div>
             <button type="submit" disabled={!genieInput.trim() || isAskingGenie} aria-label="发送消息">
               {isAskingGenie ? <LoaderCircle size={16} className="loading-icon" /> : <Send size={16} />}
             </button>
