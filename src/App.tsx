@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   Activity,
   ArrowLeft,
@@ -93,6 +93,7 @@ function App() {
   const [readyScore, setReadyScore] = useState(45)
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
+  const cameraAttemptedRef = useRef(false)
 
   useEffect(() => {
     return () => streamRef.current?.getTracks().forEach((track) => track.stop())
@@ -104,8 +105,11 @@ function App() {
     }
   }, [cameraEnabled])
 
-  const enableCamera = async () => {
+  const enableCamera = useCallback(async () => {
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('Camera API is unavailable')
+      }
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       streamRef.current = stream
       setCameraEnabled(true)
@@ -113,7 +117,13 @@ function App() {
     } catch {
       setCameraError('未获取到摄像头权限，已使用演示画面。')
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (view === 'onboarding' || cameraEnabled || cameraAttemptedRef.current) return
+    cameraAttemptedRef.current = true
+    void enableCamera()
+  }, [cameraEnabled, enableCamera, view])
 
   const changeScene = (nextScene: Scene) => {
     setScene(nextScene)
