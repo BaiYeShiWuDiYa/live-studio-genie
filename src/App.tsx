@@ -98,11 +98,16 @@ function App() {
     return () => streamRef.current?.getTracks().forEach((track) => track.stop())
   }, [])
 
+  useEffect(() => {
+    if (cameraEnabled && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current
+    }
+  }, [cameraEnabled])
+
   const enableCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       streamRef.current = stream
-      if (videoRef.current) videoRef.current.srcObject = stream
       setCameraEnabled(true)
       setCameraError('')
     } catch {
