@@ -34,7 +34,7 @@ http://localhost:5173
 
 ## 配置 Genie Agent
 
-右侧 Genie 对话调用 `gpt-5.4-2026-03-05`。每位开发者都需要在项目根目录创建自己的 `.env.local` 文件：
+右侧 Genie 对话调用 `gpt-5.4-2026-03-05`。每位开发者都需要在项目根目录创建自己的 `.env` 文件：
 
 ```env
 GENIE_MODEL_AK=你的模型访问密钥
@@ -43,7 +43,7 @@ GENIE_MODEL_BASE_URL=https://aidp-i18ntt-sg.tiktok-row.net
 
 说明：
 
-- `.env.local` 仅保存在本地，已经被 Git 忽略，禁止提交访问密钥。
+- `.env` 仅保存在本地，已经被 Git 忽略，禁止提交访问密钥。
 - 在非办公网络环境中，如有需要可将域名改为：
 
 ```env
@@ -51,7 +51,7 @@ GENIE_MODEL_BASE_URL=https://aidp-i18ntt-sg.byteintl.net
 ```
 
 - 未配置 `GENIE_MODEL_AK` 时，UI 和其他演示功能仍可运行；发送 Genie 对话时会显示配置错误提示。
-- 修改 `.env.local` 后，重启 `npm run dev`，确保开发服务器重新加载环境变量。
+- 修改 `.env` 后，重启 `npm run dev`，确保开发服务器重新加载环境变量。
 
 ## 常用命令
 
@@ -96,6 +96,6 @@ vite.config.ts         开发环境 Agent 同源代理，密钥仅在服务端�
 
 ## 协作约定
 
-- 不要提交 `.env.local`、密钥或本地调试文件。
+- 不要提交 `.env`、密钥或本地调试文件。
 - 提交信息采用简短格式，例如：`feat: refine genie chat ui`。
 - 保持 Agent 请求经过 `vite.config.ts` 的同源代理，不能将 AK 暴露给浏览器端代码。
