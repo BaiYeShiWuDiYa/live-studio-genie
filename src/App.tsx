@@ -18,6 +18,8 @@ import {
   Music2,
   Play,
   RefreshCw,
+  RotateCcw,
+  Save,
   Send,
   Sparkles,
   Users,
@@ -30,6 +32,7 @@ import { askGenie } from './services/genie'
 type AppView = 'onboarding' | 'prelive' | 'live'
 type Scene = 'quality' | 'interaction' | 'troubleshoot' | 'pk'
 type StreamKind = 'music' | 'chat' | 'game'
+type PreliveTask = 'layout' | 'visual' | 'content' | 'interaction'
 
 type Metric = {
   label: string
@@ -89,6 +92,13 @@ const sceneMetrics: Record<Scene, Metric[]> = {
   ],
 }
 
+const preliveTasks: Array<{ id: PreliveTask; title: string; detail: string; action: string }> = [
+  { id: 'layout', title: '确认画布布局', detail: '当前为单人竖屏相机布局，你可以换一种布局或选择画面源后生成。', action: '确认当前布局' },
+  { id: 'visual', title: '完成画风检测', detail: '检测到光线偏冷，建议预览暖色补光和轻度磨皮。', action: '应用画面预览' },
+  { id: 'content', title: '确认标题与开场脚本', detail: '已生成直播标题、首 3 分钟口播与点歌顺序。', action: '应用内容方案' },
+  { id: 'interaction', title: '设置互动开场', detail: '建议首屏展示点歌投票，降低新观众参与门槛。', action: '添加点歌投票' },
+]
+
 function App() {
   const [view, setView] = useState<AppView>('onboarding')
   const [streamType, setStreamType] = useState<StreamKind>('music')
@@ -98,6 +108,8 @@ function App() {
   const [cameraEnabled, setCameraEnabled] = useState(false)
   const [cameraError, setCameraError] = useState('')
   const [readyScore, setReadyScore] = useState(45)
+  const [preliveTaskIndex, setPreliveTaskIndex] = useState(0)
+  const [showGoLive, setShowGoLive] = useState(false)
   const [genieInput, setGenieInput] = useState('')
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [genieError, setGenieError] = useState('')
@@ -144,7 +156,24 @@ function App() {
 
   const applySuggestion = () => {
     setApplied(true)
-    if (view === 'prelive') setReadyScore((score) => Math.min(score + 18, 100))
+  }
+
+  const completePreliveTask = () => {
+    setApplied(true)
+    setReadyScore((score) => Math.min(score + 14, 100))
+    if (preliveTaskIndex < preliveTasks.length - 1) {
+      setPreliveTaskIndex((index) => index + 1)
+      return
+    }
+    setReadyScore(100)
+  }
+
+  const saveConfiguration = () => {
+    setShowGoLive(true)
+  }
+
+  const undoSuggestion = () => {
+    setApplied(false)
   }
 
   const handleGenieSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -279,9 +308,11 @@ function App() {
           </div>
           {view === 'prelive' && (
             <div className="prelive-footer">
-              <div><b>准备度 {readyScore} / 100</b><span>再完成 3 项即可开播</span></div>
+              <div><b>准备度 {readyScore} / 100</b><span>{readyScore === 100 ? '所有播前任务已完成' : `再完成 ${preliveTasks.length - preliveTaskIndex} 项即可开播`}</span></div>
               <div className="score-track"><i style={{ width: `${readyScore}%` }} /></div>
-              <button className="primary-button" type="button" onClick={() => setView('live')}><Play size={16} fill="currentColor" />开始直播</button>
+              {readyScore === 100
+                ? <button className="primary-button" type="button" onClick={saveConfiguration}><Save size={16} />保存配置</button>
+                : <button className="secondary-button" type="button" disabled>完成任务后保存</button>}
             </div>
           )}
         </section>
@@ -292,7 +323,9 @@ function App() {
             <div className="mini-orb"><Sparkles size={17} /></div>
             <div><strong>{view === 'prelive' ? '为你生成了开播方案' : '我发现了一个机会点'}</strong><p>{view === 'prelive' ? '根据音乐聊天主题，已匹配舒适陪伴型场景。' : sceneCopy[scene].detail}</p></div>
           </div>
-          {view === 'prelive' ? <PreliveRecommendation applied={applied} onApply={applySuggestion} /> : <SceneRecommendation scene={scene} applied={applied} onApply={applySuggestion} />}
+          {view === 'prelive'
+            ? <PreliveTaskCard task={preliveTasks[preliveTaskIndex]} completedCount={preliveTaskIndex} onApply={completePreliveTask} />
+            : <SceneRecommendation scene={scene} applied={applied} onApply={applySuggestion} onUndo={undoSuggestion} />}
           {chatMessages.length > 0 && <div className="genie-conversation" aria-live="polite">
             {chatMessages.map((message, index) => (
               <article key={`${message.role}-${index}`} className={`chat-message ${message.role}`}>
@@ -316,6 +349,20 @@ function App() {
           </form>
         </aside>
       </section>
+      {showGoLive && (
+        <div className="golive-overlay" role="dialog" aria-modal="true" aria-label="播前准备完成">
+          <section className="golive-dialog">
+            <div className="golive-mark"><Check size={26} /></div>
+            <span>配置已保存</span>
+            <h2>播前准备百分百，去开播</h2>
+            <p>标题、画面预览、互动开场和脚本已同步到本场直播。</p>
+            <button className="primary-button golive-button" type="button" onClick={() => { setShowGoLive(false); setView('live') }}>
+              <Play size={17} fill="currentColor" />GO LIVE
+            </button>
+            <button className="card-text-button" type="button" onClick={() => setShowGoLive(false)}>返回继续调整</button>
+          </section>
+        </div>
+      )}
     </main>
   )
 }
@@ -367,11 +414,21 @@ function DemoOpponent() {
   return <div className="demo-opponent"><div className="opponent-hair" /><div className="opponent-face" /><div className="opponent-body" /></div>
 }
 
-function PreliveRecommendation({ applied, onApply }: { applied: boolean; onApply: () => void }) {
-  return <div className="recommendation-card"><span className="card-kicker">推荐方案</span><h2>温柔陪伴 · 音乐现场</h2><p>暖色背景、点歌投票和开场欢迎语，适合 20:00 后的轻松聊天氛围。</p><div className="template-grid"><span>暖光<br />氛围</span><span>点歌<br />投票</span><span>欢迎<br />贴纸</span></div><button className="primary-button full-button" type="button" onClick={onApply}>{applied ? <><Check size={16} />已应用方案</> : <><WandSparkles size={16} />一键应用方案</>}</button><button className="card-text-button" type="button">查看参数</button></div>
+function PreliveTaskCard({ task, completedCount, onApply }: { task: typeof preliveTasks[number]; completedCount: number; onApply: () => void }) {
+  return <div className="recommendation-card prelive-task-card">
+    <span className="card-kicker">播前任务 {completedCount + 1} / {preliveTasks.length}</span>
+    <h2>{task.title}</h2>
+    <p>{task.detail}</p>
+    {task.id === 'layout' && <div className="task-choice-row"><button type="button" className="task-choice selected"><Camera size={15} />单人竖屏</button><button type="button" className="task-choice"><LayoutTemplate size={15} />换一种布局</button></div>}
+    {task.id === 'visual' && <div className="adjustments"><Adjustment label="暖色" value="+18" /><Adjustment label="磨皮" value="20%" /></div>}
+    {task.id === 'content' && <div className="script-preview"><span>首 30 秒口播</span><p>“刚进来的朋友先选一首歌，今天我们轻松聊聊。”</p></div>}
+    {task.id === 'interaction' && <div className="interaction-widget"><div><Gift size={17} /><span>点歌投票</span></div><p>甜歌还是炸场？评论区打 1 或 2</p><small>仅预览，确认后在开播时上屏</small></div>}
+    <button className="primary-button full-button" type="button" onClick={onApply}><Check size={16} />{task.action}</button>
+    <button className="card-text-button" type="button">跳过并稍后处理</button>
+  </div>
 }
 
-function SceneRecommendation({ scene, applied, onApply }: { scene: Scene; applied: boolean; onApply: () => void }) {
+function SceneRecommendation({ scene, applied, onApply, onUndo }: { scene: Scene; applied: boolean; onApply: () => void; onUndo: () => void }) {
   const copy = sceneCopy[scene]
   return <div className={`recommendation-card ${scene}`}>
     <span className="card-kicker">{scene === 'troubleshoot' ? '需要确认' : '实时建议'}</span>
@@ -382,7 +439,7 @@ function SceneRecommendation({ scene, applied, onApply }: { scene: Scene; applie
     {scene === 'troubleshoot' && <div className="adjustments"><Adjustment label="麦克风" value="+8%" /><Adjustment label="BGM" value="-5%" /></div>}
     {scene === 'pk' && <div className="goal-widget"><span>本轮冲刺目标</span><strong>再差 1,260 分反超</strong><div><i style={{ width: '76%' }} /></div><small>已获得 38 位观众响应</small></div>}
     <button className="primary-button full-button" type="button" onClick={onApply}>{applied ? <><Check size={16} />已应用</> : <><Sparkles size={16} />{copy.action}</>}</button>
-    <button className="card-text-button" type="button"><RefreshCw size={14} />换一组建议</button>
+    {applied ? <button className="card-text-button" type="button" onClick={onUndo}><RotateCcw size={14} />撤回最近一次调整</button> : <button className="card-text-button" type="button"><RefreshCw size={14} />换一组建议</button>}
   </div>
 }
 
