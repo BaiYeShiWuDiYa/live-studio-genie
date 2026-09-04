@@ -1142,56 +1142,134 @@
 .onboarding-shell {
   min-height: 100vh;
   color: #edf1fa;
-  background: #090c14;
+  background:
+    radial-gradient(ellipse at 50% 43%, rgba(49, 143, 119, 0.18), transparent 29%),
+    radial-gradient(ellipse at 31% 87%, rgba(23, 125, 103, 0.11), transparent 25%),
+    #040807;
   position: relative;
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
-.ambient-grid {
+.onboarding-aurora {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(#ffffff05 1px, transparent 1px),
-    linear-gradient(90deg, #ffffff05 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: linear-gradient(to bottom, black, transparent 70%);
+    radial-gradient(circle at 50% 38%, rgba(76, 220, 180, 0.18), transparent 12%),
+    radial-gradient(ellipse at 58% 8%, rgba(58, 187, 157, 0.12), transparent 28%);
+  filter: blur(18px);
+  pointer-events: none;
+}
+.onboarding-stars i {
+  position: absolute;
+  z-index: 1;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #d6fff7;
+  box-shadow: 0 0 12px #7ee8d4;
+}
+.onboarding-stars i:nth-child(1) { top: 12%; left: 15%; }
+.onboarding-stars i:nth-child(2) { top: 16%; left: 41%; }
+.onboarding-stars i:nth-child(3) { top: 14%; right: 14%; }
+.onboarding-stars i:nth-child(4) { top: 36%; right: 12%; }
+.onboarding-stars i:nth-child(5) { top: 52%; left: 16%; }
+.onboarding-stars i:nth-child(6) { top: 69%; right: 19%; }
+.onboarding-stars i:nth-child(7) { bottom: 12%; left: 28%; }
+.onboarding-stars i:nth-child(8) { bottom: 8%; right: 47%; }
+.onboarding-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #edf1f4;
+  font-size: 14px;
+}
+.onboarding-brand span {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #303a39;
+  border-radius: 7px;
+  background: #080d0d;
+}
+.onboarding-brand span svg { color: #d0fff7; }
+.onboarding-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #7f8888;
+  font-size: 11px;
+}
+.onboarding-status i,
+.eyebrow i,
+.professional-mode > i {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: #77f0ce;
+  box-shadow: 0 0 10px rgba(119, 240, 206, 0.75);
+}
+.onboarding-status em {
+  color: #656d6d;
+  font-style: normal;
 }
 .onboarding-header {
   position: relative;
   z-index: 1;
-  height: 68px;
-  padding: 0 40px;
+  height: 62px;
+  padding: 0 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid #252b38;
-}
-.draft-status {
-  font-size: 11px;
-  color: #8791a4;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.draft-status span {
-  width: 6px;
-  height: 6px;
-  background: #6bdac4;
-  border-radius: 50%;
 }
 .welcome-card {
-  position: relative;
-  z-index: 1;
-  margin: auto;
-  text-align: center;
-  width: min(600px, calc(100% - 32px));
-  padding: 44px 36px 33px;
-  border: 1px solid #2b3345;
-  border-radius: 16px;
-  background: #101521e8;
-  box-shadow: 0 28px 80px #00000055;
+  position: absolute;
+  z-index: 2;
+  top: 29%;
+  left: 50%;
+  width: min(690px, calc(100% - 40px));
+  padding: 68px 36px 32px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(109, 227, 195, 0.58);
+  border-radius: 21px;
+  background:
+    linear-gradient(125deg, rgba(15, 33, 30, 0.94), rgba(10, 20, 20, 0.86)),
+    rgba(8, 16, 16, 0.9);
+  box-shadow: 0 0 0 1px rgba(62, 139, 120, 0.12), 0 26px 70px rgba(0, 0, 0, 0.48), inset 0 1px rgba(255, 255, 255, 0.05);
+  text-align: left;
 }
+.genie-beacon {
+  position: absolute;
+  top: -67px;
+  left: 50%;
+  width: 104px;
+  height: 104px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(117, 245, 206, 0.35);
+  border-radius: 50%;
+  box-shadow: 0 0 0 9px rgba(100, 236, 196, 0.04), 0 0 52px rgba(72, 236, 185, 0.36);
+}
+.genie-beacon::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border: 1px dashed rgba(118, 238, 206, 0.54);
+  border-radius: inherit;
+  animation: beacon-spin 12s linear infinite;
+}
+.genie-beacon > div {
+  position: absolute;
+  inset: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 30%, #eafff8, #72e7c5 38%, #1f816b);
+  color: #f3fffc;
+  box-shadow: 0 0 28px #72e7c5;
+}
+@keyframes beacon-spin { to { transform: rotate(360deg); } }
 .genie-orb {
   height: 62px;
   width: 62px;
@@ -1200,62 +1278,73 @@
   box-shadow: 0 0 45px #78e3d35a;
 }
 .eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   font-size: 10px;
-  letter-spacing: 0.13em;
-  color: #80ddd2;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: #9af2dd;
 }
 .welcome-card h1 {
-  font-size: 28px;
-  margin: 12px 0;
-  color: #f3f5fb;
+  font-size: 27px;
+  line-height: 1.22;
+  letter-spacing: 0;
+  margin: 18px 0 10px;
+  color: #f3f5f1;
+}
+.welcome-card h1 span {
+  color: #83eccd;
+  text-shadow: 0 0 18px rgba(113, 234, 201, 0.35);
 }
 .welcome-card > p {
-  color: #939daf;
-  line-height: 1.65;
-  font-size: 14px;
-  max-width: 430px;
-  margin: 0 auto;
+  color: #87938f;
+  line-height: 1.5;
+  font-size: 12px;
+  margin: 0;
 }
 .stream-options {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
+  justify-content: start;
   gap: 9px;
-  margin: 28px 0 16px;
+  margin: 28px 0 18px;
 }
 .stream-option {
   position: relative;
-  padding: 13px 8px;
-  border: 1px solid #30394a;
-  background: #171c28;
-  border-radius: 9px;
-  color: #aab4c6;
+  min-height: 43px;
+  padding: 0 13px;
+  border: 1px solid rgba(109, 130, 126, 0.28);
+  background: rgba(10, 17, 17, 0.72);
+  border-radius: 999px;
+  color: #bdc7c5;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
+  justify-content: center;
+  gap: 7px;
+  font-size: 11px;
   cursor: pointer;
 }
 .stream-option svg {
-  width: 19px;
+  width: 16px;
 }
 .stream-option.active {
-  border-color: #74dfd2;
-  background: #163331;
-  color: #b7f3eb;
+  border-color: #79e7cd;
+  background: linear-gradient(110deg, rgba(29, 105, 86, 0.55), rgba(21, 61, 58, 0.58));
+  color: #e5fff7;
+  box-shadow: 0 0 14px rgba(89, 221, 188, 0.15);
 }
 .stream-option > svg:last-child {
-  position: absolute;
-  right: 7px;
-  top: 7px;
-  width: 14px;
+  position: static;
+  width: 13px;
 }
 .theme-input {
-  height: 43px;
-  border: 1px solid #343d4e;
-  border-radius: 8px;
-  background: #0d111a;
-  padding: 0 10px;
+  height: 64px;
+  border: 1px solid rgba(123, 147, 143, 0.28);
+  border-radius: 13px;
+  background: rgba(7, 13, 13, 0.68);
+  padding: 0 12px 0 16px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1272,36 +1361,44 @@
   font-size: 12px;
 }
 .theme-input button {
-  border: 0;
-  background: none;
-  color: #83e3d5;
-  padding: 3px;
+  min-width: 126px;
+  height: 42px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 10px;
+  background: linear-gradient(105deg, #2a3230, #1e2524);
+  color: #d1d8d5;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 11px;
 }
-.welcome-cta {
-  margin-top: 16px;
-  padding: 12px 18px;
+.theme-input button:hover {
+  background: linear-gradient(105deg, #276e61, #2e5f68);
+  color: #f2fffb;
 }
 .arrow-forward {
   transform: rotate(180deg);
 }
-.text-button {
-  display: block;
-  border: 0;
-  background: none;
-  color: #8893a6;
+.professional-mode {
+  position: absolute;
+  z-index: 2;
+  top: calc(29% + 354px);
+  left: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(104, 228, 194, 0.3);
+  border-radius: 999px;
+  background: rgba(10, 35, 29, 0.65);
+  color: #a9bbb6;
+  padding: 10px 16px;
   font-size: 11px;
-  margin: 15px auto 0;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  box-shadow: 0 0 24px rgba(71, 222, 181, 0.12);
 }
-.onboarding-footer {
-  position: relative;
-  z-index: 1;
-  text-align: center;
-  color: #606a7c;
-  font-size: 11px;
-  padding: 24px;
-}
+.professional-mode:hover { color: #e5fff8; border-color: #71e6c9; }
 @media (max-width: 1080px) {
   .workspace {
     grid-template-columns: 230px minmax(430px, 1fr) 290px;

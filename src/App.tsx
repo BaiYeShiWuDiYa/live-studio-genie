@@ -261,33 +261,30 @@ function App() {
   if (view === 'onboarding') {
     return (
       <main className="onboarding-shell">
-        <div className="ambient-grid" />
+        <div className="onboarding-aurora" />
+        <div className="onboarding-stars" aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /><i /></div>
         <header className="onboarding-header">
-          <Brand />
-          <span className="draft-status"><span />已保存为草稿</span>
+          <div className="onboarding-brand"><span><Music2 size={15} /></span><strong>TikTok LIVE Studio</strong></div>
+          <div className="onboarding-status"><i />Genie · 灵感伙伴 <em>Beta</em></div>
         </header>
         <section className="welcome-card">
-          <div className="genie-orb"><Sparkles size={31} /></div>
-          <span className="eyebrow">LIVE STUDIO GENIE</span>
-          <h1>要开启你的直播之旅了吗？</h1>
-          <p>告诉 Genie 你今天想播什么，我会为你准备适合这一场的直播工作台。</p>
+          <div className="genie-beacon" aria-hidden="true"><div><Sparkles size={26} fill="currentColor" /></div></div>
+          <span className="eyebrow"><i />LIVE STUDIO GENIE</span>
+          <h1>要开启你的直播<span>之旅</span>了吗！<br />先告诉我，你今天想播什么？</h1>
+          <p>选一个方向，或者用你自己的话告诉精灵。</p>
           <div className="stream-options">
             <StreamOption icon={<MessageCircle />} label="聊天陪伴" active={streamType === 'chat'} onClick={() => setStreamType('chat')} />
             <StreamOption icon={<Music2 />} label="音乐现场" active={streamType === 'music'} onClick={() => setStreamType('music')} />
             <StreamOption icon={<Gamepad2 />} label="游戏直播" active={streamType === 'game'} onClick={() => setStreamType('game')} />
-            <StreamOption icon={<RefreshCw />} label="沿用上次" active={false} onClick={() => { setStreamType('music'); setStreamTopic('秀场唱歌陪伴') }} />
+            <StreamOption icon={<Sparkles />} label="其他" active={false} onClick={() => { setStreamType('music'); setStreamTopic('秀场唱歌陪伴') }} />
           </div>
           <label className="theme-input">
             <WandSparkles size={17} />
-            <input value={streamTopic} onChange={(event) => setStreamTopic(event.target.value)} aria-label="本场主题" />
-            <button type="button" aria-label="生成工作台" onClick={startWorkspace}><Send size={17} /></button>
+            <input value={streamTopic} onChange={(event) => setStreamTopic(event.target.value)} placeholder="用一句话描述今晚的直播…（或从上方选一个方向）" aria-label="本场主题" />
+            <button type="button" aria-label="生成工作台" onClick={startWorkspace}>召唤精灵 <ArrowLeft size={16} className="arrow-forward" /></button>
           </label>
-          <button className="primary-button welcome-cta" type="button" onClick={startWorkspace}>
-            生成今日开播工作台 <ArrowLeft size={17} className="arrow-forward" />
-          </button>
-          <button className="text-button" type="button" onClick={() => setView('prelive')}>跳过，直接进入专业模式</button>
         </section>
-        <div className="onboarding-footer">Genie 会根据你的选择动态生成直播方案</div>
+        <button className="professional-mode" type="button" onClick={() => setView('prelive')}><i />我很熟，直接进入专业模式 <ArrowLeft size={15} className="arrow-forward" /></button>
       </main>
     )
   }
