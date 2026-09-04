@@ -1,6 +1,9 @@
 ﻿.app-shell {
   min-height: 100vh;
-  background: #0b0d12;
+  background:
+    radial-gradient(circle at 45% 0%, rgba(45, 103, 150, 0.12), transparent 31%),
+    radial-gradient(circle at 100% 65%, rgba(117, 51, 132, 0.1), transparent 29%),
+    #0b0d12;
   color: #edf0f5;
 }
 .topbar {
@@ -84,8 +87,8 @@
   min-height: calc(100vh - 68px);
 }
 .panel {
-  background: #11151f;
-  border: 1px solid #252b37;
+  background: linear-gradient(145deg, rgba(21, 27, 40, 0.95), rgba(13, 17, 27, 0.97));
+  border: 1px solid rgba(95, 125, 158, 0.24);
   border-radius: 8px;
   min-height: 0;
 }
@@ -104,7 +107,8 @@
   font-size: 14px;
 }
 .panel-heading > div svg {
-  color: #8be4e5;
+  color: #81dff3;
+  filter: drop-shadow(0 0 7px rgba(104, 218, 244, 0.32));
 }
 .panel-heading > span {
   font-size: 11px;
@@ -113,8 +117,8 @@
 .monitor-summary {
   margin: 16px;
   padding: 14px;
-  background: #171d28;
-  border: 1px solid #2a3340;
+  background: linear-gradient(135deg, rgba(31, 72, 81, 0.74), rgba(26, 34, 51, 0.85));
+  border: 1px solid rgba(96, 212, 202, 0.28);
   border-radius: 7px;
   display: flex;
   flex-direction: column;
@@ -128,6 +132,7 @@
 .monitor-summary strong {
   font-size: 15px;
 }
+.monitor-summary small{display:flex;align-items:center;gap:5px;color:#79cfc4;font-size:10px}
 .metric-stack {
   display: grid;
   gap: 9px;
@@ -135,8 +140,8 @@
 }
 .metric-card {
   padding: 12px;
-  background: #151a24;
-  border: 1px solid #242c3a;
+  background: rgba(22, 29, 43, 0.7);
+  border: 1px solid rgba(88, 111, 144, 0.22);
   border-radius: 7px;
 }
 .metric-card > div:first-child {
@@ -164,13 +169,17 @@
   height: 100%;
   display: block;
   border-radius: inherit;
-  background: #69d8c7;
+  background: linear-gradient(90deg,#55d6df,#8297ff);
+  box-shadow: 0 0 12px rgba(94, 211, 224, 0.45);
+  transition: width 600ms ease;
 }
 .metric-track i.warn {
-  background: #f3bd77;
+  background: linear-gradient(90deg,#f0a74d,#ffdc77);
+  box-shadow: 0 0 12px rgba(240,167,77,.38);
 }
 .metric-track i.bad {
-  background: #ec7188;
+  background: linear-gradient(90deg,#ff6b8d,#e77cff);
+  box-shadow: 0 0 12px rgba(255,107,141,.38);
 }
 .comment-stream {
   margin: 22px 16px 0;
@@ -263,8 +272,11 @@
 .primary-button {
   padding: 11px 15px;
   color: #102126;
-  background: #84ddd3;
+  background: linear-gradient(100deg,#74e0d3,#82a7ff);
+  box-shadow:0 8px 20px rgba(76,178,206,.2);
+  transition:transform 160ms ease,filter 160ms ease;
 }
+.primary-button:hover{filter:brightness(1.08);transform:translateY(-1px)}
 .live-clock {
   font-size: 12px;
   color: #f1f4f7;
@@ -283,7 +295,9 @@
   flex: 1;
   min-height: 570px;
   border: 1px solid #272e3d;
-  background: #0e1119;
+  background:
+    radial-gradient(circle at 50% 12%, rgba(71, 130, 214, 0.18), transparent 34%),
+    #0a0d15;
   position: relative;
   border-radius: 8px;
   overflow: hidden;
@@ -292,17 +306,20 @@
   justify-content: center;
 }
 .live-stage.applied {
-  background: #10151c;
+  background:
+    radial-gradient(circle at 50% 12%, rgba(77, 217, 184, 0.2), transparent 35%),
+    #0b1118;
 }
 .stage-glow {
   width: 46%;
   height: 100%;
   position: absolute;
   top: 0;
-  background: radial-gradient(ellipse, rgba(116, 91, 119, 0.24), transparent 64%);
+  background: radial-gradient(ellipse, rgba(91, 132, 235, 0.26), transparent 64%);
   filter: blur(24px);
   border-radius: 50%;
 }
+.scene-interaction .stage-glow{background:radial-gradient(ellipse,rgba(238,151,85,.28),transparent 64%)}.scene-troubleshoot .stage-glow{background:radial-gradient(ellipse,rgba(226,74,114,.24),transparent 64%)}.scene-pk .stage-glow{background:radial-gradient(ellipse,rgba(177,90,235,.3),transparent 64%)}.scan-lines{position:absolute;inset:0;z-index:2;pointer-events:none;opacity:.2;background:repeating-linear-gradient(0deg,transparent 0 4px,rgba(126,185,255,.1) 4px 5px);mix-blend-mode:overlay;animation:scan 8s linear infinite}@keyframes scan{to{background-position:0 120px}}
 .host-stage,
 .opponent-stage {
   height: 100%;
@@ -483,6 +500,7 @@
 .audio-meter i:nth-last-child(2) {
   height: 18px;
 }
+.adjustment-toast{position:absolute;z-index:5;top:58px;right:14px;max-width:218px;display:flex;gap:8px;padding:9px 10px;border:1px solid rgba(120,231,219,.45);border-radius:7px;background:rgba(12,35,39,.88);backdrop-filter:blur(10px);color:#b9f7ef;animation:toast-in 300ms ease both}.adjustment-toast svg{flex:none;color:#8ce8dd}.adjustment-toast b,.adjustment-toast span{display:block}.adjustment-toast b{font-size:11px}.adjustment-toast span{margin-top:2px;color:#a7c7c7;font-size:10px;line-height:1.4}.live-poll{position:absolute;z-index:5;left:50%;bottom:84px;width:min(280px,calc(100% - 30px));padding:12px;transform:translateX(-50%);border:1px solid rgba(255,204,112,.46);border-radius:9px;background:linear-gradient(135deg,rgba(76,50,35,.94),rgba(46,35,72,.94));box-shadow:0 16px 38px rgba(0,0,0,.3);animation:toast-in 300ms ease both}.live-poll>span{color:#f4c86d;font-size:10px}.live-poll strong{display:block;margin:5px 0 10px;font-size:13px}.live-poll>div{display:grid;grid-template-columns:1fr 1fr;gap:7px}.live-poll button{padding:8px 7px;border:1px solid rgba(255,255,255,.14);border-radius:6px;background:rgba(255,255,255,.08);color:#f7e9ce;font-size:10px;text-align:left}.live-poll b{float:right;color:#ffd878}@keyframes toast-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}.live-poll{animation:poll-in 320ms ease both}@keyframes poll-in{from{opacity:0;transform:translate(-50%,12px)}to{opacity:1;transform:translate(-50%,0)}}
 .pk-stage .host-stage,
 .pk-stage .opponent-stage {
   max-width: none;
@@ -616,6 +634,7 @@
   background: #40202b;
   border-color: #e47d98;
 }
+.active-control{border-color:#69e2d5;background:linear-gradient(135deg,#153c3d,#253653);color:#ccfff7;box-shadow:0 0 17px rgba(77,221,208,.13)}
 .prelive-footer {
   border: 1px solid #2b3342;
   background: #131924;
@@ -646,8 +665,8 @@
   flex-direction: column;
   overflow: hidden;
   background:
-    linear-gradient(180deg, rgba(39, 70, 75, 0.15), transparent 25%),
-    #11151f;
+    linear-gradient(180deg, rgba(62, 92, 185, 0.2), transparent 26%),
+    linear-gradient(145deg, rgba(22, 31, 49, .98), rgba(15, 18, 29, .98));
 }
 .genie-intro {
   padding: 18px;
@@ -660,7 +679,7 @@
   display: grid;
   place-items: center;
   border-radius: 8px;
-  background: #80dbd1;
+  background: linear-gradient(135deg,#77e5dc,#8294ff);
   color: #10272a;
 }
 .mini-orb {
@@ -679,22 +698,22 @@
 .recommendation-card {
   margin: 0 18px;
   padding: 16px;
-  background: #142224;
-  border: 1px solid #2d5655;
+  background: linear-gradient(140deg,rgba(26,65,68,.96),rgba(23,34,52,.96));
+  border: 1px solid rgba(97,223,211,.34);
   border-radius: 8px;
   box-shadow: inset 0 1px rgba(255, 255, 255, 0.025);
 }
 .recommendation-card.interaction {
-  background: #27231a;
-  border-color: #75633b;
+  background: linear-gradient(140deg,#4a361b,#2f2545);
+  border-color: #9d7441;
 }
 .recommendation-card.troubleshoot {
-  background: #2a1b22;
-  border-color: #7b3c4d;
+  background: linear-gradient(140deg,#47202e,#2a2544);
+  border-color: #a84662;
 }
 .recommendation-card.pk {
-  background: #251e31;
-  border-color: #6d518c;
+  background: linear-gradient(140deg,#31224d,#44233f);
+  border-color: #8765b1;
 }
 .prelive-task-card {
   min-height: 308px;
@@ -807,19 +826,7 @@
   font-size: 11px;
   margin: 6px 0;
 }
-.adjustment > div {
-  height: 5px;
-  border-radius: 9px;
-  background: #3c4b50;
-  overflow: hidden;
-}
-.adjustment i {
-  width: 68%;
-  height: 100%;
-  display: block;
-  background: #70d9c7;
-  border-radius: inherit;
-}
+.adjustment input{width:100%;height:5px;margin:0;appearance:none;border-radius:9px;background:linear-gradient(90deg,#70d9c7 0 68%,#3c4b50 68% 100%);cursor:pointer}.adjustment input::-webkit-slider-thumb{width:12px;height:12px;border:2px solid #d6fffb;border-radius:50%;appearance:none;background:#6b95ff;box-shadow:0 0 10px #6b95ff88}.adjustment input::-moz-range-thumb{width:10px;height:10px;border:2px solid #d6fffb;border-radius:50%;background:#6b95ff;box-shadow:0 0 10px #6b95ff88}
 .adjustment b {
   text-align: right;
   font-size: 10px;

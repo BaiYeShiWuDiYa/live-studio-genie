@@ -21,10 +21,12 @@ import {
   RotateCcw,
   Save,
   Send,
+  Signal,
   Sparkles,
   Users,
   Volume2,
   WandSparkles,
+  Zap,
 } from 'lucide-react'
 import './App.css'
 import { askGenie } from './services/genie'
@@ -44,6 +46,11 @@ type Metric = {
 type ChatMessage = {
   role: 'user' | 'assistant'
   text: string
+}
+
+type LiveAdjustment = {
+  name: string
+  detail: string
 }
 
 const sceneCopy: Record<Scene, { title: string; detail: string; action: string }> = {
@@ -114,6 +121,10 @@ function App() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [genieError, setGenieError] = useState('')
   const [isAskingGenie, setIsAskingGenie] = useState(false)
+  const [liveTick, setLiveTick] = useState(0)
+  const [liveAdjustment, setLiveAdjustment] = useState<LiveAdjustment | null>(null)
+  const [isMicMuted, setIsMicMuted] = useState(false)
+  const [isPollVisible, setIsPollVisible] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const cameraAttemptedRef = useRef(false)
@@ -148,14 +159,30 @@ function App() {
     void enableCamera()
   }, [cameraEnabled, enableCamera, view])
 
+  useEffect(() => {
+    if (view !== 'live') return
+    const interval = window.setInterval(() => setLiveTick((tick) => tick + 1), 3500)
+    return () => window.clearInterval(interval)
+  }, [view])
+
   const changeScene = (nextScene: Scene) => {
     setScene(nextScene)
     setApplied(false)
+    setLiveAdjustment(null)
+    setIsPollVisible(false)
     setIsPk(nextScene === 'pk')
   }
 
   const applySuggestion = () => {
     setApplied(true)
+    const adjustment: Record<Scene, LiveAdjustment> = {
+      quality: { name: '柔光氛围已预览', detail: '补光 +32、暖色 +18、磨皮 20%' },
+      interaction: { name: '点歌投票已上屏', detail: '将在 45 秒后自动收起' },
+      troubleshoot: { name: '音频调整已应用', detail: '麦克风 +8%，BGM -5%' },
+      pk: { name: '冲刺目标已上屏', detail: '正在召集观众助力反超' },
+    }
+    setLiveAdjustment(adjustment[scene])
+    setIsPollVisible(scene === 'interaction')
   }
 
   const completePreliveTask = () => {
@@ -174,6 +201,8 @@ function App() {
 
   const undoSuggestion = () => {
     setApplied(false)
+    setLiveAdjustment(null)
+    setIsPollVisible(false)
   }
 
   const handleGenieSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -261,16 +290,15 @@ function App() {
             <>
               <div className="monitor-summary">
                 <span>实时诊断</span>
-                <strong>{scene === 'quality' ? '2' : scene === 'troubleshoot' ? '1' : '1'} 项待处理</strong>
+                <strong>{applied ? '状态已恢复' : scene === 'quality' ? '2 项待处理' : '1 项待处理'}</strong>
+                <small><Signal size={12} />数据每 3 秒更新</small>
               </div>
               <div className="metric-stack">
-                {sceneMetrics[scene].map((metric) => <MetricCard key={metric.label} metric={metric} />)}
+                {getLiveMetrics(scene, applied, liveTick).map((metric) => <MetricCard key={metric.label} metric={metric} />)}
               </div>
               <div className="comment-stream">
                 <div className="section-label"><MessageCircle size={15} />实时评论</div>
-                <p><b>甜甜圈</b> 背景有点暗诶</p>
-                <p><b>星河入梦</b> 主播声音有点小</p>
-                <p><b>小满同学</b> 今天唱哪首歌？</p>
+                {getLiveComments(scene, applied, liveTick).map((comment) => <p key={comment.name}><b>{comment.name}</b>{comment.text}</p>)}
               </div>
             </>
           )}
@@ -297,13 +325,13 @@ function App() {
               <div className="live-clock"><span /> LIVE&nbsp; 00:23:41</div>
             )}
           </div>
-          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} isPk={isPk} applied={applied} scene={scene} />
+          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} isPk={isPk} applied={applied} scene={scene} liveAdjustment={liveAdjustment} pollVisible={isPollVisible} liveTick={liveTick} />
           {cameraError && <p className="camera-warning">{cameraError}</p>}
           <div className="stage-controls">
             <button type="button" className="control-button" onClick={enableCamera}><Camera size={18} /><span>{cameraEnabled ? '摄像头已连接' : '开启摄像头'}</span></button>
-            <button type="button" className="control-button"><Mic size={18} /><span>麦克风</span></button>
+            <button type="button" className={`control-button ${isMicMuted ? 'active-control' : ''}`} onClick={() => setIsMicMuted((muted) => !muted)}><Mic size={18} /><span>{isMicMuted ? '麦克风已静音' : '麦克风'}</span></button>
             <button type="button" className="control-button"><Volume2 size={18} /><span>扬声器</span></button>
-            <button type="button" className="control-button"><LayoutTemplate size={18} /><span>布局</span></button>
+            <button type="button" className="control-button" onClick={() => setIsPollVisible((visible) => !visible)}><LayoutTemplate size={18} /><span>{isPollVisible ? '隐藏组件' : '互动组件'}</span></button>
             <button type="button" className={`pk-launch ${isPk ? 'active' : ''}`} onClick={() => changeScene(isPk ? 'quality' : 'pk')}><Users size={17} />{isPk ? '结束 PK' : '发起 PK'}</button>
           </div>
           {view === 'prelive' && (
@@ -383,6 +411,30 @@ function MetricCard({ metric }: { metric: Metric }) {
   return <div className="metric-card"><div><span>{metric.label}</span><b>{metric.value}</b></div><div className="metric-track"><i className={metric.tone} style={{ width: `${metric.score}%` }} /></div></div>
 }
 
+function getLiveMetrics(scene: Scene, applied: boolean, tick: number): Metric[] {
+  const drift = tick % 3
+  if (applied) {
+    return [
+      { label: scene === 'troubleshoot' ? '麦克风峰值' : '画面状态', value: scene === 'troubleshoot' ? '-12 dB' : '已优化', score: 82, tone: 'good' },
+      { label: '评论区密度', value: scene === 'interaction' ? '回升中' : '正常', score: 74, tone: 'good' },
+      { label: '网络稳定性', value: '良好', score: 88, tone: 'good' },
+    ]
+  }
+  return sceneMetrics[scene].map((metric, index) => ({
+    ...metric,
+    score: Math.max(8, Math.min(96, metric.score + (index === 0 ? drift * 2 : drift))),
+  }))
+}
+
+function getLiveComments(scene: Scene, applied: boolean, tick: number) {
+  if (applied && scene === 'interaction') {
+    return [{ name: '夏日汽水', text: ' 选 2！来首炸场的' }, { name: '星河入梦', text: ' 点歌投票好玩' }, { name: '甜甜圈', text: ' 主播唱得真好' }]
+  }
+  if (scene === 'troubleshoot') return [{ name: '星河入梦', text: ' 声音有点小' }, { name: '柚子茶', text: ' 听不清诶' }, { name: '晚风', text: ' 现在卡不卡？' }]
+  if (scene === 'quality') return [{ name: '甜甜圈', text: ' 背景有点暗诶' }, { name: '小满同学', text: ' 今天的氛围好舒服' }, { name: '阿福', text: ` 刚进来 ${tick % 2 ? '求一首歌单' : '主播好'}` }]
+  return [{ name: '小满同学', text: ' 今天唱哪首歌？' }, { name: '夜航星', text: ' 新来的报到' }, { name: '青柠', text: ' 好想听甜歌' }]
+}
+
 function PreliveChecklist({ score }: { score: number }) {
   return <div className="checklist">
     <div className="readiness-card"><span>当前准备度</span><strong>{score}<small>/ 100</small></strong><p>还有 3 步可以开播</p><div className="circle-progress"><i style={{ transform: `rotate(${score * 3.6}deg)` }} /></div></div>
@@ -390,19 +442,22 @@ function PreliveChecklist({ score }: { score: number }) {
   </div>
 }
 
-function LivePreview({ videoRef, cameraEnabled, isPk, applied, scene }: { videoRef: React.RefObject<HTMLVideoElement | null>; cameraEnabled: boolean; isPk: boolean; applied: boolean; scene: Scene }) {
-  return <div className={`live-stage ${applied ? 'applied' : ''} ${isPk ? 'pk-stage' : ''}`}>
+function LivePreview({ videoRef, cameraEnabled, isPk, applied, scene, liveAdjustment, pollVisible, liveTick }: { videoRef: React.RefObject<HTMLVideoElement | null>; cameraEnabled: boolean; isPk: boolean; applied: boolean; scene: Scene; liveAdjustment: LiveAdjustment | null; pollVisible: boolean; liveTick: number }) {
+  return <div className={`live-stage ${applied ? 'applied' : ''} ${isPk ? 'pk-stage' : ''} scene-${scene}`}>
     <div className="stage-glow" />
+    <div className="scan-lines" />
     <div className="host-stage">
       {cameraEnabled ? <video ref={videoRef} autoPlay muted playsInline className="camera-feed" /> : <DemoHost />}
       <div className="stage-label"><span />林小满</div>
       {applied && <div className="applied-badge"><Check size={13} />方案已应用</div>}
       {scene === 'quality' && !applied && <div className="stage-hint"><Lightbulb size={14} />环境偏暗</div>}
       {scene === 'troubleshoot' && <div className="audio-meter"><AudioLines size={15} /><span>音频峰值偏低</span><i /><i /><i /><i /></div>}
+      {liveAdjustment && <div className="adjustment-toast"><Zap size={14} /><div><b>{liveAdjustment.name}</b><span>{liveAdjustment.detail}</span></div></div>}
+      {pollVisible && <div className="live-poll"><span>点歌投票 · 00:{45 - (liveTick % 18)}</span><strong>下一首唱什么？</strong><div><button type="button">1 甜歌 <b>62%</b></button><button type="button">2 炸场 <b>38%</b></button></div></div>}
     </div>
     {isPk && <><div className="pk-versus">VS</div><div className="opponent-stage"><DemoOpponent /><div className="stage-label opponent"><span />陈妍</div></div><div className="pk-scorebar"><div><b>8,740</b><span>林小满</span></div><strong>01:18</strong><div><b>10,000</b><span>陈妍</span></div></div></>}
     {!isPk && <div className="viewer-bubble"><Users size={14} />1,286</div>}
-    <div className="floating-comments"><span>小满唱首《可爱女人》吧</span><span>今天的氛围好舒服</span></div>
+    <div className="floating-comments"><span>{scene === 'interaction' ? '评论区打 1 或 2 投票' : '小满唱首《可爱女人》吧'}</span><span>{applied ? 'Genie 已应用推荐方案' : '今天的氛围好舒服'}</span></div>
   </div>
 }
 
@@ -444,7 +499,16 @@ function SceneRecommendation({ scene, applied, onApply, onUndo }: { scene: Scene
 }
 
 function Adjustment({ label, value }: { label: string; value: string }) {
-  return <div className="adjustment"><span>{label}</span><div><i /></div><b>{value}</b></div>
+  const numericValue = Number.parseInt(value, 10)
+  const [currentValue, setCurrentValue] = useState(Number.isNaN(numericValue) ? 20 : Math.abs(numericValue))
+  const suffix = value.includes('%') ? '%' : value.includes('20') && label === '磨皮' ? '%' : ''
+  const sign = value.startsWith('-') ? '-' : value.startsWith('+') ? '+' : ''
+
+  return <label className="adjustment">
+    <span>{label}</span>
+    <input type="range" min="0" max="100" value={currentValue} onChange={(event) => setCurrentValue(Number(event.target.value))} aria-label={`${label} 调节`} />
+    <b>{sign}{currentValue}{suffix}</b>
+  </label>
 }
 
 export default App
