@@ -35,6 +35,7 @@ type AppView = 'onboarding' | 'prelive' | 'live'
 type Scene = 'quality' | 'interaction' | 'troubleshoot' | 'pk'
 type StreamKind = 'music' | 'chat' | 'game'
 type PreliveTask = 'layout' | 'visual' | 'content' | 'interaction'
+type PreviewMode = 'mobile' | 'studio'
 
 type Metric = {
   label: string
@@ -109,6 +110,7 @@ const preliveTasks: Array<{ id: PreliveTask; title: string; detail: string; acti
 function App() {
   const [view, setView] = useState<AppView>('onboarding')
   const [streamType, setStreamType] = useState<StreamKind>('music')
+  const [streamTopic, setStreamTopic] = useState('晚间唱歌聊天')
   const [scene, setScene] = useState<Scene>('quality')
   const [isPk, setIsPk] = useState(false)
   const [applied, setApplied] = useState(false)
@@ -123,8 +125,10 @@ function App() {
   const [isAskingGenie, setIsAskingGenie] = useState(false)
   const [liveTick, setLiveTick] = useState(0)
   const [liveAdjustment, setLiveAdjustment] = useState<LiveAdjustment | null>(null)
+  const [isSuggestionPreview, setIsSuggestionPreview] = useState(false)
   const [isMicMuted, setIsMicMuted] = useState(false)
   const [isPollVisible, setIsPollVisible] = useState(false)
+  const [previewMode, setPreviewMode] = useState<PreviewMode>('mobile')
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const cameraAttemptedRef = useRef(false)
@@ -168,9 +172,26 @@ function App() {
   const changeScene = (nextScene: Scene) => {
     setScene(nextScene)
     setApplied(false)
+    setIsSuggestionPreview(false)
     setLiveAdjustment(null)
     setIsPollVisible(false)
     setIsPk(nextScene === 'pk')
+  }
+
+  const startWorkspace = () => {
+    if (streamTopic.trim()) setView('prelive')
+  }
+
+  const previewSuggestion = () => {
+    const preview: Record<Scene, LiveAdjustment> = {
+      quality: { name: '正在预览柔光氛围', detail: '仅作用于本地预览，尚未影响直播画面' },
+      interaction: { name: '正在预览互动挂件', detail: '确认后才会在观众侧上屏' },
+      troubleshoot: { name: '正在试听音频调整', detail: '试听 3 秒后可确认应用' },
+      pk: { name: '正在预览冲刺目标', detail: '确认后向观众展示目标组件' },
+    }
+    setLiveAdjustment(preview[scene])
+    setIsSuggestionPreview(true)
+    setIsPollVisible(scene === 'interaction')
   }
 
   const applySuggestion = () => {
@@ -182,6 +203,7 @@ function App() {
       pk: { name: '冲刺目标已上屏', detail: '正在召集观众助力反超' },
     }
     setLiveAdjustment(adjustment[scene])
+    setIsSuggestionPreview(false)
     setIsPollVisible(scene === 'interaction')
   }
 
@@ -202,6 +224,7 @@ function App() {
   const undoSuggestion = () => {
     setApplied(false)
     setLiveAdjustment(null)
+    setIsSuggestionPreview(false)
     setIsPollVisible(false)
   }
 
@@ -252,13 +275,14 @@ function App() {
             <StreamOption icon={<MessageCircle />} label="聊天陪伴" active={streamType === 'chat'} onClick={() => setStreamType('chat')} />
             <StreamOption icon={<Music2 />} label="音乐现场" active={streamType === 'music'} onClick={() => setStreamType('music')} />
             <StreamOption icon={<Gamepad2 />} label="游戏直播" active={streamType === 'game'} onClick={() => setStreamType('game')} />
+            <StreamOption icon={<RefreshCw />} label="沿用上次" active={false} onClick={() => { setStreamType('music'); setStreamTopic('秀场唱歌陪伴') }} />
           </div>
           <label className="theme-input">
             <WandSparkles size={17} />
-            <input defaultValue="晚间唱歌聊天" aria-label="本场主题" />
-            <button type="button" aria-label="发送"><Send size={17} /></button>
+            <input value={streamTopic} onChange={(event) => setStreamTopic(event.target.value)} aria-label="本场主题" />
+            <button type="button" aria-label="生成工作台" onClick={startWorkspace}><Send size={17} /></button>
           </label>
-          <button className="primary-button welcome-cta" type="button" onClick={() => setView('prelive')}>
+          <button className="primary-button welcome-cta" type="button" onClick={startWorkspace}>
             生成今日开播工作台 <ArrowLeft size={17} className="arrow-forward" />
           </button>
           <button className="text-button" type="button" onClick={() => setView('prelive')}>跳过，直接进入专业模式</button>
@@ -300,6 +324,11 @@ function App() {
                 <div className="section-label"><MessageCircle size={15} />实时评论</div>
                 {getLiveComments(scene, applied, liveTick).map((comment) => <p key={comment.name}><b>{comment.name}</b>{comment.text}</p>)}
               </div>
+              <div className="gift-stream">
+                <div className="section-label"><Gift size={15} />礼物动态</div>
+                <p><span>🌹</span><b>Luna</b>送出 Rose ×5 <small>刚刚</small></p>
+                <p><span>💗</span><b>Mie</b>送出 Heart ×10 <small>1 分钟前</small></p>
+              </div>
             </>
           )}
           <div className="scenario-switcher">
@@ -325,7 +354,11 @@ function App() {
               <div className="live-clock"><span /> LIVE&nbsp; 00:23:41</div>
             )}
           </div>
-          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} isPk={isPk} applied={applied} scene={scene} liveAdjustment={liveAdjustment} pollVisible={isPollVisible} liveTick={liveTick} />
+          <div className="preview-mode-switch" role="tablist" aria-label="预览模式">
+            <button type="button" className={previewMode === 'mobile' ? 'selected' : ''} onClick={() => setPreviewMode('mobile')}>移动端预览</button>
+            <button type="button" className={previewMode === 'studio' ? 'selected' : ''} onClick={() => setPreviewMode('studio')}>Studio 视图</button>
+          </div>
+          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} isPk={isPk} applied={applied} scene={scene} liveAdjustment={liveAdjustment} pollVisible={isPollVisible} liveTick={liveTick} previewMode={previewMode} isPreviewing={isSuggestionPreview} />
           {cameraError && <p className="camera-warning">{cameraError}</p>}
           <div className="stage-controls">
             <button type="button" className="control-button" onClick={enableCamera}><Camera size={18} /><span>{cameraEnabled ? '摄像头已连接' : '开启摄像头'}</span></button>
@@ -351,9 +384,14 @@ function App() {
             <div className="mini-orb"><Sparkles size={17} /></div>
             <div><strong>{view === 'prelive' ? '为你生成了开播方案' : '我发现了一个机会点'}</strong><p>{view === 'prelive' ? '根据音乐聊天主题，已匹配舒适陪伴型场景。' : sceneCopy[scene].detail}</p></div>
           </div>
+          {view === 'live' && <div className="suggestion-tabs" aria-label="Genie 建议">
+            <button type="button" className={scene === 'quality' ? 'active' : ''} onClick={() => changeScene('quality')}>优化画面亮度</button>
+            <button type="button" className={scene === 'interaction' ? 'active' : ''} onClick={() => changeScene('interaction')}>互动正在转冷</button>
+            <button type="button" className={scene === 'troubleshoot' ? 'active' : ''} onClick={() => changeScene('troubleshoot')}>麦克风偏小</button>
+          </div>}
           {view === 'prelive'
             ? <PreliveTaskCard task={preliveTasks[preliveTaskIndex]} completedCount={preliveTaskIndex} onApply={completePreliveTask} />
-            : <SceneRecommendation scene={scene} applied={applied} onApply={applySuggestion} onUndo={undoSuggestion} />}
+            : <SceneRecommendation scene={scene} applied={applied} isPreviewing={isSuggestionPreview} onPreview={previewSuggestion} onApply={applySuggestion} onUndo={undoSuggestion} />}
           {chatMessages.length > 0 && <div className="genie-conversation" aria-live="polite">
             {chatMessages.map((message, index) => (
               <article key={`${message.role}-${index}`} className={`chat-message ${message.role}`}>
@@ -442,12 +480,13 @@ function PreliveChecklist({ score }: { score: number }) {
   </div>
 }
 
-function LivePreview({ videoRef, cameraEnabled, isPk, applied, scene, liveAdjustment, pollVisible, liveTick }: { videoRef: React.RefObject<HTMLVideoElement | null>; cameraEnabled: boolean; isPk: boolean; applied: boolean; scene: Scene; liveAdjustment: LiveAdjustment | null; pollVisible: boolean; liveTick: number }) {
-  return <div className={`live-stage ${applied ? 'applied' : ''} ${isPk ? 'pk-stage' : ''} scene-${scene}`}>
+function LivePreview({ videoRef, cameraEnabled, isPk, applied, scene, liveAdjustment, pollVisible, liveTick, previewMode, isPreviewing }: { videoRef: React.RefObject<HTMLVideoElement | null>; cameraEnabled: boolean; isPk: boolean; applied: boolean; scene: Scene; liveAdjustment: LiveAdjustment | null; pollVisible: boolean; liveTick: number; previewMode: PreviewMode; isPreviewing: boolean }) {
+  return <div className={`live-stage ${applied ? 'applied' : ''} ${isPreviewing ? 'previewing' : ''} ${isPk ? 'pk-stage' : ''} scene-${scene} ${previewMode === 'studio' ? 'studio-preview' : 'mobile-preview'}`}>
     <div className="stage-glow" />
     <div className="scan-lines" />
     <div className="host-stage">
       {cameraEnabled ? <video ref={videoRef} autoPlay muted playsInline className="camera-feed" /> : <DemoHost />}
+      {previewMode === 'studio' && <div className="studio-guides"><i /><i /><i /></div>}
       <div className="stage-label"><span />林小满</div>
       {applied && <div className="applied-badge"><Check size={13} />方案已应用</div>}
       {scene === 'quality' && !applied && <div className="stage-hint"><Lightbulb size={14} />环境偏暗</div>}
@@ -470,20 +509,22 @@ function DemoOpponent() {
 }
 
 function PreliveTaskCard({ task, completedCount, onApply }: { task: typeof preliveTasks[number]; completedCount: number; onApply: () => void }) {
+  const [selectedLayout, setSelectedLayout] = useState<'portrait' | 'stage'>('portrait')
+  const [isScriptExpanded, setIsScriptExpanded] = useState(false)
   return <div className="recommendation-card prelive-task-card">
     <span className="card-kicker">播前任务 {completedCount + 1} / {preliveTasks.length}</span>
     <h2>{task.title}</h2>
     <p>{task.detail}</p>
-    {task.id === 'layout' && <div className="task-choice-row"><button type="button" className="task-choice selected"><Camera size={15} />单人竖屏</button><button type="button" className="task-choice"><LayoutTemplate size={15} />换一种布局</button></div>}
+    {task.id === 'layout' && <div className="task-choice-row"><button type="button" className={`task-choice ${selectedLayout === 'portrait' ? 'selected' : ''}`} onClick={() => setSelectedLayout('portrait')}><Camera size={15} />单人竖屏</button><button type="button" className={`task-choice ${selectedLayout === 'stage' ? 'selected' : ''}`} onClick={() => setSelectedLayout('stage')}><LayoutTemplate size={15} />秀场舞台</button></div>}
     {task.id === 'visual' && <div className="adjustments"><Adjustment label="暖色" value="+18" /><Adjustment label="磨皮" value="20%" /></div>}
-    {task.id === 'content' && <div className="script-preview"><span>首 30 秒口播</span><p>“刚进来的朋友先选一首歌，今天我们轻松聊聊。”</p></div>}
+    {task.id === 'content' && <button className={`script-preview ${isScriptExpanded ? 'expanded' : ''}`} type="button" onClick={() => setIsScriptExpanded((expanded) => !expanded)}><span>首 30 秒口播 {isScriptExpanded ? '收起' : '展开'}</span><p>“刚进来的朋友先选一首歌，今天我们轻松聊聊。”</p>{isScriptExpanded && <p className="script-extra">“评论区打 1 选甜歌，打 2 选炸场，今天由你们来定歌单。”</p>}</button>}
     {task.id === 'interaction' && <div className="interaction-widget"><div><Gift size={17} /><span>点歌投票</span></div><p>甜歌还是炸场？评论区打 1 或 2</p><small>仅预览，确认后在开播时上屏</small></div>}
     <button className="primary-button full-button" type="button" onClick={onApply}><Check size={16} />{task.action}</button>
     <button className="card-text-button" type="button">跳过并稍后处理</button>
   </div>
 }
 
-function SceneRecommendation({ scene, applied, onApply, onUndo }: { scene: Scene; applied: boolean; onApply: () => void; onUndo: () => void }) {
+function SceneRecommendation({ scene, applied, isPreviewing, onPreview, onApply, onUndo }: { scene: Scene; applied: boolean; isPreviewing: boolean; onPreview: () => void; onApply: () => void; onUndo: () => void }) {
   const copy = sceneCopy[scene]
   return <div className={`recommendation-card ${scene}`}>
     <span className="card-kicker">{scene === 'troubleshoot' ? '需要确认' : '实时建议'}</span>
@@ -493,7 +534,9 @@ function SceneRecommendation({ scene, applied, onApply, onUndo }: { scene: Scene
     {scene === 'interaction' && <div className="interaction-widget"><div><Gift size={17} /><span>点歌投票</span></div><p>甜歌还是炸场？评论区打 1 或 2</p><small>展示 45 秒 · 评论即可参与</small></div>}
     {scene === 'troubleshoot' && <div className="adjustments"><Adjustment label="麦克风" value="+8%" /><Adjustment label="BGM" value="-5%" /></div>}
     {scene === 'pk' && <div className="goal-widget"><span>本轮冲刺目标</span><strong>再差 1,260 分反超</strong><div><i style={{ width: '76%' }} /></div><small>已获得 38 位观众响应</small></div>}
-    <button className="primary-button full-button" type="button" onClick={onApply}>{applied ? <><Check size={16} />已应用</> : <><Sparkles size={16} />{copy.action}</>}</button>
+    {!isPreviewing && !applied && <button className="primary-button full-button" type="button" onClick={onPreview}><Sparkles size={16} />预览调整</button>}
+    {isPreviewing && <button className="primary-button full-button" type="button" onClick={onApply}><Check size={16} />{copy.action}</button>}
+    {applied && <button className="primary-button full-button" type="button" disabled><Check size={16} />已应用</button>}
     {applied ? <button className="card-text-button" type="button" onClick={onUndo}><RotateCcw size={14} />撤回最近一次调整</button> : <button className="card-text-button" type="button"><RefreshCw size={14} />换一组建议</button>}
   </div>
 }

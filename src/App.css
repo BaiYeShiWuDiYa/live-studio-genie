@@ -310,6 +310,10 @@
     radial-gradient(circle at 50% 12%, rgba(77, 217, 184, 0.2), transparent 35%),
     #0b1118;
 }
+.live-stage.previewing {
+  border-color: #f0c975;
+  box-shadow: inset 0 0 0 1px rgba(240, 201, 117, 0.28), 0 0 36px rgba(225, 149, 86, 0.12);
+}
 .stage-glow {
   width: 46%;
   height: 100%;
@@ -1134,6 +1138,7 @@
   color: #edb57d;
   margin: -7px 0 0;
 }
+.gift-stream{margin:18px 16px 0;padding-top:16px;border-top:1px solid #252b39}.gift-stream p{display:grid;grid-template-columns:22px auto 1fr auto;align-items:center;gap:5px;margin:9px 0;color:#d9c8d6;font-size:11px}.gift-stream b{color:#fff1fb}.gift-stream small{color:#778398;font-size:9px}.preview-mode-switch{display:inline-flex;align-self:center;padding:3px;border:1px solid rgba(88,113,149,.32);border-radius:8px;background:rgba(15,20,32,.76)}.preview-mode-switch button{min-width:94px;border:0;border-radius:5px;padding:6px 9px;background:transparent;color:#8793a8;font-size:10px}.preview-mode-switch button.selected{background:linear-gradient(115deg,#245b64,#3b4f8c);color:#e4fffd;box-shadow:0 4px 10px rgba(54,165,180,.18)}.suggestion-tabs{display:flex;gap:7px;overflow-x:auto;padding:0 18px 14px;scrollbar-width:none}.suggestion-tabs::-webkit-scrollbar{display:none}.suggestion-tabs button{flex:none;border:1px solid #354259;border-radius:999px;padding:7px 10px;background:rgba(27,34,50,.72);color:#aeb9ca;font-size:10px}.suggestion-tabs button.active{border-color:#71e1d5;background:linear-gradient(105deg,#205b58,#334e83);color:#e9fffb;box-shadow:0 0 16px rgba(92,224,211,.16)}.studio-preview .host-stage{max-width:none}.studio-preview .camera-feed{object-fit:contain;background:#06080e}.studio-guides{position:absolute;inset:12% 20%;z-index:4;pointer-events:none}.studio-guides::before,.studio-guides::after,.studio-guides i{content:"";position:absolute;display:block;border-color:rgba(108,237,222,.6)}.studio-guides::before{inset:0;border:1px solid rgba(108,237,222,.52)}.studio-guides::after{left:50%;top:0;bottom:0;border-left:1px dashed rgba(108,237,222,.45)}.studio-guides i:nth-child(1){left:0;right:0;top:38.2%;border-top:1px dashed rgba(108,237,222,.45)}.studio-guides i:nth-child(2){left:0;right:0;top:61.8%;border-top:1px dashed rgba(108,237,222,.45)}.studio-guides i:nth-child(3){inset:6px;border:1px solid rgba(132,148,255,.25)}
 .onboarding-shell {
   min-height: 100vh;
   color: #edf1fa;
@@ -1213,7 +1218,7 @@
 }
 .stream-options {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 9px;
   margin: 28px 0 16px;
 }
