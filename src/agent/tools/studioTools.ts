@@ -1,8 +1,13 @@
 import { z } from 'zod'
+import { audioSettingsSchema, type AudioSettings } from '../../capabilities/audio/types'
 import { visualSettingsSchema, type VisualSettings } from '../../capabilities/visual/types'
 import { defineTool, ToolRegistry } from './toolRegistry'
 
 export interface StudioToolContext {
+  previewAudioSettings: (settings: AudioSettings) => void
+  applyAudioSettings: (settings: AudioSettings) => void
+  resetAudioPreview: () => void
+  undoAudioSettings: () => void
   previewVisualSettings: (settings: VisualSettings) => void
   applyVisualSettings: (settings: VisualSettings) => void
   resetVisualPreview: () => void
@@ -12,6 +17,11 @@ export interface StudioToolContext {
 const visualInputSchema = z.object({
   mode: z.enum(['preview', 'apply']),
   settings: visualSettingsSchema,
+})
+
+const audioInputSchema = z.object({
+  mode: z.enum(['preview', 'apply']),
+  settings: audioSettingsSchema,
 })
 
 export const studioToolRegistry = new ToolRegistry<StudioToolContext>()
@@ -52,8 +62,49 @@ export const studioToolRegistry = new ToolRegistry<StudioToolContext>()
       return { name: '已撤回画面调整', detail: '画面已恢复到应用前的配置。' }
     },
   }))
+  .register(defineTool({
+    name: 'studio.adjust_audio',
+    description: '预览或应用麦克风和背景音乐增益。',
+    inputSchema: audioInputSchema,
+    requiresConfirmation: true,
+    execute: ({ mode, settings }, context) => {
+      if (mode === 'preview') {
+        context.previewAudioSettings(settings)
+      } else {
+        context.applyAudioSettings(settings)
+      }
+
+      return {
+        name: mode === 'preview' ? '正在试听音频调整' : '音频调整已应用',
+        detail: `麦克风 ${formatDb(settings.microphoneGainDb)}，BGM ${formatDb(settings.backgroundMusicGainDb)}`,
+      }
+    },
+  }))
+  .register(defineTool({
+    name: 'studio.reset_audio_preview',
+    description: '取消尚未应用的音频预览。',
+    inputSchema: z.object({}),
+    execute: (_, context) => {
+      context.resetAudioPreview()
+      return { name: '已取消音频预览', detail: '音频已恢复为当前正式配置。' }
+    },
+  }))
+  .register(defineTool({
+    name: 'studio.undo_audio',
+    description: '撤回最近一次正式应用的音频调整。',
+    inputSchema: z.object({}),
+    requiresConfirmation: true,
+    execute: (_, context) => {
+      context.undoAudioSettings()
+      return { name: '已撤回音频调整', detail: '音频已恢复到应用前的配置。' }
+    },
+  }))
 
 function toPercent(value: number): string {
   const percentage = Math.round((value - 1) * 100)
   return `${percentage >= 0 ? '+' : ''}${percentage}`
+}
+
+function formatDb(value: number): string {
+  return `${value >= 0 ? '+' : ''}${value} dB`
 }

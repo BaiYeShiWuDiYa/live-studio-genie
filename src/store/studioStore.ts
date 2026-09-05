@@ -1,5 +1,10 @@
 import { create } from 'zustand'
 import {
+  audioSettingsSchema,
+  defaultAudioSettings,
+  type AudioSettings,
+} from '../capabilities/audio/types'
+import {
   cameraLayerLayoutSchema,
   defaultCameraLayerLayout,
   type CameraLayerLayout,
@@ -17,11 +22,18 @@ import {
 } from '../capabilities/visual/types'
 
 interface StudioState {
+  audioSettings: AudioSettings
+  committedAudioSettings: AudioSettings
+  previousAudioSettings: AudioSettings | null
   cameraLayerLayout: CameraLayerLayout
   visualSettings: VisualSettings
   committedVisualSettings: VisualSettings
   previousVisualSettings: VisualSettings | null
   mediaMetrics: Record<MediaMetricKind, MediaMetric>
+  previewAudioSettings: (settings: AudioSettings) => void
+  applyAudioSettings: (settings: AudioSettings) => void
+  resetAudioPreview: () => void
+  undoAudioSettings: () => void
   setCameraLayerLayout: (layout: CameraLayerLayout) => void
   resetCameraLayerLayout: () => void
   previewVisualSettings: (settings: VisualSettings) => void
@@ -33,6 +45,9 @@ interface StudioState {
 }
 
 export const useStudioStore = create<StudioState>((set) => ({
+  audioSettings: defaultAudioSettings,
+  committedAudioSettings: defaultAudioSettings,
+  previousAudioSettings: null,
   cameraLayerLayout: defaultCameraLayerLayout,
   visualSettings: defaultVisualSettings,
   committedVisualSettings: defaultVisualSettings,
@@ -40,6 +55,30 @@ export const useStudioStore = create<StudioState>((set) => ({
   mediaMetrics: {
     brightness: idleMediaMetric,
     microphone: idleMediaMetric,
+  },
+  previewAudioSettings: (settings) => {
+    set({ audioSettings: audioSettingsSchema.parse(settings) })
+  },
+  applyAudioSettings: (settings) => {
+    const validatedSettings = audioSettingsSchema.parse(settings)
+    set((state) => ({
+      audioSettings: validatedSettings,
+      previousAudioSettings: state.committedAudioSettings,
+      committedAudioSettings: validatedSettings,
+    }))
+  },
+  resetAudioPreview: () => {
+    set((state) => ({ audioSettings: state.committedAudioSettings }))
+  },
+  undoAudioSettings: () => {
+    set((state) => {
+      const restoredSettings = state.previousAudioSettings ?? defaultAudioSettings
+      return {
+        audioSettings: restoredSettings,
+        committedAudioSettings: restoredSettings,
+        previousAudioSettings: null,
+      }
+    })
   },
   setCameraLayerLayout: (layout) => {
     set({ cameraLayerLayout: cameraLayerLayoutSchema.parse(layout) })

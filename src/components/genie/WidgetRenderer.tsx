@@ -2,6 +2,7 @@ import { ButtonV4 as Button } from '@byted/creator-ui'
 import { Check, Gift, RefreshCw, RotateCcw, Sparkles } from 'lucide-react'
 import { type ComponentType } from 'react'
 import { widgetSpecSchema, type WidgetSpec } from '../../agent/widgets/widgetSpec'
+import type { AudioSettings } from '../../capabilities/audio/types'
 import type { VisualSettings } from '../../capabilities/visual/types'
 import { useStudioStore } from '../../store/studioStore'
 import { Adjustment } from './Adjustment'
@@ -13,6 +14,7 @@ interface WidgetRendererProps {
   onPreview: () => void
   onApply: () => void
   onUndo: () => void
+  onAudioChange: (property: keyof AudioSettings, value: number) => void
   onVisualChange: (property: keyof VisualSettings, percentage: number) => void
 }
 
@@ -20,6 +22,7 @@ interface WidgetBodyProps {
   spec: WidgetSpec
   applied: boolean
   isPreviewing: boolean
+  onAudioChange: WidgetRendererProps['onAudioChange']
   onVisualChange: WidgetRendererProps['onVisualChange']
 }
 
@@ -54,6 +57,7 @@ export function WidgetRenderer(props: WidgetRendererProps) {
         spec={spec}
         applied={props.applied}
         isPreviewing={props.isPreviewing}
+        onAudioChange={props.onAudioChange}
         onVisualChange={props.onVisualChange}
       />
       {!props.isPreviewing && !props.applied && <Button className="primary-button full-button" color="primary" onClick={props.onPreview}><Sparkles size={16} />预览调整</Button>}
@@ -91,12 +95,20 @@ function AudiencePollWidget({ spec }: WidgetBodyProps) {
   )
 }
 
-function AudioAdjustmentWidget({ spec }: WidgetBodyProps) {
+function AudioAdjustmentWidget({ spec, applied, isPreviewing, onAudioChange }: WidgetBodyProps) {
+  const audioSettings = useStudioStore((state) => state.audioSettings)
   if (spec.type !== 'audio-adjustment') return null
+
+  const settings = applied || isPreviewing
+    ? audioSettings
+    : {
+        microphoneGainDb: spec.props.microphoneGain,
+        backgroundMusicGainDb: spec.props.backgroundMusicGain,
+      }
   return (
     <div className="adjustments">
-      <Adjustment label="麦克风" value={`${withSign(spec.props.microphoneGain)}%`} />
-      <Adjustment label="BGM" value={`${withSign(spec.props.backgroundMusicGain)}%`} />
+      <Adjustment label="麦克风" min={-20} max={20} value={`${withSign(settings.microphoneGainDb)} dB`} onChange={(value) => onAudioChange('microphoneGainDb', value)} />
+      <Adjustment label="BGM" min={-20} max={20} value={`${withSign(settings.backgroundMusicGainDb)} dB`} onChange={(value) => onAudioChange('backgroundMusicGainDb', value)} />
     </div>
   )
 }

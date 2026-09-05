@@ -4,6 +4,10 @@ import { studioToolRegistry, type StudioToolContext } from './studioTools'
 
 function createContext(): StudioToolContext {
   return {
+    previewAudioSettings: vi.fn(),
+    applyAudioSettings: vi.fn(),
+    resetAudioPreview: vi.fn(),
+    undoAudioSettings: vi.fn(),
     previewVisualSettings: vi.fn(),
     applyVisualSettings: vi.fn(),
     resetVisualPreview: vi.fn(),
@@ -39,5 +43,18 @@ describe('studio tool registry', () => {
   it('rejects tools outside the registry', () => {
     expect(() => studioToolRegistry.execute('studio.unknown', {}, createContext()))
       .toThrow('Unknown tool')
+  })
+
+  it('validates and applies audio gain settings', () => {
+    const context = createContext()
+    studioToolRegistry.execute('studio.adjust_audio', {
+      mode: 'apply',
+      settings: { microphoneGainDb: 8, backgroundMusicGainDb: -5 },
+    }, context)
+
+    expect(context.applyAudioSettings).toHaveBeenCalledWith({
+      microphoneGainDb: 8,
+      backgroundMusicGainDb: -5,
+    })
   })
 })

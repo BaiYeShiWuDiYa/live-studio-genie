@@ -34,6 +34,8 @@ import './features.css'
 import { studioToolRegistry, type StudioToolContext } from './agent/tools/studioTools'
 import { getSceneWidgetSpec } from './agent/widgets/sceneWidgets'
 import type { StudioScene, WidgetSpec } from './agent/widgets/widgetSpec'
+import { createAudioProcessor, type AudioProcessor } from './capabilities/audio/audioProcessor'
+import type { AudioSettings } from './capabilities/audio/types'
 import { requestCameraStream, requestDisplayStream, stopMediaStream } from './capabilities/media/browserMedia'
 import { useMediaMonitoring } from './capabilities/monitoring/useMediaMonitoring'
 import type { MediaMetric } from './capabilities/monitoring/types'
@@ -154,17 +156,28 @@ function App() {
   const [isPollVisible, setIsPollVisible] = useState(false)
   const [previewMode, setPreviewMode] = useState<PreviewMode>('mobile')
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null)
+  const [processedAudioStream, setProcessedAudioStream] = useState<MediaStream | null>(null)
   const [displayStream, setDisplayStream] = useState<MediaStream | null>(null)
   const [displayError, setDisplayError] = useState('')
   const [isLayoutEditing, setIsLayoutEditing] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const audioProcessorRef = useRef<AudioProcessor | null>(null)
   const cameraAttemptedRef = useRef(false)
   const resetCameraLayerLayout = useStudioStore((state) => state.resetCameraLayerLayout)
   const previewVisualSettings = useStudioStore((state) => state.previewVisualSettings)
   const applyVisualSettings = useStudioStore((state) => state.applyVisualSettings)
   const resetVisualPreview = useStudioStore((state) => state.resetVisualPreview)
   const undoVisualSettings = useStudioStore((state) => state.undoVisualSettings)
+  const previewAudioSettings = useStudioStore((state) => state.previewAudioSettings)
+  const applyAudioSettings = useStudioStore((state) => state.applyAudioSettings)
+  const resetAudioPreview = useStudioStore((state) => state.resetAudioPreview)
+  const undoAudioSettings = useStudioStore((state) => state.undoAudioSettings)
+  const microphoneGainDb = useStudioStore((state) => state.audioSettings.microphoneGainDb)
   const studioToolContext: StudioToolContext = {
+    previewAudioSettings,
+    applyAudioSettings,
+    resetAudioPreview,
+    undoAudioSettings,
     previewVisualSettings,
     applyVisualSettings,
     resetVisualPreview,
@@ -175,6 +188,14 @@ function App() {
   useEffect(() => {
     return () => stopMediaStream(mediaStream)
   }, [mediaStream])
+
+  useEffect(() => {
+    return () => audioProcessorRef.current?.close()
+  }, [])
+
+  useEffect(() => {
+    audioProcessorRef.current?.setGainDb(microphoneGainDb)
+  }, [microphoneGainDb])
 
   useEffect(() => {
     const video = videoRef.current
@@ -195,7 +216,7 @@ function App() {
 
   useMediaMonitoring({
     videoRef,
-    stream: mediaStream,
+    stream: processedAudioStream ?? mediaStream,
     cameraEnabled,
     microphoneMuted: isMicMuted,
   })
@@ -203,6 +224,11 @@ function App() {
   const enableCamera = useCallback(async () => {
     try {
       const stream = await requestCameraStream()
+      const audioProcessor = createAudioProcessor(stream)
+      audioProcessor?.setGainDb(useStudioStore.getState().audioSettings.microphoneGainDb)
+      audioProcessorRef.current?.close()
+      audioProcessorRef.current = audioProcessor
+      setProcessedAudioStream(audioProcessor?.stream ?? null)
       setMediaStream((currentStream) => {
         stopMediaStream(currentStream)
         return stream
@@ -256,6 +282,7 @@ function App() {
 
   const changeScene = (nextScene: Scene) => {
     studioToolRegistry.execute('studio.reset_visual_preview', {}, studioToolContext)
+    studioToolRegistry.execute('studio.reset_audio_preview', {}, studioToolContext)
     setAgentWidgetSpec(null)
     setScene(nextScene)
     setApplied(false)
@@ -280,6 +307,19 @@ function App() {
       return
     }
 
+    if (activeWidgetSpec.type === 'audio-adjustment') {
+      const result = studioToolRegistry.execute('studio.adjust_audio', {
+        mode: 'preview',
+        settings: {
+          microphoneGainDb: activeWidgetSpec.props.microphoneGain,
+          backgroundMusicGainDb: activeWidgetSpec.props.backgroundMusicGain,
+        },
+      }, studioToolContext)
+      setLiveAdjustment(result)
+      setIsSuggestionPreview(true)
+      return
+    }
+
     setLiveAdjustment(getWidgetAdjustment(activeWidgetSpec, 'preview'))
     setIsSuggestionPreview(true)
     setIsPollVisible(activeWidgetSpec.type === 'audience-poll')
@@ -291,6 +331,16 @@ function App() {
       const result = studioToolRegistry.execute('studio.adjust_visual', {
         mode: 'apply',
         settings: useStudioStore.getState().visualSettings,
+      }, studioToolContext)
+      setLiveAdjustment(result)
+      setIsSuggestionPreview(false)
+      return
+    }
+
+    if (activeWidgetSpec.type === 'audio-adjustment') {
+      const result = studioToolRegistry.execute('studio.adjust_audio', {
+        mode: 'apply',
+        settings: useStudioStore.getState().audioSettings,
       }, studioToolContext)
       setLiveAdjustment(result)
       setIsSuggestionPreview(false)
@@ -320,6 +370,9 @@ function App() {
     if (activeWidgetSpec.type === 'visual-adjustment') {
       const result = studioToolRegistry.execute('studio.undo_visual', {}, studioToolContext)
       setLiveAdjustment(result)
+    } else if (activeWidgetSpec.type === 'audio-adjustment') {
+      const result = studioToolRegistry.execute('studio.undo_audio', {}, studioToolContext)
+      setLiveAdjustment(result)
     } else {
       setLiveAdjustment(null)
     }
@@ -332,6 +385,19 @@ function App() {
     const currentSettings = useStudioStore.getState().visualSettings
     const value = property === 'warmth' ? percentage / 100 : 1 + percentage / 100
     const result = studioToolRegistry.execute('studio.adjust_visual', {
+      mode: 'preview',
+      settings: {
+        ...currentSettings,
+        [property]: value,
+      },
+    }, studioToolContext)
+    setLiveAdjustment(result)
+    setIsSuggestionPreview(true)
+  }
+
+  const updateAudioPreview = (property: keyof AudioSettings, value: number) => {
+    const currentSettings = useStudioStore.getState().audioSettings
+    const result = studioToolRegistry.execute('studio.adjust_audio', {
       mode: 'preview',
       settings: {
         ...currentSettings,
@@ -513,7 +579,7 @@ function App() {
           </div>}
           {view === 'prelive'
             ? <PreliveTaskCard task={preliveTasks[preliveTaskIndex]} completedCount={preliveTaskIndex} onApply={completePreliveTask} />
-            : <WidgetRenderer spec={activeWidgetSpec} applied={applied} isPreviewing={isSuggestionPreview} onPreview={previewSuggestion} onApply={applySuggestion} onUndo={undoSuggestion} onVisualChange={updateVisualPreview} />}
+            : <WidgetRenderer spec={activeWidgetSpec} applied={applied} isPreviewing={isSuggestionPreview} onPreview={previewSuggestion} onApply={applySuggestion} onUndo={undoSuggestion} onAudioChange={updateAudioPreview} onVisualChange={updateVisualPreview} />}
           {chatMessages.length > 0 && <div className="genie-conversation" aria-live="polite">
             {chatMessages.map((message, index) => (
               <article key={`${message.role}-${index}`} className={`chat-message ${message.role}`}>
