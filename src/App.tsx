@@ -9,6 +9,7 @@ import {
   Check,
   ChevronDown,
   CircleHelp,
+  CircleStop,
   Gamepad2,
   Gift,
   LayoutTemplate,
@@ -45,7 +46,7 @@ import { WidgetRenderer } from './components/genie/WidgetRenderer'
 import { EditableCameraLayer } from './components/studio/EditableCameraLayer'
 import { LiveGoal } from './components/studio/LiveGoal'
 import { LivePoll } from './components/studio/LivePoll'
-import { askGenie } from './services/genie'
+import { askGenie, GenieRequestError } from './services/genie'
 import { useStudioStore } from './store/studioStore'
 
 type AppView = 'onboarding' | 'prelive' | 'live'
@@ -53,6 +54,7 @@ type Scene = StudioScene
 type StreamKind = 'music' | 'chat' | 'game'
 type PreliveTask = 'layout' | 'visual' | 'content' | 'interaction'
 type PreviewMode = 'mobile' | 'studio'
+type GenieRequestStatus = 'idle' | 'loading' | 'cancelled' | 'timeout' | 'error'
 
 type Metric = {
   label: string
@@ -150,7 +152,7 @@ function App() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [agentWidgetSpec, setAgentWidgetSpec] = useState<WidgetSpec | null>(null)
   const [genieError, setGenieError] = useState('')
-  const [isAskingGenie, setIsAskingGenie] = useState(false)
+  const [genieRequestStatus, setGenieRequestStatus] = useState<GenieRequestStatus>('idle')
   const [liveTick, setLiveTick] = useState(0)
   const [liveAdjustment, setLiveAdjustment] = useState<LiveAdjustment | null>(null)
   const [isSuggestionPreview, setIsSuggestionPreview] = useState(false)
@@ -164,6 +166,8 @@ function App() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const audioProcessorRef = useRef<AudioProcessor | null>(null)
   const cameraAttemptedRef = useRef(false)
+  const genieAbortRef = useRef<AbortController | null>(null)
+  const lastGenieRequestRef = useRef<{ question: string; prompt: string } | null>(null)
   const resetCameraLayerLayout = useStudioStore((state) => state.resetCameraLayerLayout)
   const previewVisualSettings = useStudioStore((state) => state.previewVisualSettings)
   const applyVisualSettings = useStudioStore((state) => state.applyVisualSettings)
@@ -210,6 +214,10 @@ function App() {
 
   useEffect(() => {
     return () => audioProcessorRef.current?.close()
+  }, [])
+
+  useEffect(() => {
+    return () => genieAbortRef.current?.abort()
   }, [])
 
   useEffect(() => {
@@ -484,10 +492,50 @@ function App() {
     }, studioToolContext)
   }
 
-  const handleGenieSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const runGenieRequest = async (
+    request: { question: string; prompt: string },
+    appendQuestion: boolean,
+  ) => {
+    const controller = new AbortController()
+    genieAbortRef.current = controller
+    lastGenieRequestRef.current = request
+    if (appendQuestion) {
+      setChatMessages((messages) => [...messages, { role: 'user', text: request.question }])
+      setGenieInput('')
+    }
+    setGenieError('')
+    setGenieRequestStatus('loading')
+
+    try {
+      const result = await askGenie(request.prompt, { signal: controller.signal })
+      if (genieAbortRef.current !== controller) return
+      setChatMessages((messages) => [...messages, { role: 'assistant', text: result.text || '已生成可操作方案。' }])
+      if (view === 'live' && result.widget) {
+        setAgentWidgetSpec(result.widget)
+        setApplied(false)
+        setIsSuggestionPreview(false)
+        setLiveAdjustment(null)
+      }
+      setGenieRequestStatus('idle')
+    } catch (error) {
+      if (genieAbortRef.current !== controller) return
+      setGenieError(error instanceof Error ? error.message : 'Genie 暂时无法响应。')
+      setGenieRequestStatus(
+        error instanceof GenieRequestError
+          ? error.code
+          : 'error',
+      )
+    } finally {
+      if (genieAbortRef.current === controller) {
+        genieAbortRef.current = null
+      }
+    }
+  }
+
+  const handleGenieSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const question = genieInput.trim()
-    if (!question || isAskingGenie) return
+    if (!question || genieRequestStatus === 'loading') return
 
     const context = view === 'prelive'
       ? '当前处于开播准备阶段，直播主题是晚间唱歌聊天。'
@@ -500,25 +548,16 @@ function App() {
       `主播问题：${question}`,
     ].join('\n')
 
-    setChatMessages((messages) => [...messages, { role: 'user', text: question }])
-    setGenieInput('')
-    setGenieError('')
-    setIsAskingGenie(true)
+    void runGenieRequest({ question, prompt }, true)
+  }
 
-    try {
-      const result = await askGenie(prompt)
-      setChatMessages((messages) => [...messages, { role: 'assistant', text: result.text || '已生成可操作方案。' }])
-      if (view === 'live' && result.widget) {
-        setAgentWidgetSpec(result.widget)
-        setApplied(false)
-        setIsSuggestionPreview(false)
-        setLiveAdjustment(null)
-      }
-    } catch (error) {
-      setGenieError(error instanceof Error ? error.message : 'Genie 暂时无法响应。')
-    } finally {
-      setIsAskingGenie(false)
-    }
+  const cancelGenieRequest = () => {
+    genieAbortRef.current?.abort()
+  }
+
+  const retryGenieRequest = () => {
+    if (!lastGenieRequestRef.current || genieRequestStatus === 'loading') return
+    void runGenieRequest(lastGenieRequestRef.current, false)
   }
 
   if (view === 'onboarding') {
@@ -666,14 +705,26 @@ function App() {
               </article>
             ))}
           </div>}
-          {genieError && <p className="genie-error">{genieError}</p>}
+          {genieRequestStatus === 'loading' && (
+            <div className="genie-request-state is-loading" role="status">
+              <LoaderCircle size={14} className="loading-icon" />
+              <span>Genie 正在分析直播状态…</span>
+              <button type="button" onClick={cancelGenieRequest}><CircleStop size={13} />取消</button>
+            </div>
+          )}
+          {genieError && genieRequestStatus !== 'loading' && (
+            <div className="genie-request-state is-error" role="alert">
+              <span>{genieError}</span>
+              <button type="button" onClick={retryGenieRequest}><RotateCcw size={13} />重试</button>
+            </div>
+          )}
           <form className="genie-composer" onSubmit={handleGenieSubmit}>
             <div className="composer-field">
               <input value={genieInput} onChange={(event) => setGenieInput(event.target.value)} placeholder="问 Genie：帮我调整一下…" aria-label="向 Genie 提问" />
-              <span>Enter 发送</span>
+              <span>{genieRequestStatus === 'loading' ? '正在生成建议' : 'Enter 发送'}</span>
             </div>
-            <button type="submit" disabled={!genieInput.trim() || isAskingGenie} aria-label="发送消息">
-              {isAskingGenie ? <LoaderCircle size={16} className="loading-icon" /> : <Send size={16} />}
+            <button type="submit" disabled={!genieInput.trim() || genieRequestStatus === 'loading'} aria-label="发送消息">
+              {genieRequestStatus === 'loading' ? <LoaderCircle size={16} className="loading-icon" /> : <Send size={16} />}
             </button>
           </form>
         </aside>

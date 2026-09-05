@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest'
-import { parseGenieContent } from './genie'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { askGenie, parseGenieContent } from './genie'
+
+afterEach(() => {
+  vi.useRealTimers()
+  vi.unstubAllGlobals()
+})
 
 describe('parseGenieContent', () => {
   it('extracts a validated widget from assistant text', () => {
@@ -21,5 +26,39 @@ describe('parseGenieContent', () => {
 
   it('supports plain text responses', () => {
     expect(parseGenieContent('当前状态稳定。')).toEqual({ text: '当前状态稳定。' })
+  })
+})
+
+describe('askGenie', () => {
+  it('aborts a request after its timeout', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('fetch', vi.fn((_: RequestInfo | URL, init?: RequestInit) => new Promise((_, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+    })))
+
+    const request = askGenie('检查直播状态', { timeoutMs: 100 })
+    const rejection = expect(request).rejects.toMatchObject({
+      code: 'timeout',
+      message: 'Genie 响应超时，请重试。',
+    })
+    await vi.advanceTimersByTimeAsync(100)
+
+    await rejection
+  })
+
+  it('supports cancellation from the caller', async () => {
+    const controller = new AbortController()
+    vi.stubGlobal('fetch', vi.fn((_: RequestInfo | URL, init?: RequestInit) => new Promise((_, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+    })))
+
+    const request = askGenie('检查直播状态', { signal: controller.signal })
+    const rejection = expect(request).rejects.toMatchObject({
+      code: 'cancelled',
+      message: '已取消本次生成。',
+    })
+    controller.abort()
+
+    await rejection
   })
 })

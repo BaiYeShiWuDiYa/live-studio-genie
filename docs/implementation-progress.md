@@ -111,8 +111,24 @@ npm run build
 npm run lint
 ```
 
+### Resilient Agent Requests
+
+- Added caller cancellation and a 15-second timeout to Agent requests.
+- Added explicit loading, cancelled, timeout, and error states.
+- Added in-context cancel and retry controls without duplicating user messages.
+- Cancels in-flight requests when the application unmounts.
+- Added unit coverage for timeout and caller cancellation.
+- Verified loading, successful recovery, and generated Widget output in the browser.
+
+Validation:
+
+```bash
+npm run test
+npm run build
+npm run lint
+```
+
 ## Next
 
-1. Add timeout and cancellation states for Agent-generated widgets.
-2. Add a real background-music source before applying BGM gain.
-3. Split remaining studio orchestration out of `App.tsx`.
+1. Add a real background-music source before applying BGM gain.
+2. Split remaining studio orchestration out of `App.tsx`.
