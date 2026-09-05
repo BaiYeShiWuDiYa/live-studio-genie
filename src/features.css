@@ -421,3 +421,38 @@
 .genie-request-state.is-error {
   color: #f1a0ad;
 }
+
+.comment-list {
+  max-height: 112px;
+  margin-top: 7px;
+  padding-right: 5px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(103, 216, 208, 0.72) rgba(37, 43, 57, 0.72);
+  scrollbar-width: thin;
+}
+
+.comment-list p {
+  margin: 0;
+  padding: 5px 6px;
+  border-radius: 4px;
+  line-height: 1.45;
+}
+
+.comment-list p:nth-child(even) {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.comment-list::-webkit-scrollbar {
+  width: 5px;
+}
+
+.comment-list::-webkit-scrollbar-track {
+  background: rgba(37, 43, 57, 0.72);
+  border-radius: 99px;
+}
+
+.comment-list::-webkit-scrollbar-thumb {
+  background: rgba(103, 216, 208, 0.72);
+  border-radius: 99px;
+}

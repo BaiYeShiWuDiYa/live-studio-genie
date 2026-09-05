@@ -23,7 +23,7 @@ describe('audience events', () => {
     const second = mockAudienceEventAdapter.getSnapshot('interaction', false, 3)
 
     expect(first).toEqual(second)
-    expect(first.comments).toHaveLength(3)
+    expect(first.comments).toHaveLength(7)
     expect(first.gifts).toHaveLength(2)
     expect(first.comments.every((event) => audienceEventSchema.safeParse(event).success))
       .toBe(true)

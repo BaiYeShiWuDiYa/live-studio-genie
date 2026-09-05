@@ -82,6 +82,7 @@ const commentsByScene: Record<StudioScene, string[]> = {
 }
 
 const userNames = ['甜甜圈', '小满同学', '阿福', '星河入梦', '柚子茶']
+const visibleCommentCount = 7
 
 const keywordGroups: Array<{
   category: CommentInsight['category']
@@ -116,7 +117,7 @@ export function analyzeCommentKeywords(
 export const mockAudienceEventAdapter: AudienceEventAdapter = {
   getSnapshot(scene, applied, tick) {
     const sourceComments = commentsByScene[scene]
-    const comments = Array.from({ length: 3 }, (_, index): AudienceComment => {
+    const comments = Array.from({ length: visibleCommentCount }, (_, index): AudienceComment => {
       const sourceIndex = (tick + index) % sourceComments.length
       return {
         id: `comment-${scene}-${tick}-${index}`,

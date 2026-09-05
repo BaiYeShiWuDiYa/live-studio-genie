@@ -722,7 +722,9 @@ function App() {
               </div>
               <div className="comment-stream">
                 <div className="section-label"><MessageCircle size={15} />实时评论</div>
-                {audienceSnapshot.comments.map((comment) => <p key={comment.id}><b>{comment.userName}</b> {comment.text}</p>)}
+                <div className="comment-list" role="log" aria-label="实时评论列表" aria-live="polite" tabIndex={0}>
+                  {audienceSnapshot.comments.map((comment) => <p key={comment.id}><b>{comment.userName}</b> {comment.text}</p>)}
+                </div>
               </div>
               <div className="gift-stream">
                 <div className="section-label"><Gift size={15} />礼物动态</div>

@@ -287,6 +287,20 @@ npm run lint
 
 Result: 10 test files and 36 tests passed. Production build completed with the existing large-chunk warning.
 
+### Scrollable Live Comments
+
+- Added a fixed-height, keyboard-focusable live-comment viewport with an isolated scrollbar.
+- Expanded deterministic mock snapshots to seven comments so overflow behavior is continuously testable.
+- Verified dynamic comment updates and isolated scrolling in Chrome.
+
+Validation:
+
+```bash
+npm run test
+npm run build
+npm run lint
+```
+
 ## Next
 
 1. Add eyeliner and face-shape deformation.
