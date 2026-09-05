@@ -6,6 +6,8 @@ export interface FaceEffectPoint {
 export interface GlassesGeometry {
   leftCenter: FaceEffectPoint
   rightCenter: FaceEffectPoint
+  leftTempleAnchor: FaceEffectPoint
+  rightTempleAnchor: FaceEffectPoint
   leftTemple: FaceEffectPoint
   rightTemple: FaceEffectPoint
   lensWidth: number
@@ -93,31 +95,50 @@ export function createGlassesGeometry(
 
   leftCenter.y -= verticalOffset
   rightCenter.y -= verticalOffset
-  const faceCenter = {
-    x: (leftCenter.x + rightCenter.x) / 2,
-    y: (leftCenter.y + rightCenter.y) / 2,
+  const roll = Math.atan2(
+    rightCenter.y - leftCenter.y,
+    rightCenter.x - leftCenter.x,
+  )
+  const axis = {
+    x: Math.cos(roll),
+    y: Math.sin(roll),
   }
-  const extendTemple = (point: FaceEffectPoint) => {
-    const dx = point.x - faceCenter.x
-    const dy = point.y - faceCenter.y
-    const length = Math.max(1, Math.hypot(dx, dy))
-    const extension = lensWidth * 0.38
+  const down = {
+    x: -axis.y,
+    y: axis.x,
+  }
+  const leftTempleAnchor = toPoint(leftTemple)
+  const rightTempleAnchor = toPoint(rightTemple)
+  const extendTemple = (
+    point: FaceEffectPoint,
+    center: FaceEffectPoint,
+    direction: -1 | 1,
+  ) => {
+    const projectedGap = Math.max(
+      0,
+      (point.x - center.x) * axis.x * direction +
+        (point.y - center.y) * axis.y * direction,
+    )
+    const extension = Math.min(
+      lensWidth * 0.32,
+      Math.max(lensWidth * 0.12, projectedGap * 0.3 + lensWidth * 0.08),
+    )
+    const earDrop = lensHeight * 0.08
     return {
-      x: point.x + (dx / length) * extension,
-      y: point.y + (dy / length) * extension,
+      x: point.x + axis.x * extension * direction + down.x * earDrop,
+      y: point.y + axis.y * extension * direction + down.y * earDrop,
     }
   }
 
   return {
     leftCenter,
     rightCenter,
-    leftTemple: extendTemple(toPoint(leftTemple)),
-    rightTemple: extendTemple(toPoint(rightTemple)),
+    leftTempleAnchor,
+    rightTempleAnchor,
+    leftTemple: extendTemple(leftTempleAnchor, leftCenter, -1),
+    rightTemple: extendTemple(rightTempleAnchor, rightCenter, 1),
     lensWidth,
     lensHeight,
-    roll: Math.atan2(
-      rightCenter.y - leftCenter.y,
-      rightCenter.x - leftCenter.x,
-    ),
+    roll,
   }
 }

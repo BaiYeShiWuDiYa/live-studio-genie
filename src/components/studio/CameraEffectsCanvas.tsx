@@ -1098,6 +1098,50 @@ function drawHeart(
   context.fill()
 }
 
+function drawGlassesTempleArms(
+  context: CanvasRenderingContext2D,
+  geometry: NonNullable<ReturnType<typeof createGlassesGeometry>>,
+  lensRadiusX: number,
+  lensHeight: number,
+) {
+  const axisX = Math.cos(geometry.roll)
+  const axisY = Math.sin(geometry.roll)
+  const upX = axisY
+  const upY = -axisX
+  const sides = [
+    {
+      center: geometry.leftCenter,
+      anchor: geometry.leftTempleAnchor,
+      end: geometry.leftTemple,
+      direction: -1,
+    },
+    {
+      center: geometry.rightCenter,
+      anchor: geometry.rightTempleAnchor,
+      end: geometry.rightTemple,
+      direction: 1,
+    },
+  ] as const
+
+  for (const { center, anchor, end, direction } of sides) {
+    const hinge = {
+      x: center.x + axisX * lensRadiusX * direction + upX * lensHeight * 0.08,
+      y: center.y + axisY * lensRadiusX * direction + upY * lensHeight * 0.08,
+    }
+    const extension = Math.hypot(end.x - anchor.x, end.y - anchor.y)
+    context.beginPath()
+    context.moveTo(hinge.x, hinge.y)
+    context.lineTo(anchor.x, anchor.y)
+    context.quadraticCurveTo(
+      anchor.x + axisX * extension * direction * 0.72,
+      anchor.y + axisY * extension * direction * 0.72,
+      end.x,
+      end.y,
+    )
+    context.stroke()
+  }
+}
+
 function drawBlackSunglasses(
   context: CanvasRenderingContext2D,
   landmarks: NormalizedLandmark[],
@@ -1106,24 +1150,17 @@ function drawBlackSunglasses(
 ) {
   const geometry = createGlassesGeometry(landmarks, width, height)
   if (!geometry) return
-  const {
-    leftCenter,
-    rightCenter,
-    leftTemple,
-    rightTemple,
-    roll,
-  } = geometry
-  const lensWidth = geometry.lensWidth * 1.04
-  const lensHeight = geometry.lensHeight * 0.96
+  const { leftCenter, rightCenter, roll } = geometry
+  const lensWidth = geometry.lensWidth * 1.12
+  const lensHeight = lensWidth * 0.72
   const radiusX = lensWidth / 2
   const radiusY = lensHeight / 2
-  const centerX = (leftCenter.x + rightCenter.x) / 2
-  const centerY = (leftCenter.y + rightCenter.y) / 2
+  const axisX = Math.cos(roll)
+  const axisY = Math.sin(roll)
+  const upX = axisY
+  const upY = -axisX
 
   context.save()
-  context.translate(centerX, centerY)
-  context.rotate(roll)
-  context.translate(-centerX, -centerY)
   context.lineJoin = 'round'
   context.lineCap = 'round'
   const frameWidth = Math.max(4, lensWidth * 0.062)
@@ -1131,46 +1168,25 @@ function drawBlackSunglasses(
   context.strokeStyle = '#05070a'
   context.shadowBlur = 8
   context.shadowColor = 'rgba(0, 0, 0, 0.7)'
+  drawGlassesTempleArms(context, geometry, radiusX, lensHeight)
 
   for (const center of [leftCenter, rightCenter]) {
-    const lensGradient = context.createLinearGradient(
-      center.x,
-      center.y - radiusY,
-      center.x,
-      center.y + radiusY,
-    )
+    context.save()
+    context.translate(center.x, center.y)
+    context.rotate(roll)
+    const lensGradient = context.createLinearGradient(0, -radiusY, 0, radiusY)
     lensGradient.addColorStop(0, 'rgba(8, 10, 14, 0.98)')
     lensGradient.addColorStop(0.55, 'rgba(16, 20, 25, 0.95)')
     lensGradient.addColorStop(1, 'rgba(42, 50, 56, 0.88)')
     context.fillStyle = lensGradient
     context.beginPath()
-    context.moveTo(center.x - radiusX, center.y - radiusY * 0.7)
-    context.quadraticCurveTo(
-      center.x - radiusX * 0.86,
-      center.y - radiusY,
-      center.x - radiusX * 0.55,
-      center.y - radiusY,
+    context.roundRect(
+      -radiusX,
+      -radiusY,
+      lensWidth,
+      lensHeight,
+      lensHeight * 0.12,
     )
-    context.lineTo(center.x + radiusX * 0.72, center.y - radiusY * 0.86)
-    context.quadraticCurveTo(
-      center.x + radiusX,
-      center.y - radiusY * 0.72,
-      center.x + radiusX * 0.94,
-      center.y - radiusY * 0.34,
-    )
-    context.quadraticCurveTo(
-      center.x + radiusX * 0.78,
-      center.y + radiusY * 0.8,
-      center.x,
-      center.y + radiusY,
-    )
-    context.quadraticCurveTo(
-      center.x - radiusX * 0.8,
-      center.y + radiusY * 0.78,
-      center.x - radiusX,
-      center.y - radiusY * 0.34,
-    )
-    context.closePath()
     context.fill()
     context.stroke()
 
@@ -1178,44 +1194,38 @@ function drawBlackSunglasses(
     context.strokeStyle = '#020304'
     context.lineWidth = frameWidth * 1.35
     context.beginPath()
-    context.moveTo(center.x - radiusX * 0.83, center.y - radiusY * 0.76)
-    context.quadraticCurveTo(
-      center.x,
-      center.y - radiusY * 1.02,
-      center.x + radiusX * 0.78,
-      center.y - radiusY * 0.78,
-    )
+    context.moveTo(-radiusX * 0.86, -radiusY * 0.82)
+    context.lineTo(radiusX * 0.86, -radiusY * 0.82)
     context.stroke()
 
     context.strokeStyle = 'rgba(255, 255, 255, 0.2)'
     context.lineWidth = Math.max(1.5, lensWidth * 0.018)
     context.beginPath()
-    context.moveTo(center.x - radiusX * 0.54, center.y - radiusY * 0.42)
+    context.moveTo(-radiusX * 0.58, -radiusY * 0.46)
     context.quadraticCurveTo(
-      center.x - radiusX * 0.3,
-      center.y - radiusY * 0.54,
-      center.x - radiusX * 0.04,
-      center.y - radiusY * 0.44,
+      -radiusX * 0.32,
+      -radiusY * 0.58,
+      -radiusX * 0.02,
+      -radiusY * 0.46,
     )
     context.stroke()
-    context.strokeStyle = '#05070a'
-    context.lineWidth = frameWidth
+    context.restore()
   }
 
+  context.shadowBlur = 0
+  context.strokeStyle = '#05070a'
+  context.lineWidth = frameWidth
   context.beginPath()
-  context.moveTo(leftCenter.x + radiusX, leftCenter.y)
-  context.bezierCurveTo(
-    leftCenter.x + radiusX * 1.12,
-    leftCenter.y - lensHeight * 0.12,
-    rightCenter.x - radiusX * 1.12,
-    rightCenter.y - lensHeight * 0.12,
-    rightCenter.x - radiusX,
-    rightCenter.y,
+  context.moveTo(
+    leftCenter.x + axisX * radiusX,
+    leftCenter.y + axisY * radiusX,
   )
-  context.moveTo(leftCenter.x - radiusX, leftCenter.y - lensHeight * 0.08)
-  context.lineTo(leftTemple.x, leftTemple.y)
-  context.moveTo(rightCenter.x + radiusX, rightCenter.y - lensHeight * 0.08)
-  context.lineTo(rightTemple.x, rightTemple.y)
+  context.quadraticCurveTo(
+    (leftCenter.x + rightCenter.x) / 2 + upX * lensHeight * 0.12,
+    (leftCenter.y + rightCenter.y) / 2 + upY * lensHeight * 0.12,
+    rightCenter.x - axisX * radiusX,
+    rightCenter.y - axisY * radiusX,
+  )
   context.stroke()
   context.restore()
 }
@@ -1231,62 +1241,55 @@ function drawTechGlasses(
   const {
     leftCenter,
     rightCenter,
-    leftTemple,
-    rightTemple,
     lensWidth,
     lensHeight,
     roll,
   } = geometry
   const lensRadiusX = lensWidth / 2
   const lensRadiusY = lensHeight / 2
+  const axisX = Math.cos(roll)
+  const axisY = Math.sin(roll)
+  const upX = axisY
+  const upY = -axisX
 
   context.save()
-  context.translate(
-    (leftCenter.x + rightCenter.x) / 2,
-    (leftCenter.y + rightCenter.y) / 2,
-  )
-  context.rotate(roll)
-  context.translate(
-    -(leftCenter.x + rightCenter.x) / 2,
-    -(leftCenter.y + rightCenter.y) / 2,
-  )
   context.fillStyle = 'rgba(54, 198, 230, 0.15)'
   context.strokeStyle = '#78f0dd'
   context.lineWidth = Math.max(2.5, lensWidth * 0.065)
   context.lineJoin = 'round'
   context.shadowBlur = 14
   context.shadowColor = '#5be8ff'
+  drawGlassesTempleArms(context, geometry, lensRadiusX, lensHeight)
 
   for (const center of [leftCenter, rightCenter]) {
+    context.save()
+    context.translate(center.x, center.y)
+    context.rotate(roll)
     context.beginPath()
     context.roundRect(
-      center.x - lensRadiusX,
-      center.y - lensRadiusY,
+      -lensRadiusX,
+      -lensRadiusY,
       lensWidth,
       lensHeight,
       lensHeight * 0.3,
     )
     context.fill()
     context.stroke()
+    context.restore()
   }
 
+  context.shadowBlur = 0
   context.beginPath()
-  context.moveTo(leftCenter.x + lensRadiusX, leftCenter.y)
-  context.bezierCurveTo(
-    leftCenter.x + lensRadiusX * 1.12,
-    leftCenter.y - lensHeight * 0.12,
-    rightCenter.x - lensRadiusX * 1.12,
-    rightCenter.y - lensHeight * 0.12,
-    rightCenter.x - lensRadiusX,
-    rightCenter.y,
+  context.moveTo(
+    leftCenter.x + axisX * lensRadiusX,
+    leftCenter.y + axisY * lensRadiusX,
   )
-  context.stroke()
-
-  context.beginPath()
-  context.moveTo(leftCenter.x - lensRadiusX, leftCenter.y - lensHeight * 0.08)
-  context.lineTo(leftTemple.x, leftTemple.y)
-  context.moveTo(rightCenter.x + lensRadiusX, rightCenter.y - lensHeight * 0.08)
-  context.lineTo(rightTemple.x, rightTemple.y)
+  context.quadraticCurveTo(
+    (leftCenter.x + rightCenter.x) / 2 + upX * lensHeight * 0.12,
+    (leftCenter.y + rightCenter.y) / 2 + upY * lensHeight * 0.12,
+    rightCenter.x - axisX * lensRadiusX,
+    rightCenter.y - axisY * lensRadiusX,
+  )
   context.stroke()
   context.restore()
 }

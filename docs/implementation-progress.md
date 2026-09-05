@@ -378,6 +378,26 @@ git diff --check
 
 Result: 11 test files and 44 tests passed. Production build completed with the existing large-chunk warning. Chrome verification covered the extended glasses geometry, revised sunglasses shape, and the new retouching controls.
 
+### Face-aligned Glasses Arms
+
+- Replaced radial temple-arm extension with an eye-axis projection that stays aligned with the face.
+- Routed each arm through its tracked temple anchor before curving slightly down toward the top of the ear.
+- Added asymmetric extension based on each visible face side so profile views shorten the far arm and extend the near arm.
+- Removed the duplicated group rotation that exaggerated arm drift when the head rolled.
+- Replaced the tapered sunglasses lenses with larger rectangular lenses and restrained rounded corners.
+- Added geometry coverage for temple anchoring, limited vertical drift, and turned-face arm asymmetry.
+
+Validation:
+
+```bash
+npm run test
+npm run build
+npm run lint
+git diff --check
+```
+
+Result: 11 test files and 45 tests passed. Production build completed with the existing large-chunk warning. The automated browser loaded the updated controls, but camera-based profile verification remains manual because that browser session has camera permission denied.
+
 ## Next
 
 1. Add eyebrow controls and face-shape deformation.
