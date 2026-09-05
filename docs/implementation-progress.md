@@ -128,7 +128,23 @@ npm run build
 npm run lint
 ```
 
+### Web Audio Background Music
+
+- Added a generated ambient chord loop as a real local BGM source.
+- Added user-gesture playback and stop controls.
+- Connected BGM settings to a dedicated Web Audio `GainNode`.
+- Applied previewed and committed BGM dB changes to the playing source.
+- Added safe output-level conversion tests and audio-context cleanup.
+- Verified playback, gain preview, and stop behavior in the browser.
+
+Validation:
+
+```bash
+npm run test
+npm run build
+npm run lint
+```
+
 ## Next
 
-1. Add a real background-music source before applying BGM gain.
-2. Split remaining studio orchestration out of `App.tsx`.
+1. Split remaining studio orchestration out of `App.tsx`.

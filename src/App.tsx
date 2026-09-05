@@ -26,7 +26,6 @@ import {
   Signal,
   Sparkles,
   Users,
-  Volume2,
   WandSparkles,
   Zap,
 } from 'lucide-react'
@@ -36,6 +35,10 @@ import { studioToolRegistry, type StudioToolContext } from './agent/tools/studio
 import { getSceneWidgetSpec } from './agent/widgets/sceneWidgets'
 import type { StudioScene, WidgetSpec } from './agent/widgets/widgetSpec'
 import { createAudioProcessor, type AudioProcessor } from './capabilities/audio/audioProcessor'
+import {
+  createBackgroundMusicPlayer,
+  type BackgroundMusicPlayer,
+} from './capabilities/audio/backgroundMusic'
 import type { AudioSettings } from './capabilities/audio/types'
 import { requestCameraStream, requestDisplayStream, stopMediaStream } from './capabilities/media/browserMedia'
 import { useMediaMonitoring } from './capabilities/monitoring/useMediaMonitoring'
@@ -157,6 +160,8 @@ function App() {
   const [liveAdjustment, setLiveAdjustment] = useState<LiveAdjustment | null>(null)
   const [isSuggestionPreview, setIsSuggestionPreview] = useState(false)
   const [isMicMuted, setIsMicMuted] = useState(false)
+  const [isBackgroundMusicPlaying, setIsBackgroundMusicPlaying] = useState(false)
+  const [backgroundMusicError, setBackgroundMusicError] = useState('')
   const [previewMode, setPreviewMode] = useState<PreviewMode>('mobile')
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null)
   const [processedAudioStream, setProcessedAudioStream] = useState<MediaStream | null>(null)
@@ -165,6 +170,7 @@ function App() {
   const [isLayoutEditing, setIsLayoutEditing] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const audioProcessorRef = useRef<AudioProcessor | null>(null)
+  const backgroundMusicRef = useRef<BackgroundMusicPlayer | null>(null)
   const cameraAttemptedRef = useRef(false)
   const genieAbortRef = useRef<AbortController | null>(null)
   const lastGenieRequestRef = useRef<{ question: string; prompt: string } | null>(null)
@@ -188,6 +194,7 @@ function App() {
   const resetLiveGoalPreview = useStudioStore((state) => state.resetLiveGoalPreview)
   const undoLiveGoal = useStudioStore((state) => state.undoLiveGoal)
   const microphoneGainDb = useStudioStore((state) => state.audioSettings.microphoneGainDb)
+  const backgroundMusicGainDb = useStudioStore((state) => state.audioSettings.backgroundMusicGainDb)
   const studioToolContext: StudioToolContext = {
     previewAudioSettings,
     applyAudioSettings,
@@ -213,7 +220,10 @@ function App() {
   }, [mediaStream])
 
   useEffect(() => {
-    return () => audioProcessorRef.current?.close()
+    return () => {
+      audioProcessorRef.current?.close()
+      backgroundMusicRef.current?.close()
+    }
   }, [])
 
   useEffect(() => {
@@ -223,6 +233,10 @@ function App() {
   useEffect(() => {
     audioProcessorRef.current?.setGainDb(microphoneGainDb)
   }, [microphoneGainDb])
+
+  useEffect(() => {
+    backgroundMusicRef.current?.setGainDb(backgroundMusicGainDb)
+  }, [backgroundMusicGainDb])
 
   useEffect(() => {
     const video = videoRef.current
@@ -492,6 +506,23 @@ function App() {
     }, studioToolContext)
   }
 
+  const toggleBackgroundMusic = () => {
+    if (backgroundMusicRef.current) {
+      backgroundMusicRef.current.close()
+      backgroundMusicRef.current = null
+      setIsBackgroundMusicPlaying(false)
+      return
+    }
+
+    try {
+      backgroundMusicRef.current = createBackgroundMusicPlayer(backgroundMusicGainDb)
+      setBackgroundMusicError('')
+      setIsBackgroundMusicPlaying(true)
+    } catch {
+      setBackgroundMusicError('浏览器无法启动背景音乐，请检查音频输出设备。')
+    }
+  }
+
   const runGenieRequest = async (
     request: { question: string; prompt: string },
     appendQuestion: boolean,
@@ -658,11 +689,11 @@ function App() {
             <button type="button" className={previewMode === 'studio' ? 'selected' : ''} onClick={() => setPreviewMode('studio')}>Studio 视图</button>
           </div>
           <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} liveAdjustment={liveAdjustment} previewMode={previewMode} isPreviewing={isSuggestionPreview} />
-          {(cameraError || displayError) && <p className="camera-warning">{displayError || cameraError}</p>}
+          {(cameraError || displayError || backgroundMusicError) && <p className="camera-warning">{displayError || cameraError || backgroundMusicError}</p>}
           <div className="stage-controls">
             <button type="button" className="control-button" onClick={enableCamera}><Camera size={18} /><span>{cameraEnabled ? '摄像头已连接' : '开启摄像头'}</span></button>
             <button type="button" className={`control-button ${isMicMuted ? 'active-control' : ''}`} onClick={() => setIsMicMuted((muted) => !muted)}><Mic size={18} /><span>{isMicMuted ? '麦克风已静音' : '麦克风'}</span></button>
-            <button type="button" className="control-button"><Volume2 size={18} /><span>扬声器</span></button>
+            <button type="button" className={`control-button ${isBackgroundMusicPlaying ? 'active-control' : ''}`} onClick={toggleBackgroundMusic}><Music2 size={18} /><span>{isBackgroundMusicPlaying ? '停止 BGM' : '播放 BGM'}</span></button>
             <button type="button" className={`control-button ${displayStream ? 'active-control' : ''}`} onClick={toggleScreenShare}><MonitorUp size={18} /><span>{displayStream ? '停止投屏' : '游戏投屏'}</span></button>
             <button type="button" className={`control-button ${isLayoutEditing ? 'active-control' : ''}`} disabled={!displayStream} onClick={() => setIsLayoutEditing((editing) => !editing)}><LayoutTemplate size={18} /><span>{isLayoutEditing ? '锁定布局' : '编辑布局'}</span></button>
             {displayStream && isLayoutEditing && <button type="button" className="control-button" onClick={resetCameraLayerLayout}><RotateCcw size={18} /><span>重置布局</span></button>}
