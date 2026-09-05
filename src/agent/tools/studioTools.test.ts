@@ -76,17 +76,21 @@ describe('studio tool registry', () => {
       smoothness: 24,
       exposure: 8,
       warmth: 12,
+      contrast: 6,
+      saturation: 8,
       backgroundMode: 'blur' as const,
       backgroundColor: '#163d38',
       backgroundImageUrl: null,
       backgroundPreset: null,
-      faceEffect: 'halo' as const,
+      faceEffect: 'butterfly-sticker' as const,
       lipstickIntensity: 32,
       lipstickColor: '#c2476e',
       blushIntensity: 20,
       blushColor: '#e8889a',
       eyeshadowIntensity: 14,
       eyeshadowColor: '#8d63b8',
+      eyelinerIntensity: 18,
+      highlightIntensity: 20,
     }
     const result = studioToolRegistry.execute('studio.adjust_camera_effects', {
       mode: 'preview',
@@ -94,7 +98,7 @@ describe('studio tool registry', () => {
     }, context)
 
     expect(context.previewCameraEffects).toHaveBeenCalledWith(cameraEffects)
-    expect(result.detail).toContain('3 项美妆')
+    expect(result.detail).toContain('5 项美妆')
   })
 
   it('publishes a validated audience poll', () => {

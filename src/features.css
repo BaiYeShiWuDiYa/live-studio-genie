@@ -308,6 +308,23 @@
 .genie-panel .recommendation-card {
   min-height: 0;
   overflow-y: auto;
+  scrollbar-color: rgba(103, 216, 208, 0.72) rgba(37, 43, 57, 0.72);
+  scrollbar-width: thin;
+}
+
+.genie-panel .recommendation-card::-webkit-scrollbar {
+  width: 6px;
+}
+
+.genie-panel .recommendation-card::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(37, 43, 57, 0.72);
+}
+
+.genie-panel .recommendation-card::-webkit-scrollbar-thumb {
+  border: 1px solid rgba(37, 43, 57, 0.72);
+  border-radius: 999px;
+  background: rgba(103, 216, 208, 0.72);
 }
 
 @media (min-width: 821px) {

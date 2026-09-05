@@ -118,7 +118,7 @@ describe('parseGenieContent', () => {
   it('normalizes explicit makeup values and a generated prop', () => {
     const result = parseGenieContent(
       '已生成方案。',
-      '柔肤 24，提亮 8，口红 35，腮红 20，眼影 18，加星环道具',
+      '柔肤 24，提亮 8，口红 35，腮红 20，眼影 18，加闪电贴纸',
       defaultCameraEffects,
       defaultCameraEffects,
     )
@@ -132,7 +132,7 @@ describe('parseGenieContent', () => {
           lipstickIntensity: 35,
           blushIntensity: 20,
           eyeshadowIntensity: 18,
-          faceEffect: 'halo',
+          faceEffect: 'lightning-sticker',
         },
       },
     })
@@ -140,8 +140,8 @@ describe('parseGenieContent', () => {
 
   it('maps new face prop instructions to trusted effect ids', () => {
     const result = parseGenieContent(
-      '已生成猫耳效果。',
-      '给我加一个猫耳道具',
+      '已生成蝴蝶贴纸。',
+      '给我加一个蝴蝶贴纸',
       defaultCameraEffects,
       defaultCameraEffects,
     )
@@ -150,7 +150,7 @@ describe('parseGenieContent', () => {
       type: 'camera-effects',
       props: {
         settings: {
-          faceEffect: 'cat-ears',
+          faceEffect: 'butterfly-sticker',
         },
       },
     })

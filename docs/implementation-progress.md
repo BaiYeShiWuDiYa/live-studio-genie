@@ -343,8 +343,10 @@ Result: 11 test files and 42 tests passed. Production build completed with the e
 - Split camera controls into dedicated Bundle, Beauty, Makeup, Props, and Background tabs.
 - Limited Beauty and Makeup tabs to their own presets and sliders while keeping all controls in Bundle.
 - Removed local file upload and added four offline procedural backgrounds rendered directly by Canvas.
-- Rebuilt the halo as a head-tracked dual-layer light ring with roll compensation.
-- Added face-tracked cat ears, heart stickers, and cheek-star stickers.
+- Added contrast and saturation beauty controls backed by the camera processing filter chain.
+- Added face-tracked eyeliner and nose highlight makeup controls.
+- Removed halo and cat-ear props, replacing them with butterfly and lightning stickers.
+- Matched the Genie recommendation scrollbar to the cyan studio scrollbar theme.
 
 Validation:
 
@@ -354,11 +356,11 @@ npm run build
 npm run lint
 ```
 
-Result: 11 test files and 43 tests passed. Chrome verification covered tab isolation, all new props, halo tracking, and segmented virtual backgrounds.
+Result: 11 test files and 43 tests passed. Chrome verification covered the new sliders, themed scrollbar, butterfly and lightning tracking, and segmented virtual backgrounds.
 
 ## Next
 
-1. Add eyeliner and face-shape deformation.
+1. Add eyebrow controls and face-shape deformation.
 2. Improve makeup edge fitting and skin-region rendering.
 3. Split remaining studio orchestration out of `App.tsx`.
 4. Reduce the Creator UI production bundle through code splitting.

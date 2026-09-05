@@ -105,14 +105,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function getRequestedFaceEffect(instruction: string): FaceEffect | undefined {
-  if (/(?:关闭|移除|去掉|取消|不要).{0,6}(?:道具|特效|眼镜|星环|光环|星光|猫耳|贴纸)/.test(instruction)) {
+  if (/(?:关闭|移除|去掉|取消|不要).{0,6}(?:道具|特效|眼镜|星光|蝴蝶|闪电|贴纸)/.test(instruction)) {
     return 'none'
   }
-  if (/猫耳/.test(instruction)) return 'cat-ears'
+  if (/蝴蝶/.test(instruction)) return 'butterfly-sticker'
+  if (/闪电/.test(instruction)) return 'lightning-sticker'
   if (/星星贴纸|脸颊星星/.test(instruction)) return 'cheek-stars'
   if (/爱心贴纸|心形贴纸|脸部贴纸|脸上贴纸/.test(instruction)) return 'heart-sticker'
   if (/(?:科技)?眼镜/.test(instruction)) return 'glasses'
-  if (/星环|光环/.test(instruction)) return 'halo'
   if (/星光|闪光/.test(instruction)) return 'sparkles'
   return undefined
 }
@@ -124,9 +124,13 @@ function getExplicitCameraPatch(instruction: string): Partial<CameraEffects> {
       | 'smoothness'
       | 'exposure'
       | 'warmth'
+      | 'contrast'
+      | 'saturation'
       | 'lipstickIntensity'
       | 'blushIntensity'
       | 'eyeshadowIntensity'
+      | 'eyelinerIntensity'
+      | 'highlightIntensity'
     >
     labels: string
     min: number
@@ -135,9 +139,13 @@ function getExplicitCameraPatch(instruction: string): Partial<CameraEffects> {
     { key: 'smoothness', labels: '柔肤|磨皮', min: 0, max: 100 },
     { key: 'exposure', labels: '提亮|曝光', min: -20, max: 30 },
     { key: 'warmth', labels: '暖肤', min: 0, max: 40 },
+    { key: 'contrast', labels: '美颜对比度|对比度', min: -20, max: 40 },
+    { key: 'saturation', labels: '饱和度', min: -30, max: 50 },
     { key: 'lipstickIntensity', labels: '口红', min: 0, max: 100 },
     { key: 'blushIntensity', labels: '腮红', min: 0, max: 100 },
     { key: 'eyeshadowIntensity', labels: '眼影', min: 0, max: 100 },
+    { key: 'eyelinerIntensity', labels: '眼线', min: 0, max: 100 },
+    { key: 'highlightIntensity', labels: '高光', min: 0, max: 100 },
   ]
   const patch: Partial<CameraEffects> = {}
 
@@ -153,7 +161,7 @@ function getExplicitCameraPatch(instruction: string): Partial<CameraEffects> {
 }
 
 function isCameraEffectsInstruction(instruction: string): boolean {
-  return /美颜|美妆|妆容|道具|特效|人脸效果|上镜|柔肤|磨皮|提亮|曝光|暖肤|口红|腮红|眼影|眼镜|星环|光环|星光|猫耳|贴纸/.test(instruction)
+  return /美颜|美妆|妆容|道具|特效|人脸效果|上镜|柔肤|磨皮|提亮|曝光|暖肤|饱和度|口红|腮红|眼影|眼线|高光|眼镜|星光|蝴蝶|闪电|贴纸/.test(instruction)
 }
 
 function hydrateCameraEffectsWidget(
@@ -189,9 +197,9 @@ function createCameraEffectsFallback(
 
   const recommendation = recommendedSettings ?? currentSettings
   const explicitPatch = getExplicitCameraPatch(instruction)
-  const beautyRequested = /美颜|上镜|柔肤|磨皮|提亮|曝光|暖肤/.test(instruction)
-  const makeupRequested = /美妆|妆容|上镜|口红|腮红|眼影/.test(instruction)
-  const propRequested = /道具|特效|眼镜|星环|光环|星光|猫耳|贴纸/.test(instruction)
+  const beautyRequested = /美颜|上镜|柔肤|磨皮|提亮|曝光|暖肤|对比度|饱和度/.test(instruction)
+  const makeupRequested = /美妆|妆容|上镜|口红|腮红|眼影|眼线|高光/.test(instruction)
+  const propRequested = /道具|特效|眼镜|星光|蝴蝶|闪电|贴纸/.test(instruction)
   const settings = cameraEffectsSchema.parse({
     ...currentSettings,
     ...(beautyRequested
@@ -199,6 +207,8 @@ function createCameraEffectsFallback(
           smoothness: recommendation.smoothness,
           exposure: recommendation.exposure,
           warmth: recommendation.warmth,
+          contrast: recommendation.contrast,
+          saturation: recommendation.saturation,
         }
       : {}),
     ...(makeupRequested
@@ -209,6 +219,8 @@ function createCameraEffectsFallback(
           blushColor: recommendation.blushColor,
           eyeshadowIntensity: recommendation.eyeshadowIntensity,
           eyeshadowColor: recommendation.eyeshadowColor,
+          eyelinerIntensity: recommendation.eyelinerIntensity,
+          highlightIntensity: recommendation.highlightIntensity,
         }
       : {}),
     ...(propRequested && getRequestedFaceEffect(instruction) === undefined

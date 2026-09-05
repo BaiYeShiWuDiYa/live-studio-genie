@@ -48,7 +48,7 @@ describe('camera effects', () => {
       lipstickIntensity: 20,
     })).toBe(true)
     expect(getEnabledMakeupCount(defaultCameraEffects)).toBe(0)
-    expect(getEnabledMakeupCount(recommendedCameraEffects)).toBe(3)
+    expect(getEnabledMakeupCount(recommendedCameraEffects)).toBe(5)
   })
 
   it('provides four valid and distinguishable style presets', () => {

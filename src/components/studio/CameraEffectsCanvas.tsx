@@ -282,8 +282,9 @@ function drawProcessedFrame({
   context.clearRect(0, 0, width, height)
   const filter = [
     `brightness(${1 + settings.exposure / 100})`,
+    `contrast(${1 + settings.contrast / 100})`,
     `sepia(${settings.warmth / 160})`,
-    `saturate(${1 + settings.warmth / 180})`,
+    `saturate(${1 + settings.warmth / 180 + settings.saturation / 100})`,
     `blur(${settings.smoothness * 0.008}px)`,
   ].join(' ')
 
@@ -538,7 +539,10 @@ function drawMakeup(
   drawLipstick(context, landmarks, settings, width, height, faceWidth)
   drawBlush(context, landmarks, settings, width, height, faceWidth, roll)
   drawEyeshadow(context, landmarks, settings, width, height, faceWidth, roll)
+  drawEyeliner(context, landmarks, settings, width, height, faceWidth)
   context.restore()
+
+  drawHighlight(context, landmarks, settings, width, height, faceWidth)
 }
 
 function drawLipstick(
@@ -659,6 +663,57 @@ function drawEyeshadow(
   context.filter = 'none'
 }
 
+function drawEyeliner(
+  context: CanvasRenderingContext2D,
+  landmarks: NormalizedLandmark[],
+  settings: CameraEffects,
+  width: number,
+  height: number,
+  faceWidth: number,
+) {
+  if (settings.eyelinerIntensity === 0) return
+  context.strokeStyle = `rgba(21, 17, 28, ${settings.eyelinerIntensity / 115})`
+  context.lineWidth = Math.max(1, faceWidth * (0.004 + settings.eyelinerIntensity * 0.00004))
+  context.lineCap = 'round'
+  context.lineJoin = 'round'
+
+  for (const indices of [EYE_TOP_LEFT, EYE_TOP_RIGHT]) {
+    context.beginPath()
+    indices.forEach((index, pointIndex) => {
+      const landmark = landmarks[index]
+      if (pointIndex === 0) context.moveTo(landmark.x * width, landmark.y * height)
+      else context.lineTo(landmark.x * width, landmark.y * height)
+    })
+    context.stroke()
+  }
+}
+
+function drawHighlight(
+  context: CanvasRenderingContext2D,
+  landmarks: NormalizedLandmark[],
+  settings: CameraEffects,
+  width: number,
+  height: number,
+  faceWidth: number,
+) {
+  if (settings.highlightIntensity === 0) return
+  const bridge = landmarks[168]
+  const tip = landmarks[1]
+  if (!bridge || !tip) return
+
+  context.save()
+  context.globalCompositeOperation = 'screen'
+  context.strokeStyle = `rgba(255, 231, 211, ${settings.highlightIntensity / 190})`
+  context.lineWidth = Math.max(2, faceWidth * 0.026)
+  context.lineCap = 'round'
+  context.filter = `blur(${Math.max(1.5, faceWidth * 0.012)}px)`
+  context.beginPath()
+  context.moveTo(bridge.x * width, bridge.y * height)
+  context.lineTo(tip.x * width, tip.y * height)
+  context.stroke()
+  context.restore()
+}
+
 function traceLandmarkPath(
   context: CanvasRenderingContext2D,
   landmarks: NormalizedLandmark[],
@@ -709,9 +764,7 @@ function drawFaceEffect(
   context.shadowColor = '#78f0dd'
   context.lineWidth = Math.max(2, faceWidth * 0.018)
 
-  if (effect === 'halo') {
-    drawHalo(context, centerX, topY, faceWidth, roll)
-  } else if (effect === 'sparkles') {
+  if (effect === 'sparkles') {
     context.fillStyle = '#fff3ad'
     ;[
       [centerX - faceWidth * 0.52, topY],
@@ -722,96 +775,117 @@ function drawFaceEffect(
     })
   } else if (effect === 'glasses') {
     drawTechGlasses(context, landmarks, width, height)
-  } else if (effect === 'cat-ears') {
-    drawCatEars(context, centerX, forehead.y * height, faceWidth, roll)
   } else if (effect === 'heart-sticker') {
     drawCheekHearts(context, landmarks, width, height, faceWidth)
   } else if (effect === 'cheek-stars') {
     drawCheekStars(context, landmarks, width, height, faceWidth)
+  } else if (effect === 'butterfly-sticker') {
+    drawButterflyStickers(context, landmarks, width, height, faceWidth, roll)
+  } else if (effect === 'lightning-sticker') {
+    drawLightningStickers(context, landmarks, width, height, faceWidth, roll)
   }
   context.restore()
 }
 
-function drawHalo(
+function drawButterflyStickers(
   context: CanvasRenderingContext2D,
-  centerX: number,
-  centerY: number,
+  landmarks: NormalizedLandmark[],
+  width: number,
+  height: number,
   faceWidth: number,
   roll: number,
 ) {
-  const radiusX = faceWidth * 0.46
-  const radiusY = faceWidth * 0.105
-  context.save()
-  context.translate(centerX, centerY)
-  context.rotate(roll)
-  const gradient = context.createLinearGradient(-radiusX, 0, radiusX, 0)
-  gradient.addColorStop(0, '#78f0dd')
-  gradient.addColorStop(0.46, '#fff7b0')
-  gradient.addColorStop(1, '#f68ed8')
-  context.strokeStyle = gradient
-  context.lineWidth = Math.max(4, faceWidth * 0.045)
-  context.shadowBlur = Math.max(18, faceWidth * 0.12)
-  context.shadowColor = '#74e9ff'
-  context.beginPath()
-  context.ellipse(0, 0, radiusX, radiusY, 0, 0, Math.PI * 2)
-  context.stroke()
-
-  context.shadowBlur = 0
-  context.strokeStyle = 'rgba(255, 255, 255, 0.82)'
-  context.lineWidth = Math.max(1.5, faceWidth * 0.012)
-  context.beginPath()
-  context.ellipse(0, -faceWidth * 0.01, radiusX * 0.96, radiusY * 0.72, 0, Math.PI, Math.PI * 2)
-  context.stroke()
-  context.restore()
-}
-
-function drawCatEars(
-  context: CanvasRenderingContext2D,
-  centerX: number,
-  foreheadY: number,
-  faceWidth: number,
-  roll: number,
-) {
-  context.save()
-  context.translate(centerX, foreheadY)
-  context.rotate(roll)
-  context.lineJoin = 'round'
-  context.lineWidth = Math.max(2.5, faceWidth * 0.018)
-  context.strokeStyle = '#8ff4e3'
-  context.fillStyle = 'rgba(32, 44, 62, 0.9)'
-  context.shadowBlur = 14
-  context.shadowColor = '#78f0dd'
-
-  for (const direction of [-1, 1]) {
-    const outerX = direction * faceWidth * 0.48
-    const innerX = direction * faceWidth * 0.12
-    const tipX = direction * faceWidth * 0.32
-    const baseY = -faceWidth * 0.02
-    const tipY = -faceWidth * 0.39
+  const anchors = [landmarks[205], landmarks[425]]
+  anchors.forEach((anchor, index) => {
+    if (!anchor) return
+    const direction = index === 0 ? -1 : 1
+    const x = anchor.x * width + direction * faceWidth * 0.08
+    const y = anchor.y * height - faceWidth * 0.12
+    const size = faceWidth * 0.12
+    context.save()
+    context.translate(x, y)
+    context.rotate(roll + direction * 0.18)
+    context.shadowBlur = 10
+    context.shadowColor = '#d68cff'
+    context.fillStyle = 'rgba(214, 140, 255, 0.86)'
+    context.strokeStyle = '#8ff4e3'
+    context.lineWidth = Math.max(1, size * 0.08)
+    for (const wingDirection of [-1, 1]) {
+      context.beginPath()
+      context.ellipse(
+        wingDirection * size * 0.46,
+        -size * 0.16,
+        size * 0.34,
+        size * 0.52,
+        wingDirection * 0.48,
+        0,
+        Math.PI * 2,
+      )
+      context.fill()
+      context.stroke()
+      context.beginPath()
+      context.ellipse(
+        wingDirection * size * 0.33,
+        size * 0.32,
+        size * 0.25,
+        size * 0.31,
+        wingDirection * 0.22,
+        0,
+        Math.PI * 2,
+      )
+      context.fill()
+      context.stroke()
+    }
+    context.fillStyle = '#fff2b8'
     context.beginPath()
-    context.moveTo(outerX, baseY)
-    context.lineTo(tipX, tipY)
-    context.lineTo(innerX, baseY)
-    context.closePath()
+    context.ellipse(0, 0, size * 0.08, size * 0.55, 0, 0, Math.PI * 2)
     context.fill()
+    context.strokeStyle = '#fff2b8'
+    context.lineWidth = Math.max(1, size * 0.055)
+    context.beginPath()
+    context.moveTo(-size * 0.02, -size * 0.46)
+    context.quadraticCurveTo(-size * 0.16, -size * 0.8, -size * 0.34, -size * 0.74)
+    context.moveTo(size * 0.02, -size * 0.46)
+    context.quadraticCurveTo(size * 0.16, -size * 0.8, size * 0.34, -size * 0.74)
     context.stroke()
+    context.restore()
+  })
+}
 
-    context.fillStyle = 'rgba(246, 142, 216, 0.68)'
+function drawLightningStickers(
+  context: CanvasRenderingContext2D,
+  landmarks: NormalizedLandmark[],
+  width: number,
+  height: number,
+  faceWidth: number,
+  roll: number,
+) {
+  const anchors = [landmarks[127], landmarks[356]]
+  anchors.forEach((anchor, index) => {
+    if (!anchor) return
+    const direction = index === 0 ? -1 : 1
+    const x = anchor.x * width - direction * faceWidth * 0.04
+    const y = anchor.y * height + faceWidth * 0.04
+    const size = faceWidth * 0.16
+    context.save()
+    context.translate(x, y)
+    context.rotate(roll + direction * 0.1)
+    context.scale(direction, 1)
+    context.fillStyle = index === 0 ? '#78f0dd' : '#f68ed8'
+    context.shadowBlur = 12
+    context.shadowColor = context.fillStyle
     context.beginPath()
-    context.moveTo(direction * faceWidth * 0.4, -faceWidth * 0.05)
-    context.lineTo(tipX, -faceWidth * 0.3)
-    context.lineTo(direction * faceWidth * 0.19, -faceWidth * 0.05)
+    context.moveTo(-size * 0.18, -size * 0.58)
+    context.lineTo(size * 0.3, -size * 0.58)
+    context.lineTo(size * 0.02, -size * 0.04)
+    context.lineTo(size * 0.34, -size * 0.04)
+    context.lineTo(-size * 0.28, size * 0.62)
+    context.lineTo(-size * 0.04, size * 0.1)
+    context.lineTo(-size * 0.34, size * 0.1)
     context.closePath()
     context.fill()
-    context.fillStyle = 'rgba(32, 44, 62, 0.9)'
-  }
-
-  context.shadowBlur = 0
-  context.strokeStyle = 'rgba(143, 244, 227, 0.78)'
-  context.beginPath()
-  context.arc(0, faceWidth * 0.03, faceWidth * 0.34, Math.PI * 1.08, Math.PI * 1.92)
-  context.stroke()
-  context.restore()
+    context.restore()
+  })
 }
 
 function drawCheekHearts(

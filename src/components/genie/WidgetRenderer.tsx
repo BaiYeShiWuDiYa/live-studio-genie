@@ -188,6 +188,8 @@ function CameraEffectsWidget({
             <Adjustment label="柔肤" max={100} value={`${settings.smoothness}%`} onChange={(value) => update({ smoothness: value })} />
             <Adjustment label="提亮" min={-20} max={30} value={`${withSign(settings.exposure)}%`} onChange={(value) => update({ exposure: value })} />
             <Adjustment label="暖肤" max={40} value={`${settings.warmth}%`} onChange={(value) => update({ warmth: value })} />
+            <Adjustment label="对比度" min={-20} max={40} value={`${withSign(settings.contrast)}%`} onChange={(value) => update({ contrast: value })} />
+            <Adjustment label="饱和度" min={-30} max={50} value={`${withSign(settings.saturation)}%`} onChange={(value) => update({ saturation: value })} />
           </div>
         </>
       )}
@@ -216,6 +218,8 @@ function CameraEffectsWidget({
               onColorChange={(eyeshadowColor) => update({ eyeshadowColor })}
               onIntensityChange={(eyeshadowIntensity) => update({ eyeshadowIntensity })}
             />
+            <Adjustment label="眼线" max={100} value={`${settings.eyelinerIntensity}%`} onChange={(value) => update({ eyelinerIntensity: value })} />
+            <Adjustment label="高光" max={100} value={`${settings.highlightIntensity}%`} onChange={(value) => update({ highlightIntensity: value })} />
           </div>
         </>
       )}
@@ -225,12 +229,12 @@ function CameraEffectsWidget({
         <div className="effect-mode-control prop-modes" role="group" aria-label="道具方案">
           {([
             ['none', '无道具'],
-            ['halo', '星环'],
             ['sparkles', '星光'],
             ['glasses', '眼镜'],
-            ['cat-ears', '猫耳'],
             ['heart-sticker', '爱心贴纸'],
             ['cheek-stars', '星星贴纸'],
+            ['butterfly-sticker', '蝴蝶贴纸'],
+            ['lightning-sticker', '闪电贴纸'],
           ] as const).map(([faceEffect, label]) => (
             <button
               type="button"

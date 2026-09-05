@@ -11,12 +11,12 @@ export const virtualBackgroundSchema = z.enum([
 export type VirtualBackground = z.infer<typeof virtualBackgroundSchema>
 export const faceEffectSchema = z.enum([
   'none',
-  'halo',
   'sparkles',
   'glasses',
-  'cat-ears',
   'heart-sticker',
   'cheek-stars',
+  'butterfly-sticker',
+  'lightning-sticker',
 ])
 export type FaceEffect = z.infer<typeof faceEffectSchema>
 
@@ -29,6 +29,8 @@ export const cameraEffectsSchema = z.object({
   smoothness: z.number().int().min(0).max(100),
   exposure: z.number().int().min(-20).max(30),
   warmth: z.number().int().min(0).max(40),
+  contrast: z.number().int().min(-20).max(40),
+  saturation: z.number().int().min(-30).max(50),
   backgroundMode: backgroundModeSchema,
   backgroundColor: z.string().regex(/^#[0-9a-f]{6}$/i),
   backgroundImageUrl: backgroundImageUrlSchema.nullable(),
@@ -40,6 +42,8 @@ export const cameraEffectsSchema = z.object({
   blushColor: z.string().regex(/^#[0-9a-f]{6}$/i),
   eyeshadowIntensity: z.number().int().min(0).max(100),
   eyeshadowColor: z.string().regex(/^#[0-9a-f]{6}$/i),
+  eyelinerIntensity: z.number().int().min(0).max(100),
+  highlightIntensity: z.number().int().min(0).max(100),
 })
 
 export type CameraEffects = z.infer<typeof cameraEffectsSchema>
@@ -70,6 +74,8 @@ export const defaultCameraEffects: CameraEffects = {
   smoothness: 0,
   exposure: 0,
   warmth: 0,
+  contrast: 0,
+  saturation: 0,
   backgroundMode: 'none',
   backgroundColor: '#163d38',
   backgroundImageUrl: null,
@@ -81,6 +87,8 @@ export const defaultCameraEffects: CameraEffects = {
   blushColor: '#e8889a',
   eyeshadowIntensity: 0,
   eyeshadowColor: '#8d63b8',
+  eyelinerIntensity: 0,
+  highlightIntensity: 0,
 }
 
 export type CameraEffectPresetId = 'natural' | 'sweet' | 'stage' | 'cyber'
@@ -99,7 +107,10 @@ export type CameraMakeupPresetId = 'off' | 'nude' | 'sweet' | 'stage' | 'cyber'
 interface CameraBeautyPreset {
   id: CameraBeautyPresetId
   label: string
-  settings: Pick<CameraEffects, 'smoothness' | 'exposure' | 'warmth'>
+  settings: Pick<
+    CameraEffects,
+    'smoothness' | 'exposure' | 'warmth' | 'contrast' | 'saturation'
+  >
 }
 
 interface CameraMakeupPreset {
@@ -114,6 +125,8 @@ interface CameraMakeupPreset {
     | 'blushColor'
     | 'eyeshadowIntensity'
     | 'eyeshadowColor'
+    | 'eyelinerIntensity'
+    | 'highlightIntensity'
   >
 }
 
@@ -121,22 +134,46 @@ export const cameraBeautyPresets: readonly CameraBeautyPreset[] = [
   {
     id: 'off',
     label: '原生',
-    settings: { smoothness: 0, exposure: 0, warmth: 0 },
+    settings: {
+      smoothness: 0,
+      exposure: 0,
+      warmth: 0,
+      contrast: 0,
+      saturation: 0,
+    },
   },
   {
     id: 'natural',
     label: '自然',
-    settings: { smoothness: 12, exposure: 4, warmth: 4 },
+    settings: {
+      smoothness: 12,
+      exposure: 4,
+      warmth: 4,
+      contrast: 4,
+      saturation: 4,
+    },
   },
   {
     id: 'soft',
     label: '柔焦',
-    settings: { smoothness: 32, exposure: 5, warmth: 8 },
+    settings: {
+      smoothness: 32,
+      exposure: 5,
+      warmth: 8,
+      contrast: -3,
+      saturation: 6,
+    },
   },
   {
     id: 'bright',
     label: '亮颜',
-    settings: { smoothness: 18, exposure: 15, warmth: 5 },
+    settings: {
+      smoothness: 18,
+      exposure: 15,
+      warmth: 5,
+      contrast: 6,
+      saturation: 8,
+    },
   },
 ]
 
@@ -152,6 +189,8 @@ export const cameraMakeupPresets: readonly CameraMakeupPreset[] = [
       blushColor: '#e8889a',
       eyeshadowIntensity: 0,
       eyeshadowColor: '#8d63b8',
+      eyelinerIntensity: 0,
+      highlightIntensity: 0,
     },
   },
   {
@@ -165,6 +204,8 @@ export const cameraMakeupPresets: readonly CameraMakeupPreset[] = [
       blushColor: '#dd9a91',
       eyeshadowIntensity: 5,
       eyeshadowColor: '#ad8e8d',
+      eyelinerIntensity: 8,
+      highlightIntensity: 8,
     },
   },
   {
@@ -178,6 +219,8 @@ export const cameraMakeupPresets: readonly CameraMakeupPreset[] = [
       blushColor: '#f08ca5',
       eyeshadowIntensity: 18,
       eyeshadowColor: '#cf91c7',
+      eyelinerIntensity: 18,
+      highlightIntensity: 20,
     },
   },
   {
@@ -191,6 +234,8 @@ export const cameraMakeupPresets: readonly CameraMakeupPreset[] = [
       blushColor: '#e2758b',
       eyeshadowIntensity: 42,
       eyeshadowColor: '#7652a8',
+      eyelinerIntensity: 42,
+      highlightIntensity: 30,
     },
   },
   {
@@ -204,6 +249,8 @@ export const cameraMakeupPresets: readonly CameraMakeupPreset[] = [
       blushColor: '#c26da8',
       eyeshadowIntensity: 55,
       eyeshadowColor: '#526fd1',
+      eyelinerIntensity: 55,
+      highlightIntensity: 34,
     },
   },
 ]
@@ -243,7 +290,7 @@ export const cameraEffectPresets: readonly CameraEffectPreset[] = [
       ...cameraBeautyPresets[2].settings,
       ...cameraMakeupPresets[3].settings,
       backgroundMode: 'blur',
-      faceEffect: 'halo',
+      faceEffect: 'butterfly-sticker',
     },
   },
   {
@@ -297,7 +344,9 @@ export function getMatchingCameraBeautyPresetId(
   return cameraBeautyPresets.find((preset) => (
     preset.settings.smoothness === settings.smoothness &&
     preset.settings.exposure === settings.exposure &&
-    preset.settings.warmth === settings.warmth
+    preset.settings.warmth === settings.warmth &&
+    preset.settings.contrast === settings.contrast &&
+    preset.settings.saturation === settings.saturation
   ))?.id ?? null
 }
 
@@ -318,7 +367,9 @@ export function getMatchingCameraMakeupPresetId(
     preset.settings.blushIntensity === settings.blushIntensity &&
     preset.settings.blushColor === settings.blushColor &&
     preset.settings.eyeshadowIntensity === settings.eyeshadowIntensity &&
-    preset.settings.eyeshadowColor === settings.eyeshadowColor
+    preset.settings.eyeshadowColor === settings.eyeshadowColor &&
+    preset.settings.eyelinerIntensity === settings.eyelinerIntensity &&
+    preset.settings.highlightIntensity === settings.highlightIntensity
   ))?.id ?? null
 }
 
@@ -329,12 +380,12 @@ export function recommendCameraEffects(
   const beautyPreset = brightnessScore < 55 ? 'bright' : 'natural'
   const makeupPresetByEffect: Record<FaceEffect, CameraMakeupPresetId> = {
     none: 'nude',
-    halo: 'stage',
     sparkles: 'sweet',
     glasses: 'cyber',
-    'cat-ears': 'sweet',
     'heart-sticker': 'sweet',
     'cheek-stars': 'sweet',
+    'butterfly-sticker': 'stage',
+    'lightning-sticker': 'cyber',
   }
   const makeupPreset = makeupPresetByEffect[settings.faceEffect]
 
@@ -349,6 +400,8 @@ export function isCameraEffectActive(settings: CameraEffects): boolean {
     settings.smoothness > 0 ||
     settings.exposure !== 0 ||
     settings.warmth > 0 ||
+    settings.contrast !== 0 ||
+    settings.saturation !== 0 ||
     settings.backgroundMode !== 'none' ||
     settings.faceEffect !== 'none' ||
     hasMakeupEnabled(settings)
@@ -359,7 +412,9 @@ export function hasMakeupEnabled(settings: CameraEffects): boolean {
   return (
     settings.lipstickIntensity > 0 ||
     settings.blushIntensity > 0 ||
-    settings.eyeshadowIntensity > 0
+    settings.eyeshadowIntensity > 0 ||
+    settings.eyelinerIntensity > 0 ||
+    settings.highlightIntensity > 0
   )
 }
 
@@ -368,6 +423,8 @@ export function getEnabledMakeupCount(settings: CameraEffects): number {
     settings.lipstickIntensity,
     settings.blushIntensity,
     settings.eyeshadowIntensity,
+    settings.eyelinerIntensity,
+    settings.highlightIntensity,
   ].filter((intensity) => intensity > 0).length
 }
 
