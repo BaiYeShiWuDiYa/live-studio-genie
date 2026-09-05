@@ -320,6 +320,23 @@ npm run lint
 
 Result: 10 test files and 40 tests passed. Production build completed with the existing large-chunk warning.
 
+### Improved Face-tracked Glasses
+
+- Rebuilt glasses geometry from eye corners, upper and lower eyelids, and temple landmarks.
+- Expanded lens width and height so frames cover the full eye sockets instead of only the eyes.
+- Added a curved bridge, rounded frames, and face-tracked temple arms.
+- Added geometry tests for frame coverage, vertical placement, and missing-landmark fallback.
+
+Validation:
+
+```bash
+npm run test
+npm run build
+npm run lint
+```
+
+Result: 11 test files and 42 tests passed. Production build completed with the existing large-chunk warning.
+
 ## Next
 
 1. Add eyeliner and face-shape deformation.

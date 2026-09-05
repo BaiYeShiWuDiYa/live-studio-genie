@@ -12,6 +12,7 @@ import {
   type CameraEffects,
   isCameraEffectActive,
 } from '../../capabilities/video/cameraEffects'
+import { createGlassesGeometry } from '../../capabilities/video/faceEffectGeometry'
 import { createFramingMetric } from '../../capabilities/monitoring/mediaAnalysis'
 import type { MediaMetric } from '../../capabilities/monitoring/types'
 import { useStudioStore } from '../../store/studioStore'
@@ -582,36 +583,19 @@ function drawTechGlasses(
   width: number,
   height: number,
 ) {
-  const leftOuter = landmarks[33]
-  const leftInner = landmarks[133]
-  const rightInner = landmarks[362]
-  const rightOuter = landmarks[263]
-  if (!leftOuter || !leftInner || !rightInner || !rightOuter) return
-
-  const toPoint = (landmark: NormalizedLandmark) => ({
-    x: landmark.x * width,
-    y: landmark.y * height,
-  })
-  const leftA = toPoint(leftOuter)
-  const leftB = toPoint(leftInner)
-  const rightA = toPoint(rightInner)
-  const rightB = toPoint(rightOuter)
-  const leftCenter = {
-    x: (leftA.x + leftB.x) / 2,
-    y: (leftA.y + leftB.y) / 2,
-  }
-  const rightCenter = {
-    x: (rightA.x + rightB.x) / 2,
-    y: (rightA.y + rightB.y) / 2,
-  }
-  const lensWidth = Math.max(
-    Math.hypot(leftB.x - leftA.x, leftB.y - leftA.y),
-    Math.hypot(rightB.x - rightA.x, rightB.y - rightA.y),
-  ) * 0.82
-  const roll = Math.atan2(
-    rightCenter.y - leftCenter.y,
-    rightCenter.x - leftCenter.x,
-  )
+  const geometry = createGlassesGeometry(landmarks, width, height)
+  if (!geometry) return
+  const {
+    leftCenter,
+    rightCenter,
+    leftTemple,
+    rightTemple,
+    lensWidth,
+    lensHeight,
+    roll,
+  } = geometry
+  const lensRadiusX = lensWidth / 2
+  const lensRadiusY = lensHeight / 2
 
   context.save()
   context.translate(
@@ -623,30 +607,43 @@ function drawTechGlasses(
     -(leftCenter.x + rightCenter.x) / 2,
     -(leftCenter.y + rightCenter.y) / 2,
   )
-  context.fillStyle = 'rgba(54, 198, 230, 0.2)'
+  context.fillStyle = 'rgba(54, 198, 230, 0.15)'
   context.strokeStyle = '#78f0dd'
-  context.lineWidth = Math.max(2, lensWidth * 0.08)
-  context.shadowBlur = 12
+  context.lineWidth = Math.max(2.5, lensWidth * 0.065)
+  context.lineJoin = 'round'
+  context.shadowBlur = 14
   context.shadowColor = '#5be8ff'
 
   for (const center of [leftCenter, rightCenter]) {
     context.beginPath()
-    context.ellipse(
-      center.x,
-      center.y,
-      lensWidth * 0.62,
-      lensWidth * 0.42,
-      0,
-      0,
-      Math.PI * 2,
+    context.roundRect(
+      center.x - lensRadiusX,
+      center.y - lensRadiusY,
+      lensWidth,
+      lensHeight,
+      lensHeight * 0.3,
     )
     context.fill()
     context.stroke()
   }
 
   context.beginPath()
-  context.moveTo(leftCenter.x + lensWidth * 0.62, leftCenter.y)
-  context.lineTo(rightCenter.x - lensWidth * 0.62, rightCenter.y)
+  context.moveTo(leftCenter.x + lensRadiusX, leftCenter.y)
+  context.bezierCurveTo(
+    leftCenter.x + lensRadiusX * 1.12,
+    leftCenter.y - lensHeight * 0.12,
+    rightCenter.x - lensRadiusX * 1.12,
+    rightCenter.y - lensHeight * 0.12,
+    rightCenter.x - lensRadiusX,
+    rightCenter.y,
+  )
+  context.stroke()
+
+  context.beginPath()
+  context.moveTo(leftCenter.x - lensRadiusX, leftCenter.y - lensHeight * 0.08)
+  context.lineTo(leftTemple.x, leftTemple.y)
+  context.moveTo(rightCenter.x + lensRadiusX, rightCenter.y - lensHeight * 0.08)
+  context.lineTo(rightTemple.x, rightTemple.y)
   context.stroke()
   context.restore()
 }
