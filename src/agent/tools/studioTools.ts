@@ -81,6 +81,7 @@ export const studioToolRegistry = new ToolRegistry<StudioToolContext>()
         none: '无贴纸',
         sparkles: '星光',
         glasses: '科技眼镜',
+        sunglasses: '黑色墨镜',
         'heart-sticker': '爱心贴纸',
         'cheek-stars': '星星贴纸',
         'butterfly-sticker': '蝴蝶贴纸',

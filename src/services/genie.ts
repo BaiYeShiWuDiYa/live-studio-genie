@@ -105,13 +105,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function getRequestedFaceEffect(instruction: string): FaceEffect | undefined {
-  if (/(?:关闭|移除|去掉|取消|不要).{0,6}(?:道具|特效|眼镜|星光|蝴蝶|闪电|贴纸)/.test(instruction)) {
+  if (/(?:关闭|移除|去掉|取消|不要).{0,6}(?:道具|特效|眼镜|墨镜|星光|蝴蝶|闪电|贴纸)/.test(instruction)) {
     return 'none'
   }
   if (/蝴蝶/.test(instruction)) return 'butterfly-sticker'
   if (/闪电/.test(instruction)) return 'lightning-sticker'
   if (/星星贴纸|脸颊星星/.test(instruction)) return 'cheek-stars'
   if (/爱心贴纸|心形贴纸|脸部贴纸|脸上贴纸/.test(instruction)) return 'heart-sticker'
+  if (/黑色墨镜|墨镜/.test(instruction)) return 'sunglasses'
   if (/(?:科技)?眼镜/.test(instruction)) return 'glasses'
   if (/星光|闪光/.test(instruction)) return 'sparkles'
   return undefined
@@ -161,7 +162,7 @@ function getExplicitCameraPatch(instruction: string): Partial<CameraEffects> {
 }
 
 function isCameraEffectsInstruction(instruction: string): boolean {
-  return /美颜|美妆|妆容|道具|特效|人脸效果|上镜|柔肤|磨皮|提亮|曝光|暖肤|饱和度|口红|腮红|眼影|眼线|高光|眼镜|星光|蝴蝶|闪电|贴纸/.test(instruction)
+  return /美颜|美妆|妆容|道具|特效|人脸效果|上镜|柔肤|磨皮|提亮|曝光|暖肤|饱和度|口红|腮红|眼影|眼线|高光|眼镜|墨镜|星光|蝴蝶|闪电|贴纸/.test(instruction)
 }
 
 function hydrateCameraEffectsWidget(
@@ -199,7 +200,7 @@ function createCameraEffectsFallback(
   const explicitPatch = getExplicitCameraPatch(instruction)
   const beautyRequested = /美颜|上镜|柔肤|磨皮|提亮|曝光|暖肤|对比度|饱和度/.test(instruction)
   const makeupRequested = /美妆|妆容|上镜|口红|腮红|眼影|眼线|高光/.test(instruction)
-  const propRequested = /道具|特效|眼镜|星光|蝴蝶|闪电|贴纸/.test(instruction)
+  const propRequested = /道具|特效|眼镜|墨镜|星光|蝴蝶|闪电|贴纸/.test(instruction)
   const settings = cameraEffectsSchema.parse({
     ...currentSettings,
     ...(beautyRequested

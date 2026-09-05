@@ -775,6 +775,8 @@ function drawFaceEffect(
     })
   } else if (effect === 'glasses') {
     drawTechGlasses(context, landmarks, width, height)
+  } else if (effect === 'sunglasses') {
+    drawBlackSunglasses(context, landmarks, width, height)
   } else if (effect === 'heart-sticker') {
     drawCheekHearts(context, landmarks, width, height, faceWidth)
   } else if (effect === 'cheek-stars') {
@@ -961,6 +963,90 @@ function drawHeart(
     y + size * 0.82,
   )
   context.fill()
+}
+
+function drawBlackSunglasses(
+  context: CanvasRenderingContext2D,
+  landmarks: NormalizedLandmark[],
+  width: number,
+  height: number,
+) {
+  const geometry = createGlassesGeometry(landmarks, width, height)
+  if (!geometry) return
+  const {
+    leftCenter,
+    rightCenter,
+    leftTemple,
+    rightTemple,
+    roll,
+  } = geometry
+  const lensWidth = geometry.lensWidth * 1.06
+  const lensHeight = geometry.lensHeight * 0.86
+  const radiusX = lensWidth / 2
+  const radiusY = lensHeight / 2
+  const centerX = (leftCenter.x + rightCenter.x) / 2
+  const centerY = (leftCenter.y + rightCenter.y) / 2
+
+  context.save()
+  context.translate(centerX, centerY)
+  context.rotate(roll)
+  context.translate(-centerX, -centerY)
+  context.lineJoin = 'round'
+  context.lineCap = 'round'
+  context.lineWidth = Math.max(4, lensWidth * 0.075)
+  context.strokeStyle = '#05070a'
+  context.shadowBlur = 8
+  context.shadowColor = 'rgba(0, 0, 0, 0.7)'
+
+  for (const center of [leftCenter, rightCenter]) {
+    const lensGradient = context.createLinearGradient(
+      center.x,
+      center.y - radiusY,
+      center.x,
+      center.y + radiusY,
+    )
+    lensGradient.addColorStop(0, 'rgba(8, 10, 14, 0.98)')
+    lensGradient.addColorStop(0.7, 'rgba(15, 19, 24, 0.94)')
+    lensGradient.addColorStop(1, 'rgba(35, 42, 48, 0.9)')
+    context.fillStyle = lensGradient
+    context.beginPath()
+    context.roundRect(
+      center.x - radiusX,
+      center.y - radiusY,
+      lensWidth,
+      lensHeight,
+      lensHeight * 0.24,
+    )
+    context.fill()
+    context.stroke()
+
+    context.shadowBlur = 0
+    context.strokeStyle = 'rgba(255, 255, 255, 0.2)'
+    context.lineWidth = Math.max(1.5, lensWidth * 0.018)
+    context.beginPath()
+    context.moveTo(center.x - radiusX * 0.58, center.y - radiusY * 0.48)
+    context.lineTo(center.x - radiusX * 0.1, center.y - radiusY * 0.48)
+    context.stroke()
+    context.strokeStyle = '#05070a'
+    context.lineWidth = Math.max(4, lensWidth * 0.075)
+  }
+
+  context.beginPath()
+  context.moveTo(leftCenter.x + radiusX, leftCenter.y)
+  context.bezierCurveTo(
+    leftCenter.x + radiusX * 1.12,
+    leftCenter.y - lensHeight * 0.12,
+    rightCenter.x - radiusX * 1.12,
+    rightCenter.y - lensHeight * 0.12,
+    rightCenter.x - radiusX,
+    rightCenter.y,
+  )
+  context.moveTo(leftCenter.x - radiusX, leftCenter.y - lensHeight * 0.08)
+  context.lineTo(leftTemple.x, leftTemple.y)
+  context.moveTo(rightCenter.x + radiusX, rightCenter.y - lensHeight * 0.08)
+  context.lineTo(rightTemple.x, rightTemple.y)
+  context.stroke()
+  context.restore()
 }
 
 function drawTechGlasses(

@@ -155,6 +155,24 @@ describe('parseGenieContent', () => {
       },
     })
   })
+
+  it('maps black sunglasses to the dedicated trusted prop', () => {
+    const result = parseGenieContent(
+      '已生成黑色墨镜。',
+      '给我戴一副黑色墨镜',
+      defaultCameraEffects,
+      defaultCameraEffects,
+    )
+
+    expect(result.widget).toMatchObject({
+      type: 'camera-effects',
+      props: {
+        settings: {
+          faceEffect: 'sunglasses',
+        },
+      },
+    })
+  })
 })
 
 describe('askGenie', () => {

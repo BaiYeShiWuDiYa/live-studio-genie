@@ -347,6 +347,7 @@ Result: 11 test files and 42 tests passed. Production build completed with the e
 - Added face-tracked eyeliner and nose highlight makeup controls.
 - Removed halo and cat-ear props, replacing them with butterfly and lightning stickers.
 - Matched the Genie recommendation scrollbar to the cyan studio scrollbar theme.
+- Added opaque black sunglasses with dedicated lenses, frame, bridge, highlights, and tracked temple arms.
 
 Validation:
 
@@ -356,7 +357,7 @@ npm run build
 npm run lint
 ```
 
-Result: 11 test files and 43 tests passed. Chrome verification covered the new sliders, themed scrollbar, butterfly and lightning tracking, and segmented virtual backgrounds.
+Result: 11 test files and 44 tests passed. Chrome verification covered the new sliders, themed scrollbar, butterfly, lightning, and sunglasses tracking, and segmented virtual backgrounds.
 
 ## Next
 

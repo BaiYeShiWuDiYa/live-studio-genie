@@ -231,6 +231,7 @@ function CameraEffectsWidget({
             ['none', '无道具'],
             ['sparkles', '星光'],
             ['glasses', '眼镜'],
+            ['sunglasses', '黑色墨镜'],
             ['heart-sticker', '爱心贴纸'],
             ['cheek-stars', '星星贴纸'],
             ['butterfly-sticker', '蝴蝶贴纸'],
