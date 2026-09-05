@@ -13,6 +13,12 @@ export const cameraEffectsSchema = z.object({
   backgroundColor: z.string().regex(/^#[0-9a-f]{6}$/i),
   backgroundImageUrl: z.string().max(2048).startsWith('blob:').nullable(),
   faceEffect: faceEffectSchema,
+  lipstickIntensity: z.number().int().min(0).max(100),
+  lipstickColor: z.string().regex(/^#[0-9a-f]{6}$/i),
+  blushIntensity: z.number().int().min(0).max(100),
+  blushColor: z.string().regex(/^#[0-9a-f]{6}$/i),
+  eyeshadowIntensity: z.number().int().min(0).max(100),
+  eyeshadowColor: z.string().regex(/^#[0-9a-f]{6}$/i),
 })
 
 export type CameraEffects = z.infer<typeof cameraEffectsSchema>
@@ -25,6 +31,12 @@ export const defaultCameraEffects: CameraEffects = {
   backgroundColor: '#163d38',
   backgroundImageUrl: null,
   faceEffect: 'none',
+  lipstickIntensity: 0,
+  lipstickColor: '#c2476e',
+  blushIntensity: 0,
+  blushColor: '#e8889a',
+  eyeshadowIntensity: 0,
+  eyeshadowColor: '#8d63b8',
 }
 
 export const recommendedCameraEffects: CameraEffects = {
@@ -35,6 +47,12 @@ export const recommendedCameraEffects: CameraEffects = {
   backgroundColor: '#163d38',
   backgroundImageUrl: null,
   faceEffect: 'halo',
+  lipstickIntensity: 32,
+  lipstickColor: '#c2476e',
+  blushIntensity: 20,
+  blushColor: '#e8889a',
+  eyeshadowIntensity: 14,
+  eyeshadowColor: '#8d63b8',
 }
 
 export function isCameraEffectActive(settings: CameraEffects): boolean {
@@ -43,8 +61,25 @@ export function isCameraEffectActive(settings: CameraEffects): boolean {
     settings.exposure !== 0 ||
     settings.warmth > 0 ||
     settings.backgroundMode !== 'none' ||
-    settings.faceEffect !== 'none'
+    settings.faceEffect !== 'none' ||
+    hasMakeupEnabled(settings)
   )
+}
+
+export function hasMakeupEnabled(settings: CameraEffects): boolean {
+  return (
+    settings.lipstickIntensity > 0 ||
+    settings.blushIntensity > 0 ||
+    settings.eyeshadowIntensity > 0
+  )
+}
+
+export function getEnabledMakeupCount(settings: CameraEffects): number {
+  return [
+    settings.lipstickIntensity,
+    settings.blushIntensity,
+    settings.eyeshadowIntensity,
+  ].filter((intensity) => intensity > 0).length
 }
 
 export function createAlphaMask(

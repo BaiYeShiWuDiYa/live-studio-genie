@@ -1,7 +1,11 @@
 import { z } from 'zod'
 import { audioSettingsSchema, type AudioSettings } from '../../capabilities/audio/types'
 import { visualSettingsSchema, type VisualSettings } from '../../capabilities/visual/types'
-import { cameraEffectsSchema, type CameraEffects } from '../../capabilities/video/cameraEffects'
+import {
+  cameraEffectsSchema,
+  getEnabledMakeupCount,
+  type CameraEffects,
+} from '../../capabilities/video/cameraEffects'
 import { liveGoalConfigSchema, type LiveGoalConfig } from '../../capabilities/widgets/liveGoal'
 import { pollConfigSchema, type PollConfig } from '../../capabilities/widgets/poll'
 import { defineTool, ToolRegistry } from './toolRegistry'
@@ -78,9 +82,10 @@ export const studioToolRegistry = new ToolRegistry<StudioToolContext>()
         halo: '星环',
         sparkles: '星光',
       }[settings.faceEffect]
+      const makeupCount = getEnabledMakeupCount(settings)
       return {
         name: mode === 'preview' ? '正在预览美化效果' : '美化效果已应用',
-        detail: `${backgroundLabel} · ${faceEffectLabel} · 柔肤 ${settings.smoothness}%`,
+        detail: `${backgroundLabel} · ${faceEffectLabel} · ${makeupCount} 项美妆`,
       }
     },
   }))

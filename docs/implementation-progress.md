@@ -180,6 +180,25 @@ npm run build
 npm run lint
 ```
 
+### Face-tracked Makeup
+
+- Added validated intensity and color settings for lipstick, blush, and eyeshadow.
+- Reused the existing MediaPipe Face Landmarker instead of adding a second detector.
+- Added mouth-interior exclusion for lipstick and face-relative placement for blush and eyeshadow.
+- Added color swatches and realtime intensity controls to the camera-effects widget.
+- Added MIT attribution for the adapted open-source landmark and compositing approach.
+- Verified the full preview state and no-face fallback in Chrome.
+
+Validation:
+
+```bash
+npm run test
+npm run build
+npm run lint
+```
+
 ## Next
 
-1. Split remaining studio orchestration out of `App.tsx`.
+1. Validate makeup alignment with a face in the physical camera.
+2. Add eyeliner and face-shape deformation.
+3. Split remaining studio orchestration out of `App.tsx`.

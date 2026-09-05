@@ -154,12 +154,66 @@ function CameraEffectsWidget({
           </button>
         ))}
       </div>
+      <div className="makeup-controls">
+        <MakeupControl
+          label="口红"
+          color={settings.lipstickColor}
+          intensity={settings.lipstickIntensity}
+          onColorChange={(lipstickColor) => update({ lipstickColor })}
+          onIntensityChange={(lipstickIntensity) => update({ lipstickIntensity })}
+        />
+        <MakeupControl
+          label="腮红"
+          color={settings.blushColor}
+          intensity={settings.blushIntensity}
+          onColorChange={(blushColor) => update({ blushColor })}
+          onIntensityChange={(blushIntensity) => update({ blushIntensity })}
+        />
+        <MakeupControl
+          label="眼影"
+          color={settings.eyeshadowColor}
+          intensity={settings.eyeshadowIntensity}
+          onColorChange={(eyeshadowColor) => update({ eyeshadowColor })}
+          onIntensityChange={(eyeshadowIntensity) => update({ eyeshadowIntensity })}
+        />
+      </div>
       <div className="adjustments">
         <Adjustment label="柔肤" max={100} value={`${settings.smoothness}%`} onChange={(value) => update({ smoothness: value })} />
         <Adjustment label="提亮" min={-20} max={30} value={`${withSign(settings.exposure)}%`} onChange={(value) => update({ exposure: value })} />
         <Adjustment label="暖肤" max={40} value={`${settings.warmth}%`} onChange={(value) => update({ warmth: value })} />
       </div>
     </>
+  )
+}
+
+function MakeupControl({
+  label,
+  color,
+  intensity,
+  onColorChange,
+  onIntensityChange,
+}: {
+  label: string
+  color: string
+  intensity: number
+  onColorChange: (color: string) => void
+  onIntensityChange: (intensity: number) => void
+}) {
+  return (
+    <div className="makeup-control">
+      <input
+        type="color"
+        value={color}
+        onChange={(event) => onColorChange(event.target.value)}
+        aria-label={`${label}颜色`}
+      />
+      <Adjustment
+        label={label}
+        max={100}
+        value={`${intensity}%`}
+        onChange={onIntensityChange}
+      />
+    </div>
   )
 }
 

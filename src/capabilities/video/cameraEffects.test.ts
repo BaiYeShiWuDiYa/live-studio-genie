@@ -3,6 +3,7 @@ import {
   cameraEffectsSchema,
   createAlphaMask,
   defaultCameraEffects,
+  getEnabledMakeupCount,
   isCameraEffectActive,
   recommendedCameraEffects,
 } from './cameraEffects'
@@ -24,6 +25,12 @@ describe('camera effects', () => {
   it('detects whether processing is required', () => {
     expect(isCameraEffectActive(defaultCameraEffects)).toBe(false)
     expect(isCameraEffectActive(recommendedCameraEffects)).toBe(true)
+    expect(isCameraEffectActive({
+      ...defaultCameraEffects,
+      lipstickIntensity: 20,
+    })).toBe(true)
+    expect(getEnabledMakeupCount(defaultCameraEffects)).toBe(0)
+    expect(getEnabledMakeupCount(recommendedCameraEffects)).toBe(3)
   })
 
   it('converts confidence values into alpha pixels', () => {
