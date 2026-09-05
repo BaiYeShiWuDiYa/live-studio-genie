@@ -2,8 +2,28 @@ import { z } from 'zod'
 
 export const backgroundModeSchema = z.enum(['none', 'blur', 'color', 'image'])
 export type BackgroundMode = z.infer<typeof backgroundModeSchema>
-export const faceEffectSchema = z.enum(['none', 'halo', 'sparkles', 'glasses'])
+export const virtualBackgroundSchema = z.enum([
+  'neon-studio',
+  'music-room',
+  'cyber-arena',
+  'creator-loft',
+])
+export type VirtualBackground = z.infer<typeof virtualBackgroundSchema>
+export const faceEffectSchema = z.enum([
+  'none',
+  'halo',
+  'sparkles',
+  'glasses',
+  'cat-ears',
+  'heart-sticker',
+  'cheek-stars',
+])
 export type FaceEffect = z.infer<typeof faceEffectSchema>
+
+const backgroundImageUrlSchema = z.union([
+  z.string().max(2048).startsWith('blob:'),
+  z.string().regex(/^\/backgrounds\/[a-z0-9-]+\.(?:png|jpe?g|webp)$/),
+])
 
 export const cameraEffectsSchema = z.object({
   smoothness: z.number().int().min(0).max(100),
@@ -11,7 +31,8 @@ export const cameraEffectsSchema = z.object({
   warmth: z.number().int().min(0).max(40),
   backgroundMode: backgroundModeSchema,
   backgroundColor: z.string().regex(/^#[0-9a-f]{6}$/i),
-  backgroundImageUrl: z.string().max(2048).startsWith('blob:').nullable(),
+  backgroundImageUrl: backgroundImageUrlSchema.nullable(),
+  backgroundPreset: virtualBackgroundSchema.nullable(),
   faceEffect: faceEffectSchema,
   lipstickIntensity: z.number().int().min(0).max(100),
   lipstickColor: z.string().regex(/^#[0-9a-f]{6}$/i),
@@ -23,6 +44,28 @@ export const cameraEffectsSchema = z.object({
 
 export type CameraEffects = z.infer<typeof cameraEffectsSchema>
 
+export const virtualBackgrounds = [
+  {
+    id: 'neon-studio',
+    label: '霓虹直播间',
+  },
+  {
+    id: 'music-room',
+    label: '夜间音乐房',
+  },
+  {
+    id: 'cyber-arena',
+    label: '未来竞技场',
+  },
+  {
+    id: 'creator-loft',
+    label: '创作者空间',
+  },
+] as const satisfies ReadonlyArray<{
+  id: VirtualBackground
+  label: string
+}>
+
 export const defaultCameraEffects: CameraEffects = {
   smoothness: 0,
   exposure: 0,
@@ -30,6 +73,7 @@ export const defaultCameraEffects: CameraEffects = {
   backgroundMode: 'none',
   backgroundColor: '#163d38',
   backgroundImageUrl: null,
+  backgroundPreset: null,
   faceEffect: 'none',
   lipstickIntensity: 0,
   lipstickColor: '#c2476e',
@@ -283,12 +327,16 @@ export function recommendCameraEffects(
   brightnessScore: number,
 ): CameraEffects {
   const beautyPreset = brightnessScore < 55 ? 'bright' : 'natural'
-  const makeupPreset: CameraMakeupPresetId = {
+  const makeupPresetByEffect: Record<FaceEffect, CameraMakeupPresetId> = {
     none: 'nude',
     halo: 'stage',
     sparkles: 'sweet',
     glasses: 'cyber',
-  }[settings.faceEffect] as CameraMakeupPresetId
+    'cat-ears': 'sweet',
+    'heart-sticker': 'sweet',
+    'cheek-stars': 'sweet',
+  }
+  const makeupPreset = makeupPresetByEffect[settings.faceEffect]
 
   return applyCameraMakeupPreset(
     applyCameraBeautyPreset(settings, beautyPreset),

@@ -16,6 +16,7 @@ import {
   isCameraEffectActive,
   recommendCameraEffects,
   recommendedCameraEffects,
+  virtualBackgrounds,
 } from './cameraEffects'
 
 describe('camera effects', () => {
@@ -30,6 +31,13 @@ describe('camera effects', () => {
       ...recommendedCameraEffects,
       backgroundImageUrl: 'https://example.com/untrusted.jpg',
     })).toThrow()
+    virtualBackgrounds.forEach(({ id }) => {
+      expect(cameraEffectsSchema.parse({
+        ...recommendedCameraEffects,
+        backgroundMode: 'image',
+        backgroundPreset: id,
+      }).backgroundPreset).toBe(id)
+    })
   })
 
   it('detects whether processing is required', () => {

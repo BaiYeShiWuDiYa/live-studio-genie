@@ -56,7 +56,7 @@
 
 .effect-category-tabs {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 2px;
   margin: 12px 0 8px;
   padding: 3px;
@@ -152,7 +152,7 @@
 
 .effect-mode-control.background-modes,
 .effect-mode-control.prop-modes {
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
 }
 
 .effect-mode-control button {
@@ -196,32 +196,81 @@
   font-weight: 500;
 }
 
-.effect-upload-control {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.effect-section-label {
+  margin: 12px 0 4px;
+  color: #76859a;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.virtual-background-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
   margin: 8px 0 12px;
-  padding: 7px 8px;
-  border: 1px dashed rgba(126, 240, 220, 0.34);
-  border-radius: 5px;
-  background: rgba(39, 89, 89, 0.12);
-  color: #9eddd6;
-  font-size: 10px;
-  cursor: pointer;
 }
 
-.effect-upload-control:hover {
-  border-color: rgba(126, 240, 220, 0.62);
-  color: #d8fff8;
-}
-
-.effect-upload-control input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
+.virtual-background-grid button {
+  position: relative;
+  aspect-ratio: 16 / 9;
   overflow: hidden;
-  clip-path: inset(50%);
+  padding: 0;
+  border: 1px solid rgba(112, 130, 161, 0.3);
+  border-radius: 6px;
+  background: #0b1018;
+  color: #effffc;
+}
+
+.virtual-background-grid button.selected {
+  border-color: #7ef0dc;
+  box-shadow: 0 0 0 1px rgba(126, 240, 220, 0.22);
+}
+
+.virtual-background-preview {
+  position: absolute;
+  inset: 0;
+  background-color: #111722;
+}
+
+.virtual-background-preview.neon-studio {
+  background:
+    linear-gradient(110deg, rgba(33, 222, 205, 0.42), transparent 36%),
+    linear-gradient(250deg, rgba(241, 84, 177, 0.44), transparent 42%),
+    #111522;
+}
+
+.virtual-background-preview.music-room {
+  background:
+    linear-gradient(120deg, rgba(236, 157, 76, 0.5), transparent 42%),
+    linear-gradient(300deg, rgba(38, 174, 165, 0.42), transparent 48%),
+    #201b24;
+}
+
+.virtual-background-preview.cyber-arena {
+  background:
+    linear-gradient(90deg, transparent 48%, rgba(105, 238, 222, 0.72) 49%, transparent 51%),
+    linear-gradient(rgba(121, 107, 232, 0.32) 1px, transparent 1px),
+    #090d18;
+  background-size: 100% 100%, 100% 12px, 100% 100%;
+}
+
+.virtual-background-preview.creator-loft {
+  background:
+    linear-gradient(90deg, rgba(193, 220, 216, 0.34), transparent 48%),
+    linear-gradient(290deg, rgba(238, 182, 117, 0.32), transparent 46%),
+    #59626a;
+}
+
+.virtual-background-grid button > span:last-child {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 12px 6px 5px;
+  background: linear-gradient(transparent, rgba(4, 8, 14, 0.88));
+  font-size: 9px;
+  text-align: left;
 }
 
 .makeup-controls {

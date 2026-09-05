@@ -11,6 +11,7 @@ import {
   hasMakeupEnabled,
   type CameraEffects,
   isCameraEffectActive,
+  type VirtualBackground,
 } from '../../capabilities/video/cameraEffects'
 import { createGlassesGeometry } from '../../capabilities/video/faceEffectGeometry'
 import { createFramingMetric } from '../../capabilities/monitoring/mediaAnalysis'
@@ -298,6 +299,8 @@ function drawProcessedFrame({
   if (settings.backgroundMode === 'color') {
     context.fillStyle = settings.backgroundColor
     context.fillRect(0, 0, width, height)
+  } else if (settings.backgroundMode === 'image' && settings.backgroundPreset) {
+    drawVirtualBackground(context, settings.backgroundPreset, width, height)
   } else if (settings.backgroundMode === 'image' && backgroundImage) {
     drawImageCover(context, backgroundImage, width, height)
   } else {
@@ -322,6 +325,151 @@ function drawProcessedFrame({
   context.drawImage(personCanvas, 0, 0)
   drawMakeup(context, faceLandmarks, settings, width, height)
   drawFaceEffect(context, faceLandmarks, settings.faceEffect, width, height)
+}
+
+function drawVirtualBackground(
+  context: CanvasRenderingContext2D,
+  preset: VirtualBackground,
+  width: number,
+  height: number,
+) {
+  const wall = context.createLinearGradient(0, 0, width, height)
+
+  if (preset === 'neon-studio') {
+    wall.addColorStop(0, '#102a32')
+    wall.addColorStop(0.48, '#101522')
+    wall.addColorStop(1, '#35172f')
+    context.fillStyle = wall
+    context.fillRect(0, 0, width, height)
+    for (let index = 0; index < 7; index += 1) {
+      context.fillStyle = index % 2 === 0 ? '#172736' : '#201b31'
+      context.fillRect(width * (0.06 + index * 0.135), height * 0.08, width * 0.085, height * 0.48)
+    }
+    drawNeonLine(context, width * 0.08, height * 0.16, width * 0.08, height * 0.7, '#55eddf', width)
+    drawNeonLine(context, width * 0.92, height * 0.14, width * 0.92, height * 0.7, '#ef72c0', width)
+    context.fillStyle = '#0b1018'
+    context.fillRect(width * 0.12, height * 0.72, width * 0.76, height * 0.28)
+    context.fillStyle = 'rgba(116, 237, 221, 0.28)'
+    context.fillRect(width * 0.22, height * 0.72, width * 0.56, height * 0.015)
+    return
+  }
+
+  if (preset === 'music-room') {
+    wall.addColorStop(0, '#35261f')
+    wall.addColorStop(0.58, '#1d2228')
+    wall.addColorStop(1, '#123b3a')
+    context.fillStyle = wall
+    context.fillRect(0, 0, width, height)
+    context.fillStyle = '#15191f'
+    context.fillRect(0, height * 0.72, width, height * 0.28)
+    context.fillStyle = '#211a1a'
+    context.fillRect(width * 0.08, height * 0.15, width * 0.25, height * 0.48)
+    for (let row = 0; row < 3; row += 1) {
+      context.fillStyle = '#8b5935'
+      context.fillRect(width * 0.1, height * (0.25 + row * 0.14), width * 0.21, height * 0.012)
+      for (let column = 0; column < 4; column += 1) {
+        context.fillStyle = ['#af5c66', '#d09a58', '#497f83', '#74638e'][column]
+        context.fillRect(
+          width * (0.115 + column * 0.047),
+          height * (0.19 + row * 0.14),
+          width * 0.026,
+          height * 0.06,
+        )
+      }
+    }
+    context.fillStyle = '#e8bb72'
+    context.beginPath()
+    context.arc(width * 0.82, height * 0.28, width * 0.055, 0, Math.PI * 2)
+    context.fill()
+    context.fillStyle = '#172326'
+    context.fillRect(width * 0.79, height * 0.32, width * 0.06, height * 0.41)
+    return
+  }
+
+  if (preset === 'cyber-arena') {
+    wall.addColorStop(0, '#07121b')
+    wall.addColorStop(0.5, '#111027')
+    wall.addColorStop(1, '#180c22')
+    context.fillStyle = wall
+    context.fillRect(0, 0, width, height)
+    const horizon = height * 0.5
+    context.strokeStyle = 'rgba(85, 237, 223, 0.3)'
+    context.lineWidth = Math.max(1, width * 0.0015)
+    for (let index = -8; index <= 8; index += 1) {
+      context.beginPath()
+      context.moveTo(width / 2, horizon)
+      context.lineTo(width / 2 + index * width * 0.12, height)
+      context.stroke()
+    }
+    for (let index = 0; index < 8; index += 1) {
+      const y = horizon + (height - horizon) * (index / 8) ** 1.7
+      context.beginPath()
+      context.moveTo(0, y)
+      context.lineTo(width, y)
+      context.stroke()
+    }
+    drawNeonLine(context, width * 0.08, height * 0.17, width * 0.35, height * 0.17, '#ef72c0', width)
+    drawNeonLine(context, width * 0.65, height * 0.17, width * 0.92, height * 0.17, '#55eddf', width)
+    context.fillStyle = 'rgba(18, 27, 43, 0.92)'
+    context.fillRect(width * 0.18, height * 0.68, width * 0.64, height * 0.2)
+    return
+  }
+
+  wall.addColorStop(0, '#85959a')
+  wall.addColorStop(0.55, '#59666d')
+  wall.addColorStop(1, '#6d5b55')
+  context.fillStyle = wall
+  context.fillRect(0, 0, width, height)
+  context.fillStyle = 'rgba(210, 231, 228, 0.72)'
+  context.fillRect(width * 0.08, height * 0.1, width * 0.27, height * 0.46)
+  context.strokeStyle = '#48575d'
+  context.lineWidth = Math.max(3, width * 0.008)
+  context.strokeRect(width * 0.08, height * 0.1, width * 0.27, height * 0.46)
+  context.beginPath()
+  context.moveTo(width * 0.215, height * 0.1)
+  context.lineTo(width * 0.215, height * 0.56)
+  context.moveTo(width * 0.08, height * 0.33)
+  context.lineTo(width * 0.35, height * 0.33)
+  context.stroke()
+  context.fillStyle = '#313d3b'
+  context.fillRect(width * 0.72, height * 0.2, width * 0.2, height * 0.035)
+  context.fillStyle = '#355e49'
+  for (let index = 0; index < 7; index += 1) {
+    context.beginPath()
+    context.ellipse(
+      width * (0.78 + (index % 3) * 0.04),
+      height * (0.38 + index * 0.026),
+      width * 0.045,
+      height * 0.024,
+      index * 0.55,
+      0,
+      Math.PI * 2,
+    )
+    context.fill()
+  }
+  context.fillStyle = '#20292d'
+  context.fillRect(0, height * 0.76, width, height * 0.24)
+}
+
+function drawNeonLine(
+  context: CanvasRenderingContext2D,
+  startX: number,
+  startY: number,
+  endX: number,
+  endY: number,
+  color: string,
+  width: number,
+) {
+  context.save()
+  context.strokeStyle = color
+  context.lineWidth = Math.max(3, width * 0.007)
+  context.shadowBlur = width * 0.025
+  context.shadowColor = color
+  context.beginPath()
+  context.moveTo(startX, startY)
+  context.lineTo(endX, endY)
+  context.stroke()
+  context.restore()
 }
 
 function resizeCanvas(
@@ -552,16 +700,17 @@ function drawFaceEffect(
   const centerX = forehead.x * width
   const faceWidth = Math.abs(right.x - left.x) * width
   const topY = forehead.y * height - faceWidth * 0.28
+  const roll = Math.atan2(
+    (right.y - left.y) * height,
+    (right.x - left.x) * width,
+  )
   context.save()
   context.shadowBlur = 14
   context.shadowColor = '#78f0dd'
   context.lineWidth = Math.max(2, faceWidth * 0.018)
 
   if (effect === 'halo') {
-    context.strokeStyle = '#9ff7e8'
-    context.beginPath()
-    context.ellipse(centerX, topY, faceWidth * 0.48, faceWidth * 0.13, 0, 0, Math.PI * 2)
-    context.stroke()
+    drawHalo(context, centerX, topY, faceWidth, roll)
   } else if (effect === 'sparkles') {
     context.fillStyle = '#fff3ad'
     ;[
@@ -571,10 +720,173 @@ function drawFaceEffect(
     ].forEach(([x, y], index) => {
       drawSparkle(context, x, y, faceWidth * (index === 2 ? 0.1 : 0.07))
     })
-  } else {
+  } else if (effect === 'glasses') {
     drawTechGlasses(context, landmarks, width, height)
+  } else if (effect === 'cat-ears') {
+    drawCatEars(context, centerX, forehead.y * height, faceWidth, roll)
+  } else if (effect === 'heart-sticker') {
+    drawCheekHearts(context, landmarks, width, height, faceWidth)
+  } else if (effect === 'cheek-stars') {
+    drawCheekStars(context, landmarks, width, height, faceWidth)
   }
   context.restore()
+}
+
+function drawHalo(
+  context: CanvasRenderingContext2D,
+  centerX: number,
+  centerY: number,
+  faceWidth: number,
+  roll: number,
+) {
+  const radiusX = faceWidth * 0.46
+  const radiusY = faceWidth * 0.105
+  context.save()
+  context.translate(centerX, centerY)
+  context.rotate(roll)
+  const gradient = context.createLinearGradient(-radiusX, 0, radiusX, 0)
+  gradient.addColorStop(0, '#78f0dd')
+  gradient.addColorStop(0.46, '#fff7b0')
+  gradient.addColorStop(1, '#f68ed8')
+  context.strokeStyle = gradient
+  context.lineWidth = Math.max(4, faceWidth * 0.045)
+  context.shadowBlur = Math.max(18, faceWidth * 0.12)
+  context.shadowColor = '#74e9ff'
+  context.beginPath()
+  context.ellipse(0, 0, radiusX, radiusY, 0, 0, Math.PI * 2)
+  context.stroke()
+
+  context.shadowBlur = 0
+  context.strokeStyle = 'rgba(255, 255, 255, 0.82)'
+  context.lineWidth = Math.max(1.5, faceWidth * 0.012)
+  context.beginPath()
+  context.ellipse(0, -faceWidth * 0.01, radiusX * 0.96, radiusY * 0.72, 0, Math.PI, Math.PI * 2)
+  context.stroke()
+  context.restore()
+}
+
+function drawCatEars(
+  context: CanvasRenderingContext2D,
+  centerX: number,
+  foreheadY: number,
+  faceWidth: number,
+  roll: number,
+) {
+  context.save()
+  context.translate(centerX, foreheadY)
+  context.rotate(roll)
+  context.lineJoin = 'round'
+  context.lineWidth = Math.max(2.5, faceWidth * 0.018)
+  context.strokeStyle = '#8ff4e3'
+  context.fillStyle = 'rgba(32, 44, 62, 0.9)'
+  context.shadowBlur = 14
+  context.shadowColor = '#78f0dd'
+
+  for (const direction of [-1, 1]) {
+    const outerX = direction * faceWidth * 0.48
+    const innerX = direction * faceWidth * 0.12
+    const tipX = direction * faceWidth * 0.32
+    const baseY = -faceWidth * 0.02
+    const tipY = -faceWidth * 0.39
+    context.beginPath()
+    context.moveTo(outerX, baseY)
+    context.lineTo(tipX, tipY)
+    context.lineTo(innerX, baseY)
+    context.closePath()
+    context.fill()
+    context.stroke()
+
+    context.fillStyle = 'rgba(246, 142, 216, 0.68)'
+    context.beginPath()
+    context.moveTo(direction * faceWidth * 0.4, -faceWidth * 0.05)
+    context.lineTo(tipX, -faceWidth * 0.3)
+    context.lineTo(direction * faceWidth * 0.19, -faceWidth * 0.05)
+    context.closePath()
+    context.fill()
+    context.fillStyle = 'rgba(32, 44, 62, 0.9)'
+  }
+
+  context.shadowBlur = 0
+  context.strokeStyle = 'rgba(143, 244, 227, 0.78)'
+  context.beginPath()
+  context.arc(0, faceWidth * 0.03, faceWidth * 0.34, Math.PI * 1.08, Math.PI * 1.92)
+  context.stroke()
+  context.restore()
+}
+
+function drawCheekHearts(
+  context: CanvasRenderingContext2D,
+  landmarks: NormalizedLandmark[],
+  width: number,
+  height: number,
+  faceWidth: number,
+) {
+  const cheeks = [landmarks[205], landmarks[425]]
+  context.fillStyle = 'rgba(255, 105, 163, 0.88)'
+  context.shadowBlur = 10
+  context.shadowColor = '#ff76bd'
+  cheeks.forEach((cheek) => {
+    if (!cheek) return
+    drawHeart(
+      context,
+      cheek.x * width,
+      cheek.y * height,
+      faceWidth * 0.075,
+    )
+  })
+}
+
+function drawCheekStars(
+  context: CanvasRenderingContext2D,
+  landmarks: NormalizedLandmark[],
+  width: number,
+  height: number,
+  faceWidth: number,
+) {
+  const cheeks = [landmarks[205], landmarks[425]]
+  context.fillStyle = '#fff3ad'
+  context.shadowBlur = 10
+  context.shadowColor = '#78f0dd'
+  cheeks.forEach((cheek, index) => {
+    if (!cheek) return
+    const direction = index === 0 ? -1 : 1
+    const x = cheek.x * width
+    const y = cheek.y * height
+    drawSparkle(context, x, y, faceWidth * 0.055)
+    drawSparkle(
+      context,
+      x + direction * faceWidth * 0.09,
+      y - faceWidth * 0.065,
+      faceWidth * 0.032,
+    )
+  })
+}
+
+function drawHeart(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+) {
+  context.beginPath()
+  context.moveTo(x, y + size * 0.82)
+  context.bezierCurveTo(
+    x - size * 1.15,
+    y + size * 0.1,
+    x - size * 0.72,
+    y - size * 0.78,
+    x,
+    y - size * 0.2,
+  )
+  context.bezierCurveTo(
+    x + size * 0.72,
+    y - size * 0.78,
+    x + size * 1.15,
+    y + size * 0.1,
+    x,
+    y + size * 0.82,
+  )
+  context.fill()
 }
 
 function drawTechGlasses(

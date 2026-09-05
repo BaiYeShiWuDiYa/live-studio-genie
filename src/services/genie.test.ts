@@ -137,6 +137,24 @@ describe('parseGenieContent', () => {
       },
     })
   })
+
+  it('maps new face prop instructions to trusted effect ids', () => {
+    const result = parseGenieContent(
+      '已生成猫耳效果。',
+      '给我加一个猫耳道具',
+      defaultCameraEffects,
+      defaultCameraEffects,
+    )
+
+    expect(result.widget).toMatchObject({
+      type: 'camera-effects',
+      props: {
+        settings: {
+          faceEffect: 'cat-ears',
+        },
+      },
+    })
+  })
 })
 
 describe('askGenie', () => {

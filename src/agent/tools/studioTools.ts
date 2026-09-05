@@ -82,6 +82,9 @@ export const studioToolRegistry = new ToolRegistry<StudioToolContext>()
         halo: '星环',
         sparkles: '星光',
         glasses: '科技眼镜',
+        'cat-ears': '猫耳',
+        'heart-sticker': '爱心贴纸',
+        'cheek-stars': '星星贴纸',
       }[settings.faceEffect]
       const makeupCount = getEnabledMakeupCount(settings)
       return {

@@ -145,7 +145,7 @@ const widgetProtocol = [
   'visual-adjustment，props.settings 包含 brightness(0.6-1.6)、contrast(0.6-1.6)、warmth(0-0.6)。',
   'audience-poll，props 包含 question、options(2-4项)、durationSeconds(15-180)。',
   'audio-adjustment，props 包含 microphoneGain(-20到20)、backgroundMusicGain(-20到20)。',
-  'camera-effects，props.settings 可只返回要修改的字段：smoothness(0-100)、exposure(-20到30)、warmth(0-40)、backgroundMode(none/blur/color/image)、backgroundColor、faceEffect(none/halo/sparkles/glasses)，以及 lipstick/blush/eyeshadow 的 Intensity(0-100) 和 Color。',
+  'camera-effects，props.settings 可只返回要修改的字段：smoothness(0-100)、exposure(-20到30)、warmth(0-40)、backgroundMode(none/blur/color/image)、backgroundPreset(neon-studio/music-room/cyber-arena/creator-loft)、backgroundColor、faceEffect(none/halo/sparkles/glasses/cat-ears/heart-sticker/cheek-stars)，以及 lipstick/blush/eyeshadow 的 Intensity(0-100) 和 Color。',
   'live-goal，props 包含 label、current、target、supporters。',
 ].join('\n')
 
@@ -654,7 +654,7 @@ function App() {
         backgroundImageUrl: studioState.cameraEffects.backgroundImageUrl ? 'local-image' : null,
       })}`,
       '涉及美颜、美妆或道具时必须返回 camera-effects 组件。settings 只需返回要修改的字段，未提及字段保持当前值。',
-      '可用道具仅限 none、halo、sparkles、glasses；不要生成图片 URL 或未注册的效果。',
+      '可用道具仅限 none、halo、sparkles、glasses、cat-ears、heart-sticker、cheek-stars；不要生成图片 URL 或未注册的效果。',
     ].join('\n')
     const prompt = [
       '你是 LIVE Studio Genie，一名专业、简洁的中文直播间助手。',

@@ -79,6 +79,7 @@ describe('studio tool registry', () => {
       backgroundMode: 'blur' as const,
       backgroundColor: '#163d38',
       backgroundImageUrl: null,
+      backgroundPreset: null,
       faceEffect: 'halo' as const,
       lipstickIntensity: 32,
       lipstickColor: '#c2476e',

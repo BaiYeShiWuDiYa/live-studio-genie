@@ -338,6 +338,24 @@ npm run lint
 
 Result: 11 test files and 42 tests passed. Production build completed with the existing large-chunk warning.
 
+### Effect Library and Local Virtual Backgrounds
+
+- Split camera controls into dedicated Bundle, Beauty, Makeup, Props, and Background tabs.
+- Limited Beauty and Makeup tabs to their own presets and sliders while keeping all controls in Bundle.
+- Removed local file upload and added four offline procedural backgrounds rendered directly by Canvas.
+- Rebuilt the halo as a head-tracked dual-layer light ring with roll compensation.
+- Added face-tracked cat ears, heart stickers, and cheek-star stickers.
+
+Validation:
+
+```bash
+npm run test
+npm run build
+npm run lint
+```
+
+Result: 11 test files and 43 tests passed. Chrome verification covered tab isolation, all new props, halo tracking, and segmented virtual backgrounds.
+
 ## Next
 
 1. Add eyeliner and face-shape deformation.

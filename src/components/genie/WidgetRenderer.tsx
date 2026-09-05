@@ -1,5 +1,5 @@
 import { ButtonV4 as Button } from '@byted/creator-ui'
-import { Check, Gift, ImagePlus, RefreshCw, RotateCcw, Sparkles } from 'lucide-react'
+import { Check, Gift, RefreshCw, RotateCcw, Sparkles } from 'lucide-react'
 import { useState, type ComponentType } from 'react'
 import { widgetSpecSchema, type WidgetSpec } from '../../agent/widgets/widgetSpec'
 import type { AudioSettings } from '../../capabilities/audio/types'
@@ -14,6 +14,7 @@ import {
   getMatchingCameraBeautyPresetId,
   getMatchingCameraEffectPresetId,
   getMatchingCameraMakeupPresetId,
+  virtualBackgrounds,
   type CameraEffects,
 } from '../../capabilities/video/cameraEffects'
 import { useStudioStore } from '../../store/studioStore'
@@ -94,7 +95,7 @@ function CameraEffectsWidget({
   onCameraEffectsChange,
 }: WidgetBodyProps) {
   const [activeSection, setActiveSection] = useState<
-    'bundle' | 'beauty' | 'makeup' | 'props'
+    'bundle' | 'beauty' | 'makeup' | 'props' | 'background'
   >('bundle')
   const cameraEffects = useStudioStore((state) => state.cameraEffects)
   if (spec.type !== 'camera-effects') return null
@@ -116,6 +117,7 @@ function CameraEffectsWidget({
           ['beauty', '美颜'],
           ['makeup', '美妆'],
           ['props', '道具'],
+          ['background', '背景'],
         ] as const).map(([section, label]) => (
           <button
             type="button"
@@ -179,13 +181,56 @@ function CameraEffectsWidget({
           ))}
         </div>
       )}
-      {activeSection === 'props' && (
+      {(activeSection === 'bundle' || activeSection === 'beauty') && (
+        <>
+          {activeSection === 'bundle' && <p className="effect-section-label">美颜微调</p>}
+          <div className="adjustments">
+            <Adjustment label="柔肤" max={100} value={`${settings.smoothness}%`} onChange={(value) => update({ smoothness: value })} />
+            <Adjustment label="提亮" min={-20} max={30} value={`${withSign(settings.exposure)}%`} onChange={(value) => update({ exposure: value })} />
+            <Adjustment label="暖肤" max={40} value={`${settings.warmth}%`} onChange={(value) => update({ warmth: value })} />
+          </div>
+        </>
+      )}
+      {(activeSection === 'bundle' || activeSection === 'makeup') && (
+        <>
+          {activeSection === 'bundle' && <p className="effect-section-label">美妆微调</p>}
+          <div className="makeup-controls">
+            <MakeupControl
+              label="口红"
+              color={settings.lipstickColor}
+              intensity={settings.lipstickIntensity}
+              onColorChange={(lipstickColor) => update({ lipstickColor })}
+              onIntensityChange={(lipstickIntensity) => update({ lipstickIntensity })}
+            />
+            <MakeupControl
+              label="腮红"
+              color={settings.blushColor}
+              intensity={settings.blushIntensity}
+              onColorChange={(blushColor) => update({ blushColor })}
+              onIntensityChange={(blushIntensity) => update({ blushIntensity })}
+            />
+            <MakeupControl
+              label="眼影"
+              color={settings.eyeshadowColor}
+              intensity={settings.eyeshadowIntensity}
+              onColorChange={(eyeshadowColor) => update({ eyeshadowColor })}
+              onIntensityChange={(eyeshadowIntensity) => update({ eyeshadowIntensity })}
+            />
+          </div>
+        </>
+      )}
+      {(activeSection === 'bundle' || activeSection === 'props') && (
+        <>
+          {activeSection === 'bundle' && <p className="effect-section-label">人脸道具</p>}
         <div className="effect-mode-control prop-modes" role="group" aria-label="道具方案">
           {([
             ['none', '无道具'],
             ['halo', '星环'],
             ['sparkles', '星光'],
             ['glasses', '眼镜'],
+            ['cat-ears', '猫耳'],
+            ['heart-sticker', '爱心贴纸'],
+            ['cheek-stars', '星星贴纸'],
           ] as const).map(([faceEffect, label]) => (
             <button
               type="button"
@@ -197,80 +242,66 @@ function CameraEffectsWidget({
             </button>
           ))}
         </div>
+        </>
       )}
-      <div className="effect-mode-control background-modes" role="group" aria-label="虚拟背景模式">
-        {([
-          ['none', '原始'],
-          ['blur', '虚化'],
-          ['color', '纯色'],
-          ['image', '图片'],
-        ] as const).map(([mode, label]) => (
-          <button
-            type="button"
-            className={settings.backgroundMode === mode ? 'selected' : ''}
-            key={mode}
-            onClick={() => update({ backgroundMode: mode })}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      {settings.backgroundMode === 'color' && (
-        <label className="effect-color-control">
-          <span>背景颜色</span>
-          <input
-            type="color"
-            value={settings.backgroundColor}
-            onChange={(event) => update({ backgroundColor: event.target.value })}
-            aria-label="背景颜色"
-          />
-          <b>{settings.backgroundColor.toUpperCase()}</b>
-        </label>
+      {(activeSection === 'bundle' || activeSection === 'background') && (
+        <>
+          {activeSection === 'bundle' && <p className="effect-section-label">虚拟背景</p>}
+          <div className="effect-mode-control background-modes" role="group" aria-label="虚拟背景模式">
+            {([
+              ['none', '原始'],
+              ['blur', '虚化'],
+              ['color', '纯色'],
+            ] as const).map(([mode, label]) => (
+              <button
+                type="button"
+                className={settings.backgroundMode === mode ? 'selected' : ''}
+                key={mode}
+                onClick={() => update({ backgroundMode: mode })}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {settings.backgroundMode === 'color' && (
+            <label className="effect-color-control">
+              <span>背景颜色</span>
+              <input
+                type="color"
+                value={settings.backgroundColor}
+                onChange={(event) => update({ backgroundColor: event.target.value })}
+                aria-label="背景颜色"
+              />
+              <b>{settings.backgroundColor.toUpperCase()}</b>
+            </label>
+          )}
+          <div className="virtual-background-grid" role="group" aria-label="预置虚拟背景">
+            {virtualBackgrounds.map((background) => (
+              <button
+                type="button"
+                className={
+                  settings.backgroundMode === 'image' &&
+                  settings.backgroundPreset === background.id
+                    ? 'selected'
+                    : ''
+                }
+                key={background.id}
+                onClick={() => update({
+                  backgroundMode: 'image',
+                  backgroundImageUrl: null,
+                  backgroundPreset: background.id,
+                })}
+              >
+                <span
+                  className={`virtual-background-preview ${background.id}`}
+                  aria-hidden="true"
+                />
+                <span>{background.label}</span>
+              </button>
+            ))}
+          </div>
+        </>
       )}
-      <label className="effect-upload-control">
-        <ImagePlus size={14} />
-        <span>{settings.backgroundImageUrl ? '更换背景图片' : '上传背景图片'}</span>
-        <input
-          type="file"
-          accept="image/png,image/jpeg,image/webp"
-          onChange={(event) => {
-            const file = event.target.files?.[0]
-            if (!file || file.size > 8 * 1024 * 1024) return
-            update({
-              backgroundMode: 'image',
-              backgroundImageUrl: URL.createObjectURL(file),
-            })
-          }}
-        />
-      </label>
-      <div className="makeup-controls">
-        <MakeupControl
-          label="口红"
-          color={settings.lipstickColor}
-          intensity={settings.lipstickIntensity}
-          onColorChange={(lipstickColor) => update({ lipstickColor })}
-          onIntensityChange={(lipstickIntensity) => update({ lipstickIntensity })}
-        />
-        <MakeupControl
-          label="腮红"
-          color={settings.blushColor}
-          intensity={settings.blushIntensity}
-          onColorChange={(blushColor) => update({ blushColor })}
-          onIntensityChange={(blushIntensity) => update({ blushIntensity })}
-        />
-        <MakeupControl
-          label="眼影"
-          color={settings.eyeshadowColor}
-          intensity={settings.eyeshadowIntensity}
-          onColorChange={(eyeshadowColor) => update({ eyeshadowColor })}
-          onIntensityChange={(eyeshadowIntensity) => update({ eyeshadowIntensity })}
-        />
-      </div>
-      <div className="adjustments">
-        <Adjustment label="柔肤" max={100} value={`${settings.smoothness}%`} onChange={(value) => update({ smoothness: value })} />
-        <Adjustment label="提亮" min={-20} max={30} value={`${withSign(settings.exposure)}%`} onChange={(value) => update({ exposure: value })} />
-        <Adjustment label="暖肤" max={40} value={`${settings.warmth}%`} onChange={(value) => update({ warmth: value })} />
-      </div>
     </>
   )
 }
