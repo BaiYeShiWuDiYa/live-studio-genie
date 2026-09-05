@@ -7,6 +7,7 @@ import type {
 import { useEffect, useRef, type RefObject } from 'react'
 import {
   createAlphaMask,
+  type FaceEffect,
   hasMakeupEnabled,
   type CameraEffects,
   isCameraEffectActive,
@@ -483,7 +484,7 @@ function hexToRgba(hex: string, alpha: number): string {
 function drawFaceEffect(
   context: CanvasRenderingContext2D,
   landmarks: NormalizedLandmark[] | null,
-  effect: 'none' | 'halo' | 'sparkles',
+  effect: FaceEffect,
   width: number,
   height: number,
 ) {
@@ -506,7 +507,7 @@ function drawFaceEffect(
     context.beginPath()
     context.ellipse(centerX, topY, faceWidth * 0.48, faceWidth * 0.13, 0, 0, Math.PI * 2)
     context.stroke()
-  } else {
+  } else if (effect === 'sparkles') {
     context.fillStyle = '#fff3ad'
     ;[
       [centerX - faceWidth * 0.52, topY],
@@ -515,7 +516,84 @@ function drawFaceEffect(
     ].forEach(([x, y], index) => {
       drawSparkle(context, x, y, faceWidth * (index === 2 ? 0.1 : 0.07))
     })
+  } else {
+    drawTechGlasses(context, landmarks, width, height)
   }
+  context.restore()
+}
+
+function drawTechGlasses(
+  context: CanvasRenderingContext2D,
+  landmarks: NormalizedLandmark[],
+  width: number,
+  height: number,
+) {
+  const leftOuter = landmarks[33]
+  const leftInner = landmarks[133]
+  const rightInner = landmarks[362]
+  const rightOuter = landmarks[263]
+  if (!leftOuter || !leftInner || !rightInner || !rightOuter) return
+
+  const toPoint = (landmark: NormalizedLandmark) => ({
+    x: landmark.x * width,
+    y: landmark.y * height,
+  })
+  const leftA = toPoint(leftOuter)
+  const leftB = toPoint(leftInner)
+  const rightA = toPoint(rightInner)
+  const rightB = toPoint(rightOuter)
+  const leftCenter = {
+    x: (leftA.x + leftB.x) / 2,
+    y: (leftA.y + leftB.y) / 2,
+  }
+  const rightCenter = {
+    x: (rightA.x + rightB.x) / 2,
+    y: (rightA.y + rightB.y) / 2,
+  }
+  const lensWidth = Math.max(
+    Math.hypot(leftB.x - leftA.x, leftB.y - leftA.y),
+    Math.hypot(rightB.x - rightA.x, rightB.y - rightA.y),
+  ) * 0.82
+  const roll = Math.atan2(
+    rightCenter.y - leftCenter.y,
+    rightCenter.x - leftCenter.x,
+  )
+
+  context.save()
+  context.translate(
+    (leftCenter.x + rightCenter.x) / 2,
+    (leftCenter.y + rightCenter.y) / 2,
+  )
+  context.rotate(roll)
+  context.translate(
+    -(leftCenter.x + rightCenter.x) / 2,
+    -(leftCenter.y + rightCenter.y) / 2,
+  )
+  context.fillStyle = 'rgba(54, 198, 230, 0.2)'
+  context.strokeStyle = '#78f0dd'
+  context.lineWidth = Math.max(2, lensWidth * 0.08)
+  context.shadowBlur = 12
+  context.shadowColor = '#5be8ff'
+
+  for (const center of [leftCenter, rightCenter]) {
+    context.beginPath()
+    context.ellipse(
+      center.x,
+      center.y,
+      lensWidth * 0.62,
+      lensWidth * 0.42,
+      0,
+      0,
+      Math.PI * 2,
+    )
+    context.fill()
+    context.stroke()
+  }
+
+  context.beginPath()
+  context.moveTo(leftCenter.x + lensWidth * 0.62, leftCenter.y)
+  context.lineTo(rightCenter.x - lensWidth * 0.62, rightCenter.y)
+  context.stroke()
   context.restore()
 }
 

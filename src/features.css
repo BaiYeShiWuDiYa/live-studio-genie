@@ -54,6 +54,59 @@
   pointer-events: none;
 }
 
+.effect-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  margin: 12px 0 8px;
+}
+
+.effect-preset-grid button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid rgba(112, 130, 161, 0.22);
+  border-radius: 6px;
+  background: rgba(11, 16, 27, 0.58);
+  color: #aeb8c9;
+  text-align: left;
+}
+
+.effect-preset-grid button.selected {
+  border-color: rgba(115, 229, 211, 0.7);
+  background: rgba(41, 112, 107, 0.3);
+  color: #effffc;
+  box-shadow: inset 0 0 12px rgba(96, 224, 207, 0.08);
+}
+
+.effect-preset-grid b {
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.effect-preset-swatches {
+  display: flex;
+  flex: none;
+}
+
+.effect-preset-swatches i {
+  width: 8px;
+  height: 16px;
+}
+
+.effect-preset-swatches i:first-child {
+  border-radius: 3px 0 0 3px;
+}
+
+.effect-preset-swatches i:last-child {
+  border-radius: 0 3px 3px 0;
+}
+
 .effect-mode-control {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -173,6 +226,14 @@
 .genie-panel .recommendation-card {
   min-height: 0;
   overflow-y: auto;
+}
+
+@media (min-width: 821px) {
+  .workspace > .genie-panel {
+    position: sticky;
+    top: 90px;
+    max-height: calc(100vh - 112px);
+  }
 }
 
 .camera-picture-in-picture.is-editing {

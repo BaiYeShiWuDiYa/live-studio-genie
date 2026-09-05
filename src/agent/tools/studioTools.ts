@@ -81,6 +81,7 @@ export const studioToolRegistry = new ToolRegistry<StudioToolContext>()
         none: '无贴纸',
         halo: '星环',
         sparkles: '星光',
+        glasses: '科技眼镜',
       }[settings.faceEffect]
       const makeupCount = getEnabledMakeupCount(settings)
       return {

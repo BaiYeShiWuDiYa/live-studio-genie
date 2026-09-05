@@ -4,7 +4,12 @@ import { type ComponentType } from 'react'
 import { widgetSpecSchema, type WidgetSpec } from '../../agent/widgets/widgetSpec'
 import type { AudioSettings } from '../../capabilities/audio/types'
 import type { VisualSettings } from '../../capabilities/visual/types'
-import type { CameraEffects } from '../../capabilities/video/cameraEffects'
+import {
+  applyCameraEffectPreset,
+  cameraEffectPresets,
+  getMatchingCameraEffectPresetId,
+  type CameraEffects,
+} from '../../capabilities/video/cameraEffects'
 import { useStudioStore } from '../../store/studioStore'
 import { Adjustment } from './Adjustment'
 
@@ -87,12 +92,31 @@ function CameraEffectsWidget({
   const settings = applied || isPreviewing
     ? cameraEffects
     : spec.props.settings
+  const selectedPresetId = getMatchingCameraEffectPresetId(settings)
   const update = (patch: Partial<CameraEffects>) => {
     onCameraEffectsChange({ ...settings, ...patch })
   }
 
   return (
     <>
+      <div className="effect-preset-grid" role="group" aria-label="美妆风格">
+        {cameraEffectPresets.map((preset) => (
+          <button
+            type="button"
+            className={selectedPresetId === preset.id ? 'selected' : ''}
+            key={preset.id}
+            title={preset.detail}
+            onClick={() => onCameraEffectsChange(applyCameraEffectPreset(preset.id))}
+          >
+            <span className="effect-preset-swatches" aria-hidden="true">
+              {preset.swatches.map((color) => (
+                <i key={color} style={{ backgroundColor: color }} />
+              ))}
+            </span>
+            <b>{preset.label}</b>
+          </button>
+        ))}
+      </div>
       <div className="effect-mode-control background-modes" role="group" aria-label="虚拟背景模式">
         {([
           ['none', '原始'],
@@ -143,6 +167,7 @@ function CameraEffectsWidget({
           ['none', '无贴纸'],
           ['halo', '星环'],
           ['sparkles', '星光'],
+          ['glasses', '眼镜'],
         ] as const).map(([faceEffect, label]) => (
           <button
             type="button"

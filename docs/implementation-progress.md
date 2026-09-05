@@ -197,8 +197,26 @@ npm run build
 npm run lint
 ```
 
+### Camera Effect Style Presets
+
+- Added four selectable styles: Natural, Sweet Live, Stage Highlight, and Future Tech.
+- Added a preset registry with validated complete settings and automatic active-style matching.
+- Kept all preset values editable after selection so the result can become a custom style.
+- Added coordinated lipstick, blush, eyeshadow, beauty, background, and prop settings per style.
+- Added a face-tracked neon glasses prop for the Future Tech preset.
+- Added a compact color-swatch selector and an independently scrollable Genie panel.
+- Verified preset switching, complete parameter replacement, custom state, and panel layout in Chrome.
+
+Validation:
+
+```bash
+npm run test
+npm run build
+npm run lint
+```
+
 ## Next
 
-1. Validate makeup alignment with a face in the physical camera.
+1. Validate makeup and prop alignment with a face in the physical camera.
 2. Add eyeliner and face-shape deformation.
 3. Split remaining studio orchestration out of `App.tsx`.
