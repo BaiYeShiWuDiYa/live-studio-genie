@@ -190,6 +190,9 @@ function CameraEffectsWidget({
             <Adjustment label="暖肤" max={40} value={`${settings.warmth}%`} onChange={(value) => update({ warmth: value })} />
             <Adjustment label="对比度" min={-20} max={40} value={`${withSign(settings.contrast)}%`} onChange={(value) => update({ contrast: value })} />
             <Adjustment label="饱和度" min={-30} max={50} value={`${withSign(settings.saturation)}%`} onChange={(value) => update({ saturation: value })} />
+            <Adjustment label="美白" max={100} value={`${settings.whitening}%`} onChange={(value) => update({ whitening: value })} />
+            <Adjustment label="红润" max={100} value={`${settings.rosiness}%`} onChange={(value) => update({ rosiness: value })} />
+            <Adjustment label="清晰" max={100} value={`${settings.clarity}%`} onChange={(value) => update({ clarity: value })} />
           </div>
         </>
       )}

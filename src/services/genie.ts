@@ -127,6 +127,9 @@ function getExplicitCameraPatch(instruction: string): Partial<CameraEffects> {
       | 'warmth'
       | 'contrast'
       | 'saturation'
+      | 'whitening'
+      | 'rosiness'
+      | 'clarity'
       | 'lipstickIntensity'
       | 'blushIntensity'
       | 'eyeshadowIntensity'
@@ -142,6 +145,9 @@ function getExplicitCameraPatch(instruction: string): Partial<CameraEffects> {
     { key: 'warmth', labels: '暖肤', min: 0, max: 40 },
     { key: 'contrast', labels: '美颜对比度|对比度', min: -20, max: 40 },
     { key: 'saturation', labels: '饱和度', min: -30, max: 50 },
+    { key: 'whitening', labels: '美白', min: 0, max: 100 },
+    { key: 'rosiness', labels: '红润|红润度', min: 0, max: 100 },
+    { key: 'clarity', labels: '清晰|清晰度', min: 0, max: 100 },
     { key: 'lipstickIntensity', labels: '口红', min: 0, max: 100 },
     { key: 'blushIntensity', labels: '腮红', min: 0, max: 100 },
     { key: 'eyeshadowIntensity', labels: '眼影', min: 0, max: 100 },
@@ -162,7 +168,7 @@ function getExplicitCameraPatch(instruction: string): Partial<CameraEffects> {
 }
 
 function isCameraEffectsInstruction(instruction: string): boolean {
-  return /美颜|美妆|妆容|道具|特效|人脸效果|上镜|柔肤|磨皮|提亮|曝光|暖肤|饱和度|口红|腮红|眼影|眼线|高光|眼镜|墨镜|星光|蝴蝶|闪电|贴纸/.test(instruction)
+  return /美颜|美妆|妆容|道具|特效|人脸效果|上镜|柔肤|磨皮|提亮|曝光|暖肤|饱和度|美白|红润|清晰|口红|腮红|眼影|眼线|高光|眼镜|墨镜|星光|蝴蝶|闪电|贴纸/.test(instruction)
 }
 
 function hydrateCameraEffectsWidget(
@@ -198,7 +204,7 @@ function createCameraEffectsFallback(
 
   const recommendation = recommendedSettings ?? currentSettings
   const explicitPatch = getExplicitCameraPatch(instruction)
-  const beautyRequested = /美颜|上镜|柔肤|磨皮|提亮|曝光|暖肤|对比度|饱和度/.test(instruction)
+  const beautyRequested = /美颜|上镜|柔肤|磨皮|提亮|曝光|暖肤|对比度|饱和度|美白|红润|清晰/.test(instruction)
   const makeupRequested = /美妆|妆容|上镜|口红|腮红|眼影|眼线|高光/.test(instruction)
   const propRequested = /道具|特效|眼镜|墨镜|星光|蝴蝶|闪电|贴纸/.test(instruction)
   const settings = cameraEffectsSchema.parse({
@@ -210,6 +216,9 @@ function createCameraEffectsFallback(
           warmth: recommendation.warmth,
           contrast: recommendation.contrast,
           saturation: recommendation.saturation,
+          whitening: recommendation.whitening,
+          rosiness: recommendation.rosiness,
+          clarity: recommendation.clarity,
         }
       : {}),
     ...(makeupRequested

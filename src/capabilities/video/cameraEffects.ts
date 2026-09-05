@@ -32,6 +32,9 @@ export const cameraEffectsSchema = z.object({
   warmth: z.number().int().min(0).max(40),
   contrast: z.number().int().min(-20).max(40),
   saturation: z.number().int().min(-30).max(50),
+  whitening: z.number().int().min(0).max(100),
+  rosiness: z.number().int().min(0).max(100),
+  clarity: z.number().int().min(0).max(100),
   backgroundMode: backgroundModeSchema,
   backgroundColor: z.string().regex(/^#[0-9a-f]{6}$/i),
   backgroundImageUrl: backgroundImageUrlSchema.nullable(),
@@ -77,6 +80,9 @@ export const defaultCameraEffects: CameraEffects = {
   warmth: 0,
   contrast: 0,
   saturation: 0,
+  whitening: 0,
+  rosiness: 0,
+  clarity: 0,
   backgroundMode: 'none',
   backgroundColor: '#163d38',
   backgroundImageUrl: null,
@@ -110,7 +116,14 @@ interface CameraBeautyPreset {
   label: string
   settings: Pick<
     CameraEffects,
-    'smoothness' | 'exposure' | 'warmth' | 'contrast' | 'saturation'
+    | 'smoothness'
+    | 'exposure'
+    | 'warmth'
+    | 'contrast'
+    | 'saturation'
+    | 'whitening'
+    | 'rosiness'
+    | 'clarity'
   >
 }
 
@@ -141,6 +154,9 @@ export const cameraBeautyPresets: readonly CameraBeautyPreset[] = [
       warmth: 0,
       contrast: 0,
       saturation: 0,
+      whitening: 0,
+      rosiness: 0,
+      clarity: 0,
     },
   },
   {
@@ -152,6 +168,9 @@ export const cameraBeautyPresets: readonly CameraBeautyPreset[] = [
       warmth: 4,
       contrast: 4,
       saturation: 4,
+      whitening: 10,
+      rosiness: 6,
+      clarity: 8,
     },
   },
   {
@@ -163,6 +182,9 @@ export const cameraBeautyPresets: readonly CameraBeautyPreset[] = [
       warmth: 8,
       contrast: -3,
       saturation: 6,
+      whitening: 16,
+      rosiness: 10,
+      clarity: 4,
     },
   },
   {
@@ -174,6 +196,9 @@ export const cameraBeautyPresets: readonly CameraBeautyPreset[] = [
       warmth: 5,
       contrast: 6,
       saturation: 8,
+      whitening: 28,
+      rosiness: 8,
+      clarity: 14,
     },
   },
 ]
@@ -347,7 +372,10 @@ export function getMatchingCameraBeautyPresetId(
     preset.settings.exposure === settings.exposure &&
     preset.settings.warmth === settings.warmth &&
     preset.settings.contrast === settings.contrast &&
-    preset.settings.saturation === settings.saturation
+    preset.settings.saturation === settings.saturation &&
+    preset.settings.whitening === settings.whitening &&
+    preset.settings.rosiness === settings.rosiness &&
+    preset.settings.clarity === settings.clarity
   ))?.id ?? null
 }
 
@@ -404,6 +432,9 @@ export function isCameraEffectActive(settings: CameraEffects): boolean {
     settings.warmth > 0 ||
     settings.contrast !== 0 ||
     settings.saturation !== 0 ||
+    settings.whitening > 0 ||
+    settings.rosiness > 0 ||
+    settings.clarity > 0 ||
     settings.backgroundMode !== 'none' ||
     settings.faceEffect !== 'none' ||
     hasMakeupEnabled(settings)

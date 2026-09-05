@@ -118,7 +118,7 @@ describe('parseGenieContent', () => {
   it('normalizes explicit makeup values and a generated prop', () => {
     const result = parseGenieContent(
       '已生成方案。',
-      '柔肤 24，提亮 8，口红 35，腮红 20，眼影 18，加闪电贴纸',
+      '柔肤 24，美白 30，红润 15，清晰 20，提亮 8，口红 35，腮红 20，眼影 18，加闪电贴纸',
       defaultCameraEffects,
       defaultCameraEffects,
     )
@@ -128,6 +128,9 @@ describe('parseGenieContent', () => {
       props: {
         settings: {
           smoothness: 24,
+          whitening: 30,
+          rosiness: 15,
+          clarity: 20,
           exposure: 8,
           lipstickIntensity: 35,
           blushIntensity: 20,

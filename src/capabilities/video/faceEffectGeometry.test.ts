@@ -28,8 +28,8 @@ describe('face effect geometry', () => {
     expect(geometry!.lensWidth).toBeCloseTo(228)
     expect(geometry!.lensHeight).toBeGreaterThan(164)
     expect(geometry!.leftCenter.y).toBeLessThan(200)
-    expect(geometry!.leftTemple.x).toBe(200)
-    expect(geometry!.rightTemple.x).toBe(800)
+    expect(geometry!.leftTemple.x).toBeLessThan(120)
+    expect(geometry!.rightTemple.x).toBeGreaterThan(880)
   })
 
   it('returns null when required eye landmarks are unavailable', () => {

@@ -93,12 +93,26 @@ export function createGlassesGeometry(
 
   leftCenter.y -= verticalOffset
   rightCenter.y -= verticalOffset
+  const faceCenter = {
+    x: (leftCenter.x + rightCenter.x) / 2,
+    y: (leftCenter.y + rightCenter.y) / 2,
+  }
+  const extendTemple = (point: FaceEffectPoint) => {
+    const dx = point.x - faceCenter.x
+    const dy = point.y - faceCenter.y
+    const length = Math.max(1, Math.hypot(dx, dy))
+    const extension = lensWidth * 0.38
+    return {
+      x: point.x + (dx / length) * extension,
+      y: point.y + (dy / length) * extension,
+    }
+  }
 
   return {
     leftCenter,
     rightCenter,
-    leftTemple: toPoint(leftTemple),
-    rightTemple: toPoint(rightTemple),
+    leftTemple: extendTemple(toPoint(leftTemple)),
+    rightTemple: extendTemple(toPoint(rightTemple)),
     lensWidth,
     lensHeight,
     roll: Math.atan2(

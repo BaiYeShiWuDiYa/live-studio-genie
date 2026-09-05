@@ -281,10 +281,10 @@ function drawProcessedFrame({
 }) {
   context.clearRect(0, 0, width, height)
   const filter = [
-    `brightness(${1 + settings.exposure / 100})`,
-    `contrast(${1 + settings.contrast / 100})`,
+    `brightness(${1 + settings.exposure / 100 + settings.whitening / 500})`,
+    `contrast(${1 + settings.contrast / 100 + settings.clarity / 500})`,
     `sepia(${settings.warmth / 160})`,
-    `saturate(${1 + settings.warmth / 180 + settings.saturation / 100})`,
+    `saturate(${1 + settings.warmth / 180 + settings.saturation / 100 + settings.rosiness / 600})`,
     `blur(${settings.smoothness * 0.008}px)`,
   ].join(' ')
 
@@ -292,6 +292,7 @@ function drawProcessedFrame({
     context.filter = filter
     context.drawImage(video, 0, 0, width, height)
     context.filter = 'none'
+    drawSkinTone(context, faceLandmarks, settings, width, height)
     drawMakeup(context, faceLandmarks, settings, width, height)
     drawFaceEffect(context, faceLandmarks, settings.faceEffect, width, height)
     return
@@ -324,6 +325,7 @@ function drawProcessedFrame({
   personContext.drawImage(maskCanvas, 0, 0, width, height)
   personContext.globalCompositeOperation = 'source-over'
   context.drawImage(personCanvas, 0, 0)
+  drawSkinTone(context, faceLandmarks, settings, width, height)
   drawMakeup(context, faceLandmarks, settings, width, height)
   drawFaceEffect(context, faceLandmarks, settings.faceEffect, width, height)
 }
@@ -513,6 +515,61 @@ const LIPS_INNER = [
 const EYE_TOP_LEFT = [33, 246, 161, 160, 159, 158, 157, 173, 133]
 const EYE_TOP_RIGHT = [263, 466, 388, 387, 386, 385, 384, 398, 362]
 
+function drawSkinTone(
+  context: CanvasRenderingContext2D,
+  landmarks: NormalizedLandmark[] | null,
+  settings: CameraEffects,
+  width: number,
+  height: number,
+) {
+  if (!landmarks || (settings.whitening === 0 && settings.rosiness === 0)) return
+  const forehead = landmarks[10]
+  const chin = landmarks[152]
+  const left = landmarks[234]
+  const right = landmarks[454]
+  if (!forehead || !chin || !left || !right) return
+
+  const centerX = ((left.x + right.x) / 2) * width
+  const centerY = ((forehead.y + chin.y) / 2) * height
+  const faceWidth = Math.hypot(
+    (right.x - left.x) * width,
+    (right.y - left.y) * height,
+  )
+  const faceHeight = Math.hypot(
+    (chin.x - forehead.x) * width,
+    (chin.y - forehead.y) * height,
+  )
+  const roll = Math.atan2(
+    (right.y - left.y) * height,
+    (right.x - left.x) * width,
+  )
+
+  const fillTone = (
+    color: string,
+    alpha: number,
+    operation: GlobalCompositeOperation,
+  ) => {
+    if (alpha <= 0) return
+    context.save()
+    context.globalCompositeOperation = operation
+    context.translate(centerX, centerY)
+    context.rotate(roll)
+    context.scale(faceWidth * 0.5, faceHeight * 0.53)
+    const gradient = context.createRadialGradient(0, -0.06, 0.08, 0, 0, 1)
+    gradient.addColorStop(0, hexToRgba(color, alpha))
+    gradient.addColorStop(0.62, hexToRgba(color, alpha * 0.72))
+    gradient.addColorStop(1, hexToRgba(color, 0))
+    context.fillStyle = gradient
+    context.beginPath()
+    context.arc(0, 0, 1, 0, Math.PI * 2)
+    context.fill()
+    context.restore()
+  }
+
+  fillTone('#fff8f1', settings.whitening / 520, 'screen')
+  fillTone('#ef8e9f', settings.rosiness / 420, 'soft-light')
+}
+
 function drawMakeup(
   context: CanvasRenderingContext2D,
   landmarks: NormalizedLandmark[] | null,
@@ -672,19 +729,56 @@ function drawEyeliner(
   faceWidth: number,
 ) {
   if (settings.eyelinerIntensity === 0) return
-  context.strokeStyle = `rgba(21, 17, 28, ${settings.eyelinerIntensity / 115})`
-  context.lineWidth = Math.max(1, faceWidth * (0.004 + settings.eyelinerIntensity * 0.00004))
-  context.lineCap = 'round'
-  context.lineJoin = 'round'
+  const left = landmarks[234]
+  const right = landmarks[454]
+  const nose = landmarks[1]
+  if (!left || !right || !nose) return
+  const roll = Math.atan2(
+    (right.y - left.y) * height,
+    (right.x - left.x) * width,
+  )
+  const upX = Math.sin(roll)
+  const upY = -Math.cos(roll)
+  const thickness = faceWidth * (0.004 + settings.eyelinerIntensity * 0.00007)
+  const alpha = Math.min(0.86, 0.18 + settings.eyelinerIntensity / 160)
+  context.fillStyle = `rgba(18, 15, 24, ${alpha})`
 
   for (const indices of [EYE_TOP_LEFT, EYE_TOP_RIGHT]) {
+    const points = indices.map((index) => ({
+      x: landmarks[index].x * width,
+      y: landmarks[index].y * height,
+    }))
     context.beginPath()
-    indices.forEach((index, pointIndex) => {
-      const landmark = landmarks[index]
-      if (pointIndex === 0) context.moveTo(landmark.x * width, landmark.y * height)
-      else context.lineTo(landmark.x * width, landmark.y * height)
+    points.forEach((point, index) => {
+      if (index === 0) context.moveTo(point.x, point.y)
+      else context.lineTo(point.x, point.y)
     })
-    context.stroke()
+    for (let index = points.length - 1; index >= 0; index -= 1) {
+      const progress = index / (points.length - 1)
+      const taper = Math.sin(progress * Math.PI)
+      context.lineTo(
+        points[index].x + upX * thickness * taper,
+        points[index].y + upY * thickness * taper,
+      )
+    }
+    context.closePath()
+    context.fill()
+
+    const outer = points[0]
+    const direction = outer.x < nose.x * width ? -1 : 1
+    const wingLength = faceWidth * (0.025 + settings.eyelinerIntensity * 0.00018)
+    context.beginPath()
+    context.moveTo(outer.x, outer.y)
+    context.lineTo(
+      outer.x + direction * wingLength + upX * wingLength * 0.35,
+      outer.y + upY * wingLength * 0.35,
+    )
+    context.lineTo(
+      outer.x + upX * thickness * 0.5,
+      outer.y + upY * thickness * 0.5,
+    )
+    context.closePath()
+    context.fill()
   }
 }
 
@@ -699,18 +793,57 @@ function drawHighlight(
   if (settings.highlightIntensity === 0) return
   const bridge = landmarks[168]
   const tip = landmarks[1]
-  if (!bridge || !tip) return
+  const leftCheek = landmarks[117]
+  const rightCheek = landmarks[346]
+  const left = landmarks[234]
+  const right = landmarks[454]
+  if (!bridge || !tip || !leftCheek || !rightCheek || !left || !right) return
+  const alpha = settings.highlightIntensity / 520
+  const roll = Math.atan2(
+    (right.y - left.y) * height,
+    (right.x - left.x) * width,
+  )
+
+  const drawSpot = (
+    x: number,
+    y: number,
+    radiusX: number,
+    radiusY: number,
+    rotation: number,
+    opacity: number,
+  ) => {
+    context.save()
+    context.translate(x, y)
+    context.rotate(rotation)
+    context.scale(radiusX, radiusY)
+    const gradient = context.createRadialGradient(0, 0, 0, 0, 0, 1)
+    gradient.addColorStop(0, `rgba(255, 244, 226, ${opacity})`)
+    gradient.addColorStop(0.58, `rgba(255, 238, 216, ${opacity * 0.5})`)
+    gradient.addColorStop(1, 'rgba(255, 238, 216, 0)')
+    context.fillStyle = gradient
+    context.beginPath()
+    context.arc(0, 0, 1, 0, Math.PI * 2)
+    context.fill()
+    context.restore()
+  }
 
   context.save()
   context.globalCompositeOperation = 'screen'
-  context.strokeStyle = `rgba(255, 231, 211, ${settings.highlightIntensity / 190})`
-  context.lineWidth = Math.max(2, faceWidth * 0.026)
-  context.lineCap = 'round'
-  context.filter = `blur(${Math.max(1.5, faceWidth * 0.012)}px)`
-  context.beginPath()
-  context.moveTo(bridge.x * width, bridge.y * height)
-  context.lineTo(tip.x * width, tip.y * height)
-  context.stroke()
+  const noseAngle = Math.atan2(
+    (tip.y - bridge.y) * height,
+    (tip.x - bridge.x) * width,
+  ) - Math.PI / 2
+  drawSpot(
+    ((bridge.x + tip.x) / 2) * width,
+    ((bridge.y + tip.y) / 2) * height,
+    faceWidth * 0.035,
+    faceWidth * 0.16,
+    noseAngle,
+    alpha,
+  )
+  drawSpot(tip.x * width, tip.y * height, faceWidth * 0.055, faceWidth * 0.04, roll, alpha)
+  drawSpot(leftCheek.x * width, leftCheek.y * height, faceWidth * 0.13, faceWidth * 0.055, roll, alpha * 0.72)
+  drawSpot(rightCheek.x * width, rightCheek.y * height, faceWidth * 0.13, faceWidth * 0.055, roll, alpha * 0.72)
   context.restore()
 }
 
@@ -980,8 +1113,8 @@ function drawBlackSunglasses(
     rightTemple,
     roll,
   } = geometry
-  const lensWidth = geometry.lensWidth * 1.06
-  const lensHeight = geometry.lensHeight * 0.86
+  const lensWidth = geometry.lensWidth * 1.04
+  const lensHeight = geometry.lensHeight * 0.96
   const radiusX = lensWidth / 2
   const radiusY = lensHeight / 2
   const centerX = (leftCenter.x + rightCenter.x) / 2
@@ -993,7 +1126,8 @@ function drawBlackSunglasses(
   context.translate(-centerX, -centerY)
   context.lineJoin = 'round'
   context.lineCap = 'round'
-  context.lineWidth = Math.max(4, lensWidth * 0.075)
+  const frameWidth = Math.max(4, lensWidth * 0.062)
+  context.lineWidth = frameWidth
   context.strokeStyle = '#05070a'
   context.shadowBlur = 8
   context.shadowColor = 'rgba(0, 0, 0, 0.7)'
@@ -1006,29 +1140,66 @@ function drawBlackSunglasses(
       center.y + radiusY,
     )
     lensGradient.addColorStop(0, 'rgba(8, 10, 14, 0.98)')
-    lensGradient.addColorStop(0.7, 'rgba(15, 19, 24, 0.94)')
-    lensGradient.addColorStop(1, 'rgba(35, 42, 48, 0.9)')
+    lensGradient.addColorStop(0.55, 'rgba(16, 20, 25, 0.95)')
+    lensGradient.addColorStop(1, 'rgba(42, 50, 56, 0.88)')
     context.fillStyle = lensGradient
     context.beginPath()
-    context.roundRect(
-      center.x - radiusX,
+    context.moveTo(center.x - radiusX, center.y - radiusY * 0.7)
+    context.quadraticCurveTo(
+      center.x - radiusX * 0.86,
       center.y - radiusY,
-      lensWidth,
-      lensHeight,
-      lensHeight * 0.24,
+      center.x - radiusX * 0.55,
+      center.y - radiusY,
     )
+    context.lineTo(center.x + radiusX * 0.72, center.y - radiusY * 0.86)
+    context.quadraticCurveTo(
+      center.x + radiusX,
+      center.y - radiusY * 0.72,
+      center.x + radiusX * 0.94,
+      center.y - radiusY * 0.34,
+    )
+    context.quadraticCurveTo(
+      center.x + radiusX * 0.78,
+      center.y + radiusY * 0.8,
+      center.x,
+      center.y + radiusY,
+    )
+    context.quadraticCurveTo(
+      center.x - radiusX * 0.8,
+      center.y + radiusY * 0.78,
+      center.x - radiusX,
+      center.y - radiusY * 0.34,
+    )
+    context.closePath()
     context.fill()
     context.stroke()
 
     context.shadowBlur = 0
+    context.strokeStyle = '#020304'
+    context.lineWidth = frameWidth * 1.35
+    context.beginPath()
+    context.moveTo(center.x - radiusX * 0.83, center.y - radiusY * 0.76)
+    context.quadraticCurveTo(
+      center.x,
+      center.y - radiusY * 1.02,
+      center.x + radiusX * 0.78,
+      center.y - radiusY * 0.78,
+    )
+    context.stroke()
+
     context.strokeStyle = 'rgba(255, 255, 255, 0.2)'
     context.lineWidth = Math.max(1.5, lensWidth * 0.018)
     context.beginPath()
-    context.moveTo(center.x - radiusX * 0.58, center.y - radiusY * 0.48)
-    context.lineTo(center.x - radiusX * 0.1, center.y - radiusY * 0.48)
+    context.moveTo(center.x - radiusX * 0.54, center.y - radiusY * 0.42)
+    context.quadraticCurveTo(
+      center.x - radiusX * 0.3,
+      center.y - radiusY * 0.54,
+      center.x - radiusX * 0.04,
+      center.y - radiusY * 0.44,
+    )
     context.stroke()
     context.strokeStyle = '#05070a'
-    context.lineWidth = Math.max(4, lensWidth * 0.075)
+    context.lineWidth = frameWidth
   }
 
   context.beginPath()

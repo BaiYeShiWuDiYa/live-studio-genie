@@ -359,6 +359,25 @@ npm run lint
 
 Result: 11 test files and 44 tests passed. Chrome verification covered the new sliders, themed scrollbar, butterfly, lightning, and sunglasses tracking, and segmented virtual backgrounds.
 
+### Refined Face Effects and Retouching
+
+- Extended the shared tracked temple-arm geometry for both cyber glasses and black sunglasses.
+- Rebuilt black sunglasses with tapered curved lenses, a heavier brow frame, a dedicated bridge, and softer reflections.
+- Replaced the rigid eyeliner stroke with a tapered upper-lid fill and a short outer wing.
+- Replaced the nose highlight line with soft nose-bridge, nose-tip, and cheek highlight regions.
+- Added whitening, rosiness, and clarity controls across schemas, presets, Canvas rendering, Agent instructions, and deterministic parsing.
+
+Validation:
+
+```bash
+npm run test
+npm run build
+npm run lint
+git diff --check
+```
+
+Result: 11 test files and 44 tests passed. Production build completed with the existing large-chunk warning. Chrome verification covered the extended glasses geometry, revised sunglasses shape, and the new retouching controls.
+
 ## Next
 
 1. Add eyebrow controls and face-shape deformation.
