@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
 import { ButtonV4 as Button } from '@byted/creator-ui'
 import {
   Activity,
@@ -32,9 +32,11 @@ import {
 } from 'lucide-react'
 import './App.css'
 import './features.css'
+import { studioToolRegistry, type StudioToolContext } from './agent/tools/studioTools'
 import { requestCameraStream, requestDisplayStream, stopMediaStream } from './capabilities/media/browserMedia'
 import { useMediaMonitoring } from './capabilities/monitoring/useMediaMonitoring'
 import type { MediaMetric } from './capabilities/monitoring/types'
+import type { VisualSettings } from './capabilities/visual/types'
 import { EditableCameraLayer } from './components/studio/EditableCameraLayer'
 import { askGenie } from './services/genie'
 import { useStudioStore } from './store/studioStore'
@@ -144,6 +146,16 @@ function App() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const cameraAttemptedRef = useRef(false)
   const resetCameraLayerLayout = useStudioStore((state) => state.resetCameraLayerLayout)
+  const previewVisualSettings = useStudioStore((state) => state.previewVisualSettings)
+  const applyVisualSettings = useStudioStore((state) => state.applyVisualSettings)
+  const resetVisualPreview = useStudioStore((state) => state.resetVisualPreview)
+  const undoVisualSettings = useStudioStore((state) => state.undoVisualSettings)
+  const studioToolContext: StudioToolContext = {
+    previewVisualSettings,
+    applyVisualSettings,
+    resetVisualPreview,
+    undoVisualSettings,
+  }
 
   useEffect(() => {
     return () => stopMediaStream(mediaStream)
@@ -228,6 +240,7 @@ function App() {
   }, [view])
 
   const changeScene = (nextScene: Scene) => {
+    studioToolRegistry.execute('studio.reset_visual_preview', {}, studioToolContext)
     setScene(nextScene)
     setApplied(false)
     setIsSuggestionPreview(false)
@@ -241,6 +254,16 @@ function App() {
   }
 
   const previewSuggestion = () => {
+    if (scene === 'quality') {
+      const result = studioToolRegistry.execute('studio.adjust_visual', {
+        mode: 'preview',
+        settings: { brightness: 1.32, contrast: 1.08, warmth: 0.18 },
+      }, studioToolContext)
+      setLiveAdjustment(result)
+      setIsSuggestionPreview(true)
+      return
+    }
+
     const preview: Record<Scene, LiveAdjustment> = {
       quality: { name: '正在预览柔光氛围', detail: '仅作用于本地预览，尚未影响直播画面' },
       interaction: { name: '正在预览互动挂件', detail: '确认后才会在观众侧上屏' },
@@ -254,6 +277,16 @@ function App() {
 
   const applySuggestion = () => {
     setApplied(true)
+    if (scene === 'quality') {
+      const result = studioToolRegistry.execute('studio.adjust_visual', {
+        mode: 'apply',
+        settings: useStudioStore.getState().visualSettings,
+      }, studioToolContext)
+      setLiveAdjustment(result)
+      setIsSuggestionPreview(false)
+      return
+    }
+
     const adjustment: Record<Scene, LiveAdjustment> = {
       quality: { name: '柔光氛围已预览', detail: '补光 +32、暖色 +18、磨皮 20%' },
       interaction: { name: '点歌投票已上屏', detail: '将在 45 秒后自动收起' },
@@ -280,10 +313,29 @@ function App() {
   }
 
   const undoSuggestion = () => {
+    if (scene === 'quality') {
+      const result = studioToolRegistry.execute('studio.undo_visual', {}, studioToolContext)
+      setLiveAdjustment(result)
+    } else {
+      setLiveAdjustment(null)
+    }
     setApplied(false)
-    setLiveAdjustment(null)
     setIsSuggestionPreview(false)
     setIsPollVisible(false)
+  }
+
+  const updateVisualPreview = (property: keyof VisualSettings, percentage: number) => {
+    const currentSettings = useStudioStore.getState().visualSettings
+    const value = property === 'warmth' ? percentage / 100 : 1 + percentage / 100
+    const result = studioToolRegistry.execute('studio.adjust_visual', {
+      mode: 'preview',
+      settings: {
+        ...currentSettings,
+        [property]: value,
+      },
+    }, studioToolContext)
+    setLiveAdjustment(result)
+    setIsSuggestionPreview(true)
   }
 
   const handleGenieSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -449,7 +501,7 @@ function App() {
           </div>}
           {view === 'prelive'
             ? <PreliveTaskCard task={preliveTasks[preliveTaskIndex]} completedCount={preliveTaskIndex} onApply={completePreliveTask} />
-            : <SceneRecommendation scene={scene} applied={applied} isPreviewing={isSuggestionPreview} onPreview={previewSuggestion} onApply={applySuggestion} onUndo={undoSuggestion} />}
+            : <SceneRecommendation scene={scene} applied={applied} isPreviewing={isSuggestionPreview} onPreview={previewSuggestion} onApply={applySuggestion} onUndo={undoSuggestion} onVisualChange={updateVisualPreview} />}
           {chatMessages.length > 0 && <div className="genie-conversation" aria-live="polite">
             {chatMessages.map((message, index) => (
               <article key={`${message.role}-${index}`} className={`chat-message ${message.role}`}>
@@ -572,6 +624,15 @@ function PreliveChecklist({ score }: { score: number }) {
 
 function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, isPk, applied, scene, liveAdjustment, pollVisible, liveTick, previewMode, isPreviewing }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; displayStream: MediaStream | null; layoutEditing: boolean; isPk: boolean; applied: boolean; scene: Scene; liveAdjustment: LiveAdjustment | null; pollVisible: boolean; liveTick: number; previewMode: PreviewMode; isPreviewing: boolean }) {
   const displayVideoRef = useRef<HTMLVideoElement>(null)
+  const visualSettings = useStudioStore((state) => state.visualSettings)
+  const previewStyle = {
+    '--studio-video-filter': [
+      `brightness(${visualSettings.brightness})`,
+      `contrast(${visualSettings.contrast})`,
+      `sepia(${visualSettings.warmth})`,
+      `saturate(${1 + visualSettings.warmth * 0.35})`,
+    ].join(' '),
+  } as CSSProperties
 
   useEffect(() => {
     if (displayVideoRef.current && displayStream) {
@@ -579,7 +640,7 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
     }
   }, [displayStream])
 
-  return <div className={`live-stage ${applied ? 'applied' : ''} ${isPreviewing ? 'previewing' : ''} ${isPk ? 'pk-stage' : ''} scene-${scene} ${previewMode === 'studio' ? 'studio-preview' : 'mobile-preview'}`}>
+  return <div style={previewStyle} className={`live-stage ${applied ? 'applied' : ''} ${isPreviewing ? 'previewing' : ''} ${isPk ? 'pk-stage' : ''} scene-${scene} ${previewMode === 'studio' ? 'studio-preview' : 'mobile-preview'}`}>
     <div className="stage-glow" />
     <div className="scan-lines" />
     <div className={`host-stage ${displayStream ? 'screen-sharing' : ''}`}>
@@ -627,13 +688,18 @@ function PreliveTaskCard({ task, completedCount, onApply }: { task: typeof preli
   </div>
 }
 
-function SceneRecommendation({ scene, applied, isPreviewing, onPreview, onApply, onUndo }: { scene: Scene; applied: boolean; isPreviewing: boolean; onPreview: () => void; onApply: () => void; onUndo: () => void }) {
+function SceneRecommendation({ scene, applied, isPreviewing, onPreview, onApply, onUndo, onVisualChange }: { scene: Scene; applied: boolean; isPreviewing: boolean; onPreview: () => void; onApply: () => void; onUndo: () => void; onVisualChange: (property: keyof VisualSettings, percentage: number) => void }) {
   const copy = sceneCopy[scene]
+  const visualSettings = useStudioStore((state) => state.visualSettings)
   return <div className={`recommendation-card ${scene}`}>
     <span className="card-kicker">{scene === 'troubleshoot' ? '需要确认' : '实时建议'}</span>
     <h2>{copy.title}</h2>
     <p>{copy.detail}</p>
-    {scene === 'quality' && <div className="adjustments"><Adjustment label="补光" value="+32" /><Adjustment label="暖色" value="+18" /><Adjustment label="磨皮" value="20%" /></div>}
+    {scene === 'quality' && <div className="adjustments">
+      <Adjustment label="补光" value={`+${Math.round((visualSettings.brightness - 1) * 100)}`} onChange={(value) => onVisualChange('brightness', value)} />
+      <Adjustment label="对比度" value={`+${Math.round((visualSettings.contrast - 1) * 100)}`} onChange={(value) => onVisualChange('contrast', value)} />
+      <Adjustment label="暖色" value={`+${Math.round(visualSettings.warmth * 100)}`} onChange={(value) => onVisualChange('warmth', value)} />
+    </div>}
     {scene === 'interaction' && <div className="interaction-widget"><div><Gift size={17} /><span>点歌投票</span></div><p>甜歌还是炸场？评论区打 1 或 2</p><small>展示 45 秒 · 评论即可参与</small></div>}
     {scene === 'troubleshoot' && <div className="adjustments"><Adjustment label="麦克风" value="+8%" /><Adjustment label="BGM" value="-5%" /></div>}
     {scene === 'pk' && <div className="goal-widget"><span>本轮冲刺目标</span><strong>再差 1,260 分反超</strong><div><i style={{ width: '76%' }} /></div><small>已获得 38 位观众响应</small></div>}
@@ -644,15 +710,21 @@ function SceneRecommendation({ scene, applied, isPreviewing, onPreview, onApply,
   </div>
 }
 
-function Adjustment({ label, value }: { label: string; value: string }) {
+function Adjustment({ label, value, onChange }: { label: string; value: string; onChange?: (value: number) => void }) {
   const numericValue = Number.parseInt(value, 10)
-  const [currentValue, setCurrentValue] = useState(Number.isNaN(numericValue) ? 20 : Math.abs(numericValue))
+  const initialValue = Number.isNaN(numericValue) ? 20 : Math.abs(numericValue)
+  const [internalValue, setInternalValue] = useState(initialValue)
+  const currentValue = onChange ? initialValue : internalValue
   const suffix = value.includes('%') ? '%' : value.includes('20') && label === '磨皮' ? '%' : ''
   const sign = value.startsWith('-') ? '-' : value.startsWith('+') ? '+' : ''
 
   return <label className="adjustment">
     <span>{label}</span>
-    <input type="range" min="0" max="100" value={currentValue} onChange={(event) => setCurrentValue(Number(event.target.value))} aria-label={`${label} 调节`} />
+    <input type="range" min="0" max="60" value={currentValue} onChange={(event) => {
+      const nextValue = Number(event.target.value)
+      if (onChange) onChange(nextValue)
+      else setInternalValue(nextValue)
+    }} aria-label={`${label} 调节`} />
     <b>{sign}{currentValue}{suffix}</b>
   </label>
 }

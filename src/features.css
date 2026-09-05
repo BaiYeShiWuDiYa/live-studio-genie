@@ -9,6 +9,13 @@
   background: #05070c;
 }
 
+.live-stage .camera-feed,
+.live-stage .screen-feed,
+.live-stage .demo-host {
+  filter: var(--studio-video-filter, none);
+  transition: filter 220ms ease;
+}
+
 .camera-picture-in-picture {
   position: absolute;
   z-index: 4;
