@@ -1,5 +1,5 @@
 import { ButtonV4 as Button } from '@byted/creator-ui'
-import { Check, Gift, RefreshCw, RotateCcw, Sparkles } from 'lucide-react'
+import { Check, Gift, ImagePlus, RefreshCw, RotateCcw, Sparkles } from 'lucide-react'
 import { type ComponentType } from 'react'
 import { widgetSpecSchema, type WidgetSpec } from '../../agent/widgets/widgetSpec'
 import type { AudioSettings } from '../../capabilities/audio/types'
@@ -93,11 +93,12 @@ function CameraEffectsWidget({
 
   return (
     <>
-      <div className="effect-mode-control" role="group" aria-label="虚拟背景模式">
+      <div className="effect-mode-control background-modes" role="group" aria-label="虚拟背景模式">
         {([
           ['none', '原始'],
           ['blur', '虚化'],
           ['color', '纯色'],
+          ['image', '图片'],
         ] as const).map(([mode, label]) => (
           <button
             type="button"
@@ -121,6 +122,38 @@ function CameraEffectsWidget({
           <b>{settings.backgroundColor.toUpperCase()}</b>
         </label>
       )}
+      <label className="effect-upload-control">
+        <ImagePlus size={14} />
+        <span>{settings.backgroundImageUrl ? '更换背景图片' : '上传背景图片'}</span>
+        <input
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          onChange={(event) => {
+            const file = event.target.files?.[0]
+            if (!file || file.size > 8 * 1024 * 1024) return
+            update({
+              backgroundMode: 'image',
+              backgroundImageUrl: URL.createObjectURL(file),
+            })
+          }}
+        />
+      </label>
+      <div className="effect-mode-control" role="group" aria-label="人脸贴纸">
+        {([
+          ['none', '无贴纸'],
+          ['halo', '星环'],
+          ['sparkles', '星光'],
+        ] as const).map(([faceEffect, label]) => (
+          <button
+            type="button"
+            className={settings.faceEffect === faceEffect ? 'selected' : ''}
+            key={faceEffect}
+            onClick={() => update({ faceEffect })}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       <div className="adjustments">
         <Adjustment label="柔肤" max={100} value={`${settings.smoothness}%`} onChange={(value) => update({ smoothness: value })} />
         <Adjustment label="提亮" min={-20} max={30} value={`${withSign(settings.exposure)}%`} onChange={(value) => update({ exposure: value })} />

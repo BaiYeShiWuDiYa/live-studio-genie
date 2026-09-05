@@ -78,6 +78,8 @@ describe('studio tool registry', () => {
       warmth: 12,
       backgroundMode: 'blur' as const,
       backgroundColor: '#163d38',
+      backgroundImageUrl: null,
+      faceEffect: 'halo' as const,
     }
     studioToolRegistry.execute('studio.adjust_camera_effects', {
       mode: 'preview',

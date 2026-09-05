@@ -138,7 +138,7 @@ const widgetProtocol = [
   'visual-adjustment，props.settings 包含 brightness(0.6-1.6)、contrast(0.6-1.6)、warmth(0-0.6)。',
   'audience-poll，props 包含 question、options(2-4项)、durationSeconds(15-180)。',
   'audio-adjustment，props 包含 microphoneGain(-20到20)、backgroundMusicGain(-20到20)。',
-  'camera-effects，props.settings 包含 smoothness、exposure、warmth、backgroundMode、backgroundColor。',
+  'camera-effects，props.settings 包含 smoothness、exposure、warmth、backgroundMode(none/blur/color)、backgroundColor、backgroundImageUrl(null)、faceEffect(none/halo/sparkles)。',
   'live-goal，props 包含 label、current、target、supporters。',
 ].join('\n')
 
@@ -238,7 +238,13 @@ function App() {
   }, [])
 
   useEffect(() => {
-    return () => genieAbortRef.current?.abort()
+    return () => {
+      genieAbortRef.current?.abort()
+      const backgroundImageUrl = useStudioStore.getState().cameraEffects.backgroundImageUrl
+      if (backgroundImageUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(backgroundImageUrl)
+      }
+    }
   }, [])
 
   useEffect(() => {

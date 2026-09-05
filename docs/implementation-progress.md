@@ -163,7 +163,23 @@ npm run build
 npm run lint
 ```
 
+### Custom Backgrounds and Face Effects
+
+- Added local PNG, JPEG, and WebP background upload with an 8 MB limit.
+- Restricted background URLs to browser-generated Blob URLs.
+- Added cover-mode image compositing behind the segmented person.
+- Added the official Face Landmarker model and local-only landmark processing.
+- Added face-tracked halo and sparkle effects rendered directly on Canvas.
+- Verified image and face-effect controls, background segmentation, and no-face fallback in Chrome.
+
+Validation:
+
+```bash
+npm run test
+npm run build
+npm run lint
+```
+
 ## Next
 
-1. Add custom image backgrounds and face-tracked stickers.
-2. Split remaining studio orchestration out of `App.tsx`.
+1. Split remaining studio orchestration out of `App.tsx`.

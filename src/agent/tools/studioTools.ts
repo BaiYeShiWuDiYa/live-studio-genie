@@ -71,10 +71,16 @@ export const studioToolRegistry = new ToolRegistry<StudioToolContext>()
         none: '原始背景',
         blur: '背景虚化',
         color: '纯色背景',
+        image: '图片背景',
       }[settings.backgroundMode]
+      const faceEffectLabel = {
+        none: '无贴纸',
+        halo: '星环',
+        sparkles: '星光',
+      }[settings.faceEffect]
       return {
         name: mode === 'preview' ? '正在预览美化效果' : '美化效果已应用',
-        detail: `${backgroundLabel} · 柔肤 ${settings.smoothness}% · 暖肤 ${settings.warmth}%`,
+        detail: `${backgroundLabel} · ${faceEffectLabel} · 柔肤 ${settings.smoothness}%`,
       }
     },
   }))

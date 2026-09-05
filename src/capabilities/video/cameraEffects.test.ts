@@ -15,6 +15,10 @@ describe('camera effects', () => {
       ...recommendedCameraEffects,
       smoothness: 120,
     })).toThrow()
+    expect(() => cameraEffectsSchema.parse({
+      ...recommendedCameraEffects,
+      backgroundImageUrl: 'https://example.com/untrusted.jpg',
+    })).toThrow()
   })
 
   it('detects whether processing is required', () => {
