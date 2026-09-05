@@ -863,7 +863,7 @@ function getLiveMetrics(
   scene: Scene,
   applied: boolean,
   tick: number,
-  mediaMetrics: Record<'brightness' | 'microphone', MediaMetric>,
+  mediaMetrics: Record<'brightness' | 'microphone' | 'framing', MediaMetric>,
 ): Metric[] {
   const drift = tick % 3
   let metrics: Metric[]
@@ -883,6 +883,7 @@ function getLiveMetrics(
 
   if (scene === 'quality') {
     metrics[0] = toLiveMetric('画面亮度', mediaMetrics.brightness)
+    metrics[2] = toLiveMetric('人像占比', mediaMetrics.framing)
   }
   if (scene === 'troubleshoot') {
     metrics[0] = toLiveMetric('麦克风电平', mediaMetrics.microphone)

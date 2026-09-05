@@ -232,8 +232,25 @@ npm run build
 npm run lint
 ```
 
+### Face Framing Monitoring
+
+- Added continuous Face Landmarker tracking while a camera source is active.
+- Shared the latest landmarks with makeup and prop rendering to avoid duplicate inference.
+- Added face coverage, centering, distance, and vertical placement analysis.
+- Added a realtime `人像占比` metric to the quality diagnostics.
+- Throttled metric publication independently from the smoother rendering cadence.
+- Physical-camera verification is deferred until the workstation is unlocked.
+
+Validation:
+
+```bash
+npm run test
+npm run build
+npm run lint
+```
+
 ## Next
 
-1. Validate makeup and prop alignment with a face in the physical camera.
+1. Validate makeup, props, and framing with a face in the physical camera.
 2. Add eyeliner and face-shape deformation.
 3. Split remaining studio orchestration out of `App.tsx`.

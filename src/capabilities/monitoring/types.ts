@@ -12,7 +12,7 @@ export const mediaMetricSchema = z.object({
 })
 
 export type MediaMetric = z.infer<typeof mediaMetricSchema>
-export type MediaMetricKind = 'brightness' | 'microphone'
+export type MediaMetricKind = 'brightness' | 'microphone' | 'framing'
 
 export const idleMediaMetric: MediaMetric = {
   score: 0,

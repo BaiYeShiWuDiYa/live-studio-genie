@@ -4,6 +4,7 @@ import {
   calculateBrightness,
   createAudioMetric,
   createBrightnessMetric,
+  createFramingMetric,
 } from './mediaAnalysis'
 
 describe('media analysis', () => {
@@ -22,5 +23,20 @@ describe('media analysis', () => {
     expect(createBrightnessMetric(42).tone).toBe('warn')
     expect(createBrightnessMetric(68).tone).toBe('good')
     expect(createAudioMetric(-60, true).value).toBe('已静音')
+  })
+
+  it('scores face size and composition', () => {
+    const centered = createFramingMetric([
+      { x: 0.4, y: 0.25 },
+      { x: 0.6, y: 0.55 },
+    ])
+    expect(centered.value).toBe('人脸 30% · 居中')
+    expect(centered.tone).toBe('good')
+
+    expect(createFramingMetric(null)).toMatchObject({
+      value: '未检测到人脸',
+      tone: 'bad',
+      score: 0,
+    })
   })
 })

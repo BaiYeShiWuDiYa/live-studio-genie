@@ -12,6 +12,8 @@ import {
   type CameraEffects,
   isCameraEffectActive,
 } from '../../capabilities/video/cameraEffects'
+import { createFramingMetric } from '../../capabilities/monitoring/mediaAnalysis'
+import type { MediaMetric } from '../../capabilities/monitoring/types'
 import { useStudioStore } from '../../store/studioStore'
 
 const WASM_ROOT = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
@@ -19,6 +21,23 @@ const MODEL_PATH = '/mediapipe/models/selfie_segmenter_landscape.tflite'
 const FACE_MODEL_PATH = '/mediapipe/models/face_landmarker.task'
 const SEGMENT_INTERVAL_MS = 90
 const FACE_INTERVAL_MS = 120
+const FRAMING_INTERVAL_MS = 600
+
+const framingMeasuringMetric: MediaMetric = {
+  score: 0,
+  value: '检测中',
+  tone: 'warn',
+  status: 'measuring',
+  updatedAt: 0,
+}
+
+const framingUnavailableMetric: MediaMetric = {
+  score: 0,
+  value: '检测不可用',
+  tone: 'bad',
+  status: 'unavailable',
+  updatedAt: 0,
+}
 
 let segmenterPromise: Promise<ImageSegmenter> | null = null
 let faceLandmarkerPromise: Promise<FaceLandmarker> | null = null
@@ -85,8 +104,61 @@ interface CameraEffectsCanvasProps {
 
 export function CameraEffectsCanvas({ videoRef }: CameraEffectsCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const faceLandmarksRef = useRef<NormalizedLandmark[] | null>(null)
   const settings = useStudioStore((state) => state.cameraEffects)
+  const updateMetric = useStudioStore((state) => state.updateMediaMetric)
+  const resetMetric = useStudioStore((state) => state.resetMediaMetric)
   const active = isCameraEffectActive(settings)
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+
+    let animationFrame = 0
+    let disposed = false
+    let faceLandmarker: FaceLandmarker | null = null
+    let lastFaceAt = 0
+    let lastMetricAt = 0
+    updateMetric('framing', framingMeasuringMetric)
+
+    void getFaceLandmarker()
+      .then((instance) => {
+        if (!disposed) faceLandmarker = instance
+      })
+      .catch(() => {
+        if (!disposed) updateMetric('framing', framingUnavailableMetric)
+      })
+
+    const track = (timestamp: number) => {
+      if (
+        faceLandmarker &&
+        video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+        timestamp - lastFaceAt >= FACE_INTERVAL_MS
+      ) {
+        try {
+          const result = faceLandmarker.detectForVideo(video, timestamp)
+          faceLandmarksRef.current =
+            result.faceLandmarks[0]?.map((landmark) => ({ ...landmark })) ?? null
+        } catch {
+          faceLandmarksRef.current = null
+        }
+        lastFaceAt = timestamp
+        if (timestamp - lastMetricAt >= FRAMING_INTERVAL_MS) {
+          updateMetric('framing', createFramingMetric(faceLandmarksRef.current))
+          lastMetricAt = timestamp
+        }
+      }
+      animationFrame = requestAnimationFrame(track)
+    }
+
+    animationFrame = requestAnimationFrame(track)
+    return () => {
+      disposed = true
+      cancelAnimationFrame(animationFrame)
+      faceLandmarksRef.current = null
+      resetMetric('framing')
+    }
+  }, [resetMetric, updateMetric, videoRef])
 
   useEffect(() => {
     if (!active) return
@@ -105,21 +177,13 @@ export function CameraEffectsCanvas({ videoRef }: CameraEffectsCanvasProps) {
     let animationFrame = 0
     let disposed = false
     let segmenter: ImageSegmenter | null = null
-    let faceLandmarker: FaceLandmarker | null = null
     let lastSegmentAt = 0
-    let lastFaceAt = 0
     let latestMask: MPMask | null = null
-    let latestFace: NormalizedLandmark[] | null = null
     let backgroundImage: HTMLImageElement | null = null
 
     if (settings.backgroundMode !== 'none') {
       void getSegmenter().then((instance) => {
         if (!disposed) segmenter = instance
-      })
-    }
-    if (settings.faceEffect !== 'none' || hasMakeupEnabled(settings)) {
-      void getFaceLandmarker().then((instance) => {
-        if (!disposed) faceLandmarker = instance
       })
     }
     if (settings.backgroundImageUrl) {
@@ -157,16 +221,6 @@ export function CameraEffectsCanvas({ videoRef }: CameraEffectsCanvasProps) {
         result.confidenceMasks?.forEach((mask) => mask.close())
         lastSegmentAt = timestamp
       }
-      if (
-        (settings.faceEffect !== 'none' || hasMakeupEnabled(settings)) &&
-        faceLandmarker &&
-        timestamp - lastFaceAt >= FACE_INTERVAL_MS
-      ) {
-        const result = faceLandmarker.detectForVideo(video, timestamp)
-        latestFace = result.faceLandmarks[0]?.map((landmark) => ({ ...landmark })) ?? null
-        lastFaceAt = timestamp
-      }
-
       drawProcessedFrame({
         video,
         context,
@@ -175,7 +229,7 @@ export function CameraEffectsCanvas({ videoRef }: CameraEffectsCanvasProps) {
         maskCanvas,
         maskContext,
         mask: latestMask,
-        faceLandmarks: latestFace,
+        faceLandmarks: faceLandmarksRef.current,
         backgroundImage,
         width,
         height,

@@ -106,6 +106,7 @@ export const useStudioStore = create<StudioState>((set) => ({
   mediaMetrics: {
     brightness: idleMediaMetric,
     microphone: idleMediaMetric,
+    framing: idleMediaMetric,
   },
   previewAudioSettings: (settings) => {
     set({ audioSettings: audioSettingsSchema.parse(settings) })
