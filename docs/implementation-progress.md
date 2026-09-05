@@ -215,6 +215,23 @@ npm run build
 npm run lint
 ```
 
+### Independent Camera Effect Categories
+
+- Split camera effects into Bundle, Beauty, Makeup, and Prop selectors.
+- Added four beauty presets and five makeup presets.
+- Kept background and detailed intensity controls independently editable.
+- Added category-specific matching so custom changes do not report the wrong preset.
+- Verified with unit coverage that beauty changes preserve makeup, props, and background.
+- Browser interaction verification is deferred until the workstation is unlocked.
+
+Validation:
+
+```bash
+npm run test
+npm run build
+npm run lint
+```
+
 ## Next
 
 1. Validate makeup and prop alignment with a face in the physical camera.

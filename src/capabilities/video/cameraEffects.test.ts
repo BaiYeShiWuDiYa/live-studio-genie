@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applyCameraBeautyPreset,
   applyCameraEffectPreset,
+  applyCameraMakeupPreset,
   cameraEffectPresets,
   cameraEffectsSchema,
+  cameraBeautyPresets,
+  cameraMakeupPresets,
   createAlphaMask,
   defaultCameraEffects,
   getEnabledMakeupCount,
+  getMatchingCameraBeautyPresetId,
   getMatchingCameraEffectPresetId,
+  getMatchingCameraMakeupPresetId,
   isCameraEffectActive,
   recommendedCameraEffects,
 } from './cameraEffects'
@@ -44,6 +50,21 @@ describe('camera effects', () => {
       expect(getMatchingCameraEffectPresetId(applyCameraEffectPreset(id))).toBe(id)
     })
     expect(applyCameraEffectPreset('cyber').faceEffect).toBe('glasses')
+  })
+
+  it('switches beauty, makeup, and props independently', () => {
+    const cyber = applyCameraEffectPreset('cyber')
+    const bright = applyCameraBeautyPreset(cyber, 'bright')
+    expect(getMatchingCameraBeautyPresetId(bright)).toBe('bright')
+    expect(bright.faceEffect).toBe('glasses')
+    expect(bright.lipstickColor).toBe(cyber.lipstickColor)
+
+    const nude = applyCameraMakeupPreset(bright, 'nude')
+    expect(getMatchingCameraMakeupPresetId(nude)).toBe('nude')
+    expect(nude.smoothness).toBe(bright.smoothness)
+    expect(nude.backgroundMode).toBe('color')
+    expect(cameraBeautyPresets).toHaveLength(4)
+    expect(cameraMakeupPresets).toHaveLength(5)
   })
 
   it('converts confidence values into alpha pixels', () => {

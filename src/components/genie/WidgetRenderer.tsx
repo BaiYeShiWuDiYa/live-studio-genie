@@ -1,13 +1,19 @@
 import { ButtonV4 as Button } from '@byted/creator-ui'
 import { Check, Gift, ImagePlus, RefreshCw, RotateCcw, Sparkles } from 'lucide-react'
-import { type ComponentType } from 'react'
+import { useState, type ComponentType } from 'react'
 import { widgetSpecSchema, type WidgetSpec } from '../../agent/widgets/widgetSpec'
 import type { AudioSettings } from '../../capabilities/audio/types'
 import type { VisualSettings } from '../../capabilities/visual/types'
 import {
+  applyCameraBeautyPreset,
   applyCameraEffectPreset,
+  applyCameraMakeupPreset,
+  cameraBeautyPresets,
   cameraEffectPresets,
+  cameraMakeupPresets,
+  getMatchingCameraBeautyPresetId,
   getMatchingCameraEffectPresetId,
+  getMatchingCameraMakeupPresetId,
   type CameraEffects,
 } from '../../capabilities/video/cameraEffects'
 import { useStudioStore } from '../../store/studioStore'
@@ -87,36 +93,111 @@ function CameraEffectsWidget({
   isPreviewing,
   onCameraEffectsChange,
 }: WidgetBodyProps) {
+  const [activeSection, setActiveSection] = useState<
+    'bundle' | 'beauty' | 'makeup' | 'props'
+  >('bundle')
   const cameraEffects = useStudioStore((state) => state.cameraEffects)
   if (spec.type !== 'camera-effects') return null
   const settings = applied || isPreviewing
     ? cameraEffects
     : spec.props.settings
   const selectedPresetId = getMatchingCameraEffectPresetId(settings)
+  const selectedBeautyId = getMatchingCameraBeautyPresetId(settings)
+  const selectedMakeupId = getMatchingCameraMakeupPresetId(settings)
   const update = (patch: Partial<CameraEffects>) => {
     onCameraEffectsChange({ ...settings, ...patch })
   }
 
   return (
     <>
-      <div className="effect-preset-grid" role="group" aria-label="美妆风格">
-        {cameraEffectPresets.map((preset) => (
+      <div className="effect-category-tabs" role="tablist" aria-label="效果分类">
+        {([
+          ['bundle', '整套'],
+          ['beauty', '美颜'],
+          ['makeup', '美妆'],
+          ['props', '道具'],
+        ] as const).map(([section, label]) => (
           <button
             type="button"
-            className={selectedPresetId === preset.id ? 'selected' : ''}
-            key={preset.id}
-            title={preset.detail}
-            onClick={() => onCameraEffectsChange(applyCameraEffectPreset(preset.id))}
+            role="tab"
+            aria-selected={activeSection === section}
+            className={activeSection === section ? 'selected' : ''}
+            key={section}
+            onClick={() => setActiveSection(section)}
           >
-            <span className="effect-preset-swatches" aria-hidden="true">
-              {preset.swatches.map((color) => (
-                <i key={color} style={{ backgroundColor: color }} />
-              ))}
-            </span>
-            <b>{preset.label}</b>
+            {label}
           </button>
         ))}
       </div>
+      {activeSection === 'bundle' && (
+        <div className="effect-preset-grid" role="group" aria-label="整套风格">
+          {cameraEffectPresets.map((preset) => (
+            <button
+              type="button"
+              className={selectedPresetId === preset.id ? 'selected' : ''}
+              key={preset.id}
+              title={preset.detail}
+              onClick={() => onCameraEffectsChange(applyCameraEffectPreset(preset.id))}
+            >
+              <EffectSwatches colors={preset.swatches} />
+              <b>{preset.label}</b>
+            </button>
+          ))}
+        </div>
+      )}
+      {activeSection === 'beauty' && (
+        <div className="effect-preset-grid beauty-presets" role="group" aria-label="美颜方案">
+          {cameraBeautyPresets.map((preset) => (
+            <button
+              type="button"
+              className={selectedBeautyId === preset.id ? 'selected' : ''}
+              key={preset.id}
+              onClick={() => onCameraEffectsChange(
+                applyCameraBeautyPreset(settings, preset.id),
+              )}
+            >
+              <Sparkles size={13} />
+              <b>{preset.label}</b>
+            </button>
+          ))}
+        </div>
+      )}
+      {activeSection === 'makeup' && (
+        <div className="effect-preset-grid" role="group" aria-label="美妆方案">
+          {cameraMakeupPresets.map((preset) => (
+            <button
+              type="button"
+              className={selectedMakeupId === preset.id ? 'selected' : ''}
+              key={preset.id}
+              onClick={() => onCameraEffectsChange(
+                applyCameraMakeupPreset(settings, preset.id),
+              )}
+            >
+              <EffectSwatches colors={preset.swatches} />
+              <b>{preset.label}</b>
+            </button>
+          ))}
+        </div>
+      )}
+      {activeSection === 'props' && (
+        <div className="effect-mode-control prop-modes" role="group" aria-label="道具方案">
+          {([
+            ['none', '无道具'],
+            ['halo', '星环'],
+            ['sparkles', '星光'],
+            ['glasses', '眼镜'],
+          ] as const).map(([faceEffect, label]) => (
+            <button
+              type="button"
+              className={settings.faceEffect === faceEffect ? 'selected' : ''}
+              key={faceEffect}
+              onClick={() => update({ faceEffect })}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="effect-mode-control background-modes" role="group" aria-label="虚拟背景模式">
         {([
           ['none', '原始'],
@@ -162,23 +243,6 @@ function CameraEffectsWidget({
           }}
         />
       </label>
-      <div className="effect-mode-control" role="group" aria-label="人脸贴纸">
-        {([
-          ['none', '无贴纸'],
-          ['halo', '星环'],
-          ['sparkles', '星光'],
-          ['glasses', '眼镜'],
-        ] as const).map(([faceEffect, label]) => (
-          <button
-            type="button"
-            className={settings.faceEffect === faceEffect ? 'selected' : ''}
-            key={faceEffect}
-            onClick={() => update({ faceEffect })}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
       <div className="makeup-controls">
         <MakeupControl
           label="口红"
@@ -208,6 +272,20 @@ function CameraEffectsWidget({
         <Adjustment label="暖肤" max={40} value={`${settings.warmth}%`} onChange={(value) => update({ warmth: value })} />
       </div>
     </>
+  )
+}
+
+function EffectSwatches({
+  colors,
+}: {
+  colors: readonly [string, string, string]
+}) {
+  return (
+    <span className="effect-preset-swatches" aria-hidden="true">
+      {colors.map((color) => (
+        <i key={color} style={{ backgroundColor: color }} />
+      ))}
+    </span>
   )
 }
 
