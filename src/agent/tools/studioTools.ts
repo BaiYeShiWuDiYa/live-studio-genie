@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { audioSettingsSchema, type AudioSettings } from '../../capabilities/audio/types'
 import { visualSettingsSchema, type VisualSettings } from '../../capabilities/visual/types'
+import { liveGoalConfigSchema, type LiveGoalConfig } from '../../capabilities/widgets/liveGoal'
 import { pollConfigSchema, type PollConfig } from '../../capabilities/widgets/poll'
 import { defineTool, ToolRegistry } from './toolRegistry'
 
@@ -13,6 +14,10 @@ export interface StudioToolContext {
   publishPoll: (config: PollConfig) => void
   resetPollPreview: () => void
   undoPoll: () => void
+  previewLiveGoal: (config: LiveGoalConfig) => void
+  publishLiveGoal: (config: LiveGoalConfig) => void
+  resetLiveGoalPreview: () => void
+  undoLiveGoal: () => void
   previewVisualSettings: (settings: VisualSettings) => void
   applyVisualSettings: (settings: VisualSettings) => void
   resetVisualPreview: () => void
@@ -32,6 +37,11 @@ const audioInputSchema = z.object({
 const pollInputSchema = z.object({
   mode: z.enum(['preview', 'apply']),
   config: pollConfigSchema,
+})
+
+const liveGoalInputSchema = z.object({
+  mode: z.enum(['preview', 'apply']),
+  config: liveGoalConfigSchema,
 })
 
 export const studioToolRegistry = new ToolRegistry<StudioToolContext>()
@@ -143,6 +153,42 @@ export const studioToolRegistry = new ToolRegistry<StudioToolContext>()
     execute: (_, context) => {
       context.undoPoll()
       return { name: '互动投票已撤回', detail: '投票组件已从直播画面移除。' }
+    },
+  }))
+  .register(defineTool({
+    name: 'studio.configure_live_goal',
+    description: '预览或发布直播间冲刺目标。',
+    inputSchema: liveGoalInputSchema,
+    requiresConfirmation: true,
+    execute: ({ mode, config }, context) => {
+      if (mode === 'preview') {
+        context.previewLiveGoal(config)
+      } else {
+        context.publishLiveGoal(config)
+      }
+      return {
+        name: mode === 'preview' ? '正在预览冲刺目标' : '冲刺目标已上屏',
+        detail: `${config.label} · ${config.current.toLocaleString()} / ${config.target.toLocaleString()}`,
+      }
+    },
+  }))
+  .register(defineTool({
+    name: 'studio.reset_live_goal_preview',
+    description: '取消尚未发布的冲刺目标预览。',
+    inputSchema: z.object({}),
+    execute: (_, context) => {
+      context.resetLiveGoalPreview()
+      return { name: '已取消目标预览', detail: '直播画面已恢复。' }
+    },
+  }))
+  .register(defineTool({
+    name: 'studio.undo_live_goal',
+    description: '撤回最近一次发布的冲刺目标。',
+    inputSchema: z.object({}),
+    requiresConfirmation: true,
+    execute: (_, context) => {
+      context.undoLiveGoal()
+      return { name: '冲刺目标已撤回', detail: '目标组件已从直播画面移除。' }
     },
   }))
 

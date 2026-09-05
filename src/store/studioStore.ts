@@ -21,6 +21,12 @@ import {
   type VisualSettings,
 } from '../capabilities/visual/types'
 import {
+  hiddenLiveGoalState,
+  liveGoalConfigSchema,
+  type LiveGoalConfig,
+  type LiveGoalState,
+} from '../capabilities/widgets/liveGoal'
+import {
   createPollVotes,
   hiddenPollState,
   pollConfigSchema,
@@ -39,6 +45,9 @@ interface StudioState {
   pollState: PollState
   committedPollState: PollState
   previousPollState: PollState | null
+  liveGoalState: LiveGoalState
+  committedLiveGoalState: LiveGoalState
+  previousLiveGoalState: LiveGoalState | null
   mediaMetrics: Record<MediaMetricKind, MediaMetric>
   previewAudioSettings: (settings: AudioSettings) => void
   applyAudioSettings: (settings: AudioSettings) => void
@@ -56,6 +65,11 @@ interface StudioState {
   undoPoll: () => void
   hidePoll: () => void
   votePoll: (optionIndex: number) => void
+  previewLiveGoal: (config: LiveGoalConfig) => void
+  publishLiveGoal: (config: LiveGoalConfig) => void
+  resetLiveGoalPreview: () => void
+  undoLiveGoal: () => void
+  advanceLiveGoal: (amount: number) => void
   updateMediaMetric: (kind: MediaMetricKind, metric: MediaMetric) => void
   resetMediaMetric: (kind: MediaMetricKind) => void
 }
@@ -71,6 +85,9 @@ export const useStudioStore = create<StudioState>((set) => ({
   pollState: hiddenPollState,
   committedPollState: hiddenPollState,
   previousPollState: null,
+  liveGoalState: hiddenLiveGoalState,
+  committedLiveGoalState: hiddenLiveGoalState,
+  previousLiveGoalState: null,
   mediaMetrics: {
     brightness: idleMediaMetric,
     microphone: idleMediaMetric,
@@ -183,6 +200,56 @@ export const useStudioStore = create<StudioState>((set) => ({
       votes[optionIndex] += 1
       const pollState = { ...state.pollState, votes }
       return { pollState, committedPollState: pollState }
+    })
+  },
+  previewLiveGoal: (config) => {
+    set({
+      liveGoalState: {
+        config: liveGoalConfigSchema.parse(config),
+        status: 'preview',
+      },
+    })
+  },
+  publishLiveGoal: (config) => {
+    const validatedConfig = liveGoalConfigSchema.parse(config)
+    set((state) => {
+      const activeGoal: LiveGoalState = {
+        config: validatedConfig,
+        status: 'active',
+      }
+      return {
+        liveGoalState: activeGoal,
+        committedLiveGoalState: activeGoal,
+        previousLiveGoalState: state.committedLiveGoalState,
+      }
+    })
+  },
+  resetLiveGoalPreview: () => {
+    set((state) => ({ liveGoalState: state.committedLiveGoalState }))
+  },
+  undoLiveGoal: () => {
+    set((state) => {
+      const restoredGoal = state.previousLiveGoalState ?? hiddenLiveGoalState
+      return {
+        liveGoalState: restoredGoal,
+        committedLiveGoalState: restoredGoal,
+        previousLiveGoalState: null,
+      }
+    })
+  },
+  advanceLiveGoal: (amount) => {
+    set((state) => {
+      if (state.liveGoalState.status !== 'active' || !state.liveGoalState.config) return state
+      const config = {
+        ...state.liveGoalState.config,
+        current: Math.min(
+          state.liveGoalState.config.target,
+          state.liveGoalState.config.current + Math.max(0, Math.round(amount)),
+        ),
+        supporters: state.liveGoalState.config.supporters + 1,
+      }
+      const liveGoalState: LiveGoalState = { config, status: 'active' }
+      return { liveGoalState, committedLiveGoalState: liveGoalState }
     })
   },
   updateMediaMetric: (kind, metric) => {

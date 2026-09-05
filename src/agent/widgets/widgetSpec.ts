@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { visualSettingsSchema } from '../../capabilities/visual/types'
+import { liveGoalConfigSchema } from '../../capabilities/widgets/liveGoal'
 import { pollConfigSchema } from '../../capabilities/widgets/poll'
 
 export const studioSceneSchema = z.enum(['quality', 'interaction', 'troubleshoot', 'pk'])
@@ -36,12 +37,7 @@ export const widgetSpecSchema = z.discriminatedUnion('type', [
   z.object({
     ...widgetBase,
     type: z.literal('live-goal'),
-    props: z.object({
-      label: z.string().min(1).max(40),
-      current: z.number().int().nonnegative(),
-      target: z.number().int().positive(),
-      supporters: z.number().int().nonnegative(),
-    }),
+    props: liveGoalConfigSchema,
   }),
 ])
 

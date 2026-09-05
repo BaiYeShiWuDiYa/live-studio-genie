@@ -95,12 +95,24 @@ npm run build
 npm run lint
 ```
 
-## In Progress
+### Dynamic LIVE Goal
 
-- Tool-backed LIVE Goal lifecycle and dynamic progress.
+- Added validated LIVE Goal configuration and runtime state.
+- Added Tool Registry preview, publish, reset, and undo actions.
+- Added automatic progress updates and manual simulated gift boosts.
+- Added target completion, progress, and supporter feedback states.
+- Verified preview restrictions, publishing, dynamic progress, completion, and undo in the browser.
+
+Validation:
+
+```bash
+npm run test
+npm run build
+npm run lint
+```
 
 ## Next
 
-1. Add LIVE Goal preview, publish, progress, and undo actions.
-2. Add timeout and cancellation states for Agent-generated widgets.
-3. Add a real background-music source before applying BGM gain.
+1. Add timeout and cancellation states for Agent-generated widgets.
+2. Add a real background-music source before applying BGM gain.
+3. Split remaining studio orchestration out of `App.tsx`.

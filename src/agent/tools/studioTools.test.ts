@@ -12,6 +12,10 @@ function createContext(): StudioToolContext {
     publishPoll: vi.fn(),
     resetPollPreview: vi.fn(),
     undoPoll: vi.fn(),
+    previewLiveGoal: vi.fn(),
+    publishLiveGoal: vi.fn(),
+    resetLiveGoalPreview: vi.fn(),
+    undoLiveGoal: vi.fn(),
     previewVisualSettings: vi.fn(),
     applyVisualSettings: vi.fn(),
     resetVisualPreview: vi.fn(),
@@ -75,5 +79,21 @@ describe('studio tool registry', () => {
     }, context)
 
     expect(context.publishPoll).toHaveBeenCalledWith(config)
+  })
+
+  it('publishes a validated live goal', () => {
+    const context = createContext()
+    const config = {
+      label: '本轮冲刺目标',
+      current: 8740,
+      target: 10000,
+      supporters: 38,
+    }
+    studioToolRegistry.execute('studio.configure_live_goal', {
+      mode: 'apply',
+      config,
+    }, context)
+
+    expect(context.publishLiveGoal).toHaveBeenCalledWith(config)
   })
 })

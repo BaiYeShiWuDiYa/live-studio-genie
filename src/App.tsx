@@ -43,6 +43,7 @@ import type { VisualSettings } from './capabilities/visual/types'
 import { Adjustment } from './components/genie/Adjustment'
 import { WidgetRenderer } from './components/genie/WidgetRenderer'
 import { EditableCameraLayer } from './components/studio/EditableCameraLayer'
+import { LiveGoal } from './components/studio/LiveGoal'
 import { LivePoll } from './components/studio/LivePoll'
 import { askGenie } from './services/genie'
 import { useStudioStore } from './store/studioStore'
@@ -178,6 +179,10 @@ function App() {
   const resetPollPreview = useStudioStore((state) => state.resetPollPreview)
   const undoPoll = useStudioStore((state) => state.undoPoll)
   const hidePoll = useStudioStore((state) => state.hidePoll)
+  const previewLiveGoal = useStudioStore((state) => state.previewLiveGoal)
+  const publishLiveGoal = useStudioStore((state) => state.publishLiveGoal)
+  const resetLiveGoalPreview = useStudioStore((state) => state.resetLiveGoalPreview)
+  const undoLiveGoal = useStudioStore((state) => state.undoLiveGoal)
   const microphoneGainDb = useStudioStore((state) => state.audioSettings.microphoneGainDb)
   const studioToolContext: StudioToolContext = {
     previewAudioSettings,
@@ -188,6 +193,10 @@ function App() {
     publishPoll,
     resetPollPreview,
     undoPoll,
+    previewLiveGoal,
+    publishLiveGoal,
+    resetLiveGoalPreview,
+    undoLiveGoal,
     previewVisualSettings,
     applyVisualSettings,
     resetVisualPreview,
@@ -294,6 +303,7 @@ function App() {
     studioToolRegistry.execute('studio.reset_visual_preview', {}, studioToolContext)
     studioToolRegistry.execute('studio.reset_audio_preview', {}, studioToolContext)
     studioToolRegistry.execute('studio.reset_poll_preview', {}, studioToolContext)
+    studioToolRegistry.execute('studio.reset_live_goal_preview', {}, studioToolContext)
     setAgentWidgetSpec(null)
     setScene(nextScene)
     setApplied(false)
@@ -340,6 +350,16 @@ function App() {
       return
     }
 
+    if (activeWidgetSpec.type === 'live-goal') {
+      const result = studioToolRegistry.execute('studio.configure_live_goal', {
+        mode: 'preview',
+        config: activeWidgetSpec.props,
+      }, studioToolContext)
+      setLiveAdjustment(result)
+      setIsSuggestionPreview(true)
+      return
+    }
+
     setLiveAdjustment(getWidgetAdjustment(activeWidgetSpec, 'preview'))
     setIsSuggestionPreview(true)
   }
@@ -376,6 +396,16 @@ function App() {
       return
     }
 
+    if (activeWidgetSpec.type === 'live-goal') {
+      const result = studioToolRegistry.execute('studio.configure_live_goal', {
+        mode: 'apply',
+        config: activeWidgetSpec.props,
+      }, studioToolContext)
+      setLiveAdjustment(result)
+      setIsSuggestionPreview(false)
+      return
+    }
+
     setLiveAdjustment(getWidgetAdjustment(activeWidgetSpec, 'apply'))
     setIsSuggestionPreview(false)
   }
@@ -403,6 +433,9 @@ function App() {
       setLiveAdjustment(result)
     } else if (activeWidgetSpec.type === 'audience-poll') {
       const result = studioToolRegistry.execute('studio.undo_poll', {}, studioToolContext)
+      setLiveAdjustment(result)
+    } else if (activeWidgetSpec.type === 'live-goal') {
+      const result = studioToolRegistry.execute('studio.undo_live_goal', {}, studioToolContext)
       setLiveAdjustment(result)
     } else {
       setLiveAdjustment(null)
@@ -805,6 +838,7 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
       {scene === 'troubleshoot' && <div className="audio-meter"><AudioLines size={15} /><span>音频峰值偏低</span><i /><i /><i /><i /></div>}
       {liveAdjustment && <div className="adjustment-toast"><Zap size={14} /><div><b>{liveAdjustment.name}</b><span>{liveAdjustment.detail}</span></div></div>}
       <LivePoll />
+      <LiveGoal />
     </div>
     {isPk && <><div className="pk-versus">VS</div><div className="opponent-stage"><DemoOpponent /><div className="stage-label opponent"><span />陈妍</div></div><div className="pk-scorebar"><div><b>8,740</b><span>林小满</span></div><strong>01:18</strong><div><b>10,000</b><span>陈妍</span></div></div></>}
     {!isPk && <div className="viewer-bubble"><Users size={14} />1,286</div>}
