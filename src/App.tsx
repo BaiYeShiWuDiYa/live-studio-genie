@@ -30,7 +30,10 @@ import {
   Zap,
 } from 'lucide-react'
 import './App.css'
+import { useMediaMonitoring } from './capabilities/monitoring/useMediaMonitoring'
+import type { MediaMetric } from './capabilities/monitoring/types'
 import { askGenie } from './services/genie'
+import { useStudioStore } from './store/studioStore'
 
 type AppView = 'onboarding' | 'prelive' | 'live'
 type Scene = 'quality' | 'interaction' | 'troubleshoot' | 'pk'
@@ -130,19 +133,33 @@ function App() {
   const [isMicMuted, setIsMicMuted] = useState(false)
   const [isPollVisible, setIsPollVisible] = useState(false)
   const [previewMode, setPreviewMode] = useState<PreviewMode>('mobile')
+  const [mediaStream, setMediaStream] = useState<MediaStream | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
-  const streamRef = useRef<MediaStream | null>(null)
   const cameraAttemptedRef = useRef(false)
 
   useEffect(() => {
-    return () => streamRef.current?.getTracks().forEach((track) => track.stop())
-  }, [])
+    return () => mediaStream?.getTracks().forEach((track) => track.stop())
+  }, [mediaStream])
 
   useEffect(() => {
-    if (cameraEnabled && videoRef.current && streamRef.current) {
-      videoRef.current.srcObject = streamRef.current
+    const video = videoRef.current
+    if (cameraEnabled && video && mediaStream) {
+      video.srcObject = mediaStream
     }
-  }, [cameraEnabled])
+  }, [cameraEnabled, mediaStream, view])
+
+  useEffect(() => {
+    mediaStream?.getAudioTracks().forEach((track) => {
+      track.enabled = !isMicMuted
+    })
+  }, [isMicMuted, mediaStream])
+
+  useMediaMonitoring({
+    videoRef,
+    stream: mediaStream,
+    cameraEnabled,
+    microphoneMuted: isMicMuted,
+  })
 
   const enableCamera = useCallback(async () => {
     try {
@@ -150,7 +167,10 @@ function App() {
         throw new Error('Camera API is unavailable')
       }
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      streamRef.current = stream
+      setMediaStream((currentStream) => {
+        currentStream?.getTracks().forEach((track) => track.stop())
+        return stream
+      })
       setCameraEnabled(true)
       setCameraError('')
     } catch {
@@ -313,10 +333,10 @@ function App() {
               <div className="monitor-summary">
                 <span>实时诊断</span>
                 <strong>{applied ? '状态已恢复' : scene === 'quality' ? '2 项待处理' : '1 项待处理'}</strong>
-                <small><Signal size={12} />数据每 3 秒更新</small>
+                <small><Signal size={12} />媒体实时采样 · 场景每 3 秒更新</small>
               </div>
               <div className="metric-stack">
-                {getLiveMetrics(scene, applied, liveTick).map((metric) => <MetricCard key={metric.label} metric={metric} />)}
+                <LiveMetricStack scene={scene} applied={applied} liveTick={liveTick} />
               </div>
               <div className="comment-stream">
                 <div className="section-label"><MessageCircle size={15} />实时评论</div>
@@ -447,19 +467,51 @@ function MetricCard({ metric }: { metric: Metric }) {
   return <div className="metric-card"><div><span>{metric.label}</span><b>{metric.value}</b></div><div className="metric-track"><i className={metric.tone} style={{ width: `${metric.score}%` }} /></div></div>
 }
 
-function getLiveMetrics(scene: Scene, applied: boolean, tick: number): Metric[] {
+function LiveMetricStack({ scene, applied, liveTick }: { scene: Scene; applied: boolean; liveTick: number }) {
+  const mediaMetrics = useStudioStore((state) => state.mediaMetrics)
+  return getLiveMetrics(scene, applied, liveTick, mediaMetrics)
+    .map((metric) => <MetricCard key={metric.label} metric={metric} />)
+}
+
+function getLiveMetrics(
+  scene: Scene,
+  applied: boolean,
+  tick: number,
+  mediaMetrics: Record<'brightness' | 'microphone', MediaMetric>,
+): Metric[] {
   const drift = tick % 3
+  let metrics: Metric[]
+
   if (applied) {
-    return [
+    metrics = [
       { label: scene === 'troubleshoot' ? '麦克风峰值' : '画面状态', value: scene === 'troubleshoot' ? '-12 dB' : '已优化', score: 82, tone: 'good' },
       { label: '评论区密度', value: scene === 'interaction' ? '回升中' : '正常', score: 74, tone: 'good' },
       { label: '网络稳定性', value: '良好', score: 88, tone: 'good' },
     ]
+  } else {
+    metrics = sceneMetrics[scene].map((metric, index) => ({
+      ...metric,
+      score: Math.max(8, Math.min(96, metric.score + (index === 0 ? drift * 2 : drift))),
+    }))
   }
-  return sceneMetrics[scene].map((metric, index) => ({
-    ...metric,
-    score: Math.max(8, Math.min(96, metric.score + (index === 0 ? drift * 2 : drift))),
-  }))
+
+  if (scene === 'quality') {
+    metrics[0] = toLiveMetric('画面亮度', mediaMetrics.brightness)
+  }
+  if (scene === 'troubleshoot') {
+    metrics[0] = toLiveMetric('麦克风电平', mediaMetrics.microphone)
+  }
+
+  return metrics
+}
+
+function toLiveMetric(label: string, metric: MediaMetric): Metric {
+  return {
+    label,
+    value: metric.value,
+    score: metric.status === 'ready' ? metric.score : 8,
+    tone: metric.tone,
+  }
 }
 
 function getLiveComments(scene: Scene, applied: boolean, tick: number) {
