@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { audioSettingsSchema, type AudioSettings } from '../../capabilities/audio/types'
 import { visualSettingsSchema, type VisualSettings } from '../../capabilities/visual/types'
+import { pollConfigSchema, type PollConfig } from '../../capabilities/widgets/poll'
 import { defineTool, ToolRegistry } from './toolRegistry'
 
 export interface StudioToolContext {
@@ -8,6 +9,10 @@ export interface StudioToolContext {
   applyAudioSettings: (settings: AudioSettings) => void
   resetAudioPreview: () => void
   undoAudioSettings: () => void
+  previewPoll: (config: PollConfig) => void
+  publishPoll: (config: PollConfig) => void
+  resetPollPreview: () => void
+  undoPoll: () => void
   previewVisualSettings: (settings: VisualSettings) => void
   applyVisualSettings: (settings: VisualSettings) => void
   resetVisualPreview: () => void
@@ -22,6 +27,11 @@ const visualInputSchema = z.object({
 const audioInputSchema = z.object({
   mode: z.enum(['preview', 'apply']),
   settings: audioSettingsSchema,
+})
+
+const pollInputSchema = z.object({
+  mode: z.enum(['preview', 'apply']),
+  config: pollConfigSchema,
 })
 
 export const studioToolRegistry = new ToolRegistry<StudioToolContext>()
@@ -97,6 +107,42 @@ export const studioToolRegistry = new ToolRegistry<StudioToolContext>()
     execute: (_, context) => {
       context.undoAudioSettings()
       return { name: '已撤回音频调整', detail: '音频已恢复到应用前的配置。' }
+    },
+  }))
+  .register(defineTool({
+    name: 'studio.configure_poll',
+    description: '预览或发布直播间互动投票。',
+    inputSchema: pollInputSchema,
+    requiresConfirmation: true,
+    execute: ({ mode, config }, context) => {
+      if (mode === 'preview') {
+        context.previewPoll(config)
+      } else {
+        context.publishPoll(config)
+      }
+      return {
+        name: mode === 'preview' ? '正在预览互动投票' : '互动投票已上屏',
+        detail: `${config.question} · ${config.durationSeconds} 秒`,
+      }
+    },
+  }))
+  .register(defineTool({
+    name: 'studio.reset_poll_preview',
+    description: '取消尚未发布的互动投票预览。',
+    inputSchema: z.object({}),
+    execute: (_, context) => {
+      context.resetPollPreview()
+      return { name: '已取消投票预览', detail: '直播画面已恢复。' }
+    },
+  }))
+  .register(defineTool({
+    name: 'studio.undo_poll',
+    description: '撤回最近一次发布的互动投票。',
+    inputSchema: z.object({}),
+    requiresConfirmation: true,
+    execute: (_, context) => {
+      context.undoPoll()
+      return { name: '互动投票已撤回', detail: '投票组件已从直播画面移除。' }
     },
   }))
 

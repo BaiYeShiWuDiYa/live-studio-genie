@@ -8,6 +8,10 @@ function createContext(): StudioToolContext {
     applyAudioSettings: vi.fn(),
     resetAudioPreview: vi.fn(),
     undoAudioSettings: vi.fn(),
+    previewPoll: vi.fn(),
+    publishPoll: vi.fn(),
+    resetPollPreview: vi.fn(),
+    undoPoll: vi.fn(),
     previewVisualSettings: vi.fn(),
     applyVisualSettings: vi.fn(),
     resetVisualPreview: vi.fn(),
@@ -56,5 +60,20 @@ describe('studio tool registry', () => {
       microphoneGainDb: 8,
       backgroundMusicGainDb: -5,
     })
+  })
+
+  it('publishes a validated audience poll', () => {
+    const context = createContext()
+    const config = {
+      question: '下一首唱什么？',
+      options: ['甜歌', '炸场'],
+      durationSeconds: 45,
+    }
+    studioToolRegistry.execute('studio.configure_poll', {
+      mode: 'apply',
+      config,
+    }, context)
+
+    expect(context.publishPoll).toHaveBeenCalledWith(config)
   })
 })

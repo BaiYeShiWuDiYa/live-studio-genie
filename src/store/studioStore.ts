@@ -20,6 +20,13 @@ import {
   visualSettingsSchema,
   type VisualSettings,
 } from '../capabilities/visual/types'
+import {
+  createPollVotes,
+  hiddenPollState,
+  pollConfigSchema,
+  type PollConfig,
+  type PollState,
+} from '../capabilities/widgets/poll'
 
 interface StudioState {
   audioSettings: AudioSettings
@@ -29,6 +36,9 @@ interface StudioState {
   visualSettings: VisualSettings
   committedVisualSettings: VisualSettings
   previousVisualSettings: VisualSettings | null
+  pollState: PollState
+  committedPollState: PollState
+  previousPollState: PollState | null
   mediaMetrics: Record<MediaMetricKind, MediaMetric>
   previewAudioSettings: (settings: AudioSettings) => void
   applyAudioSettings: (settings: AudioSettings) => void
@@ -40,6 +50,12 @@ interface StudioState {
   applyVisualSettings: (settings: VisualSettings) => void
   resetVisualPreview: () => void
   undoVisualSettings: () => void
+  previewPoll: (config: PollConfig) => void
+  publishPoll: (config: PollConfig) => void
+  resetPollPreview: () => void
+  undoPoll: () => void
+  hidePoll: () => void
+  votePoll: (optionIndex: number) => void
   updateMediaMetric: (kind: MediaMetricKind, metric: MediaMetric) => void
   resetMediaMetric: (kind: MediaMetricKind) => void
 }
@@ -52,6 +68,9 @@ export const useStudioStore = create<StudioState>((set) => ({
   visualSettings: defaultVisualSettings,
   committedVisualSettings: defaultVisualSettings,
   previousVisualSettings: null,
+  pollState: hiddenPollState,
+  committedPollState: hiddenPollState,
+  previousPollState: null,
   mediaMetrics: {
     brightness: idleMediaMetric,
     microphone: idleMediaMetric,
@@ -108,6 +127,62 @@ export const useStudioStore = create<StudioState>((set) => ({
         committedVisualSettings: restoredSettings,
         previousVisualSettings: null,
       }
+    })
+  },
+  previewPoll: (config) => {
+    const validatedConfig = pollConfigSchema.parse(config)
+    set({
+      pollState: {
+        config: validatedConfig,
+        status: 'preview',
+        startedAt: null,
+        votes: createPollVotes(validatedConfig.options.length),
+      },
+    })
+  },
+  publishPoll: (config) => {
+    const validatedConfig = pollConfigSchema.parse(config)
+    set((state) => {
+      const activePoll: PollState = {
+        config: validatedConfig,
+        status: 'active',
+        startedAt: Date.now(),
+        votes: createPollVotes(validatedConfig.options.length),
+      }
+      return {
+        pollState: activePoll,
+        committedPollState: activePoll,
+        previousPollState: state.committedPollState,
+      }
+    })
+  },
+  resetPollPreview: () => {
+    set((state) => ({ pollState: state.committedPollState }))
+  },
+  undoPoll: () => {
+    set((state) => {
+      const restoredPoll = state.previousPollState ?? hiddenPollState
+      return {
+        pollState: restoredPoll,
+        committedPollState: restoredPoll,
+        previousPollState: null,
+      }
+    })
+  },
+  hidePoll: () => {
+    set({
+      pollState: hiddenPollState,
+      committedPollState: hiddenPollState,
+      previousPollState: null,
+    })
+  },
+  votePoll: (optionIndex) => {
+    set((state) => {
+      if (state.pollState.status !== 'active' || state.pollState.votes[optionIndex] === undefined) return state
+      const votes = [...state.pollState.votes]
+      votes[optionIndex] += 1
+      const pollState = { ...state.pollState, votes }
+      return { pollState, committedPollState: pollState }
     })
   },
   updateMediaMetric: (kind, metric) => {

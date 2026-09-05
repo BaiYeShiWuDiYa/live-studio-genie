@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { visualSettingsSchema } from '../../capabilities/visual/types'
+import { pollConfigSchema } from '../../capabilities/widgets/poll'
 
 export const studioSceneSchema = z.enum(['quality', 'interaction', 'troubleshoot', 'pk'])
 export type StudioScene = z.infer<typeof studioSceneSchema>
@@ -22,11 +23,7 @@ export const widgetSpecSchema = z.discriminatedUnion('type', [
   z.object({
     ...widgetBase,
     type: z.literal('audience-poll'),
-    props: z.object({
-      question: z.string().min(1).max(60),
-      options: z.array(z.string().min(1).max(24)).min(2).max(4),
-      durationSeconds: z.number().int().min(15).max(180),
-    }),
+    props: pollConfigSchema,
   }),
   z.object({
     ...widgetBase,

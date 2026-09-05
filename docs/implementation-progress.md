@@ -66,6 +66,27 @@ Commit: `c665147 feat: add schema driven gen ui`
 - Routes validated widgets through the existing preview, apply, and undo flow.
 - Verified a real model response and its generated visual settings in the browser.
 
+Commit: `2822866 feat: support agent generated widgets`
+
+### Web Audio Gain Processing
+
+- Added a Web Audio `GainNode` and `MediaStreamDestination` processing pipeline.
+- Connected microphone gain settings to the processed audio stream.
+- Changed microphone monitoring to analyze the processed signal.
+- Added Tool Registry preview, apply, reset, and undo actions for audio settings.
+- Added signed dB controls and unit coverage for dB-to-linear conversion.
+- Verified the audio widget preview, apply, and undo lifecycle in the browser.
+
+Commit: `7f48fcc feat: add audio gain processing`
+
+### Interactive Audience Poll
+
+- Added validated poll configuration and runtime state.
+- Added Tool Registry preview, publish, reset, and undo actions.
+- Added a real countdown and automatic expiration.
+- Added clickable vote options with live percentage updates.
+- Verified preview restrictions, publishing, voting, countdown, and undo in the browser.
+
 Validation:
 
 ```bash
@@ -76,10 +97,10 @@ npm run lint
 
 ## In Progress
 
-- Tool-backed audio gain and interactive widget lifecycle.
+- Tool-backed LIVE Goal lifecycle and dynamic progress.
 
 ## Next
 
-1. Add a Web Audio `GainNode` processing pipeline.
-2. Move poll and live-goal lifecycle into Tool Registry actions.
-3. Add timeout and cancellation states for Agent-generated widgets.
+1. Add LIVE Goal preview, publish, progress, and undo actions.
+2. Add timeout and cancellation states for Agent-generated widgets.
+3. Add a real background-music source before applying BGM gain.

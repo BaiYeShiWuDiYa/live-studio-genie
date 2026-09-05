@@ -43,6 +43,7 @@ import type { VisualSettings } from './capabilities/visual/types'
 import { Adjustment } from './components/genie/Adjustment'
 import { WidgetRenderer } from './components/genie/WidgetRenderer'
 import { EditableCameraLayer } from './components/studio/EditableCameraLayer'
+import { LivePoll } from './components/studio/LivePoll'
 import { askGenie } from './services/genie'
 import { useStudioStore } from './store/studioStore'
 
@@ -153,7 +154,6 @@ function App() {
   const [liveAdjustment, setLiveAdjustment] = useState<LiveAdjustment | null>(null)
   const [isSuggestionPreview, setIsSuggestionPreview] = useState(false)
   const [isMicMuted, setIsMicMuted] = useState(false)
-  const [isPollVisible, setIsPollVisible] = useState(false)
   const [previewMode, setPreviewMode] = useState<PreviewMode>('mobile')
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null)
   const [processedAudioStream, setProcessedAudioStream] = useState<MediaStream | null>(null)
@@ -172,12 +172,22 @@ function App() {
   const applyAudioSettings = useStudioStore((state) => state.applyAudioSettings)
   const resetAudioPreview = useStudioStore((state) => state.resetAudioPreview)
   const undoAudioSettings = useStudioStore((state) => state.undoAudioSettings)
+  const pollStatus = useStudioStore((state) => state.pollState.status)
+  const previewPoll = useStudioStore((state) => state.previewPoll)
+  const publishPoll = useStudioStore((state) => state.publishPoll)
+  const resetPollPreview = useStudioStore((state) => state.resetPollPreview)
+  const undoPoll = useStudioStore((state) => state.undoPoll)
+  const hidePoll = useStudioStore((state) => state.hidePoll)
   const microphoneGainDb = useStudioStore((state) => state.audioSettings.microphoneGainDb)
   const studioToolContext: StudioToolContext = {
     previewAudioSettings,
     applyAudioSettings,
     resetAudioPreview,
     undoAudioSettings,
+    previewPoll,
+    publishPoll,
+    resetPollPreview,
+    undoPoll,
     previewVisualSettings,
     applyVisualSettings,
     resetVisualPreview,
@@ -283,12 +293,12 @@ function App() {
   const changeScene = (nextScene: Scene) => {
     studioToolRegistry.execute('studio.reset_visual_preview', {}, studioToolContext)
     studioToolRegistry.execute('studio.reset_audio_preview', {}, studioToolContext)
+    studioToolRegistry.execute('studio.reset_poll_preview', {}, studioToolContext)
     setAgentWidgetSpec(null)
     setScene(nextScene)
     setApplied(false)
     setIsSuggestionPreview(false)
     setLiveAdjustment(null)
-    setIsPollVisible(false)
     setIsPk(nextScene === 'pk')
   }
 
@@ -320,9 +330,18 @@ function App() {
       return
     }
 
+    if (activeWidgetSpec.type === 'audience-poll') {
+      const result = studioToolRegistry.execute('studio.configure_poll', {
+        mode: 'preview',
+        config: activeWidgetSpec.props,
+      }, studioToolContext)
+      setLiveAdjustment(result)
+      setIsSuggestionPreview(true)
+      return
+    }
+
     setLiveAdjustment(getWidgetAdjustment(activeWidgetSpec, 'preview'))
     setIsSuggestionPreview(true)
-    setIsPollVisible(activeWidgetSpec.type === 'audience-poll')
   }
 
   const applySuggestion = () => {
@@ -347,9 +366,18 @@ function App() {
       return
     }
 
+    if (activeWidgetSpec.type === 'audience-poll') {
+      const result = studioToolRegistry.execute('studio.configure_poll', {
+        mode: 'apply',
+        config: activeWidgetSpec.props,
+      }, studioToolContext)
+      setLiveAdjustment(result)
+      setIsSuggestionPreview(false)
+      return
+    }
+
     setLiveAdjustment(getWidgetAdjustment(activeWidgetSpec, 'apply'))
     setIsSuggestionPreview(false)
-    setIsPollVisible(activeWidgetSpec.type === 'audience-poll')
   }
 
   const completePreliveTask = () => {
@@ -373,12 +401,14 @@ function App() {
     } else if (activeWidgetSpec.type === 'audio-adjustment') {
       const result = studioToolRegistry.execute('studio.undo_audio', {}, studioToolContext)
       setLiveAdjustment(result)
+    } else if (activeWidgetSpec.type === 'audience-poll') {
+      const result = studioToolRegistry.execute('studio.undo_poll', {}, studioToolContext)
+      setLiveAdjustment(result)
     } else {
       setLiveAdjustment(null)
     }
     setApplied(false)
     setIsSuggestionPreview(false)
-    setIsPollVisible(false)
   }
 
   const updateVisualPreview = (property: keyof VisualSettings, percentage: number) => {
@@ -406,6 +436,19 @@ function App() {
     }, studioToolContext)
     setLiveAdjustment(result)
     setIsSuggestionPreview(true)
+  }
+
+  const togglePollWidget = () => {
+    if (pollStatus !== 'hidden') {
+      hidePoll()
+      return
+    }
+    const spec = getSceneWidgetSpec('interaction')
+    if (spec.type !== 'audience-poll') return
+    studioToolRegistry.execute('studio.configure_poll', {
+      mode: 'preview',
+      config: spec.props,
+    }, studioToolContext)
   }
 
   const handleGenieSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -437,7 +480,6 @@ function App() {
         setApplied(false)
         setIsSuggestionPreview(false)
         setLiveAdjustment(null)
-        setIsPollVisible(false)
       }
     } catch (error) {
       setGenieError(error instanceof Error ? error.message : 'Genie 暂时无法响应。')
@@ -543,7 +585,7 @@ function App() {
             <button type="button" className={previewMode === 'mobile' ? 'selected' : ''} onClick={() => setPreviewMode('mobile')}>移动端预览</button>
             <button type="button" className={previewMode === 'studio' ? 'selected' : ''} onClick={() => setPreviewMode('studio')}>Studio 视图</button>
           </div>
-          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} liveAdjustment={liveAdjustment} pollVisible={isPollVisible} liveTick={liveTick} previewMode={previewMode} isPreviewing={isSuggestionPreview} />
+          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} liveAdjustment={liveAdjustment} previewMode={previewMode} isPreviewing={isSuggestionPreview} />
           {(cameraError || displayError) && <p className="camera-warning">{displayError || cameraError}</p>}
           <div className="stage-controls">
             <button type="button" className="control-button" onClick={enableCamera}><Camera size={18} /><span>{cameraEnabled ? '摄像头已连接' : '开启摄像头'}</span></button>
@@ -552,7 +594,7 @@ function App() {
             <button type="button" className={`control-button ${displayStream ? 'active-control' : ''}`} onClick={toggleScreenShare}><MonitorUp size={18} /><span>{displayStream ? '停止投屏' : '游戏投屏'}</span></button>
             <button type="button" className={`control-button ${isLayoutEditing ? 'active-control' : ''}`} disabled={!displayStream} onClick={() => setIsLayoutEditing((editing) => !editing)}><LayoutTemplate size={18} /><span>{isLayoutEditing ? '锁定布局' : '编辑布局'}</span></button>
             {displayStream && isLayoutEditing && <button type="button" className="control-button" onClick={resetCameraLayerLayout}><RotateCcw size={18} /><span>重置布局</span></button>}
-            <button type="button" className="control-button" onClick={() => setIsPollVisible((visible) => !visible)}><LayoutTemplate size={18} /><span>{isPollVisible ? '隐藏组件' : '互动组件'}</span></button>
+            <button type="button" className={`control-button ${pollStatus !== 'hidden' ? 'active-control' : ''}`} onClick={togglePollWidget}><LayoutTemplate size={18} /><span>{pollStatus !== 'hidden' ? '隐藏组件' : '互动组件'}</span></button>
             <button type="button" className={`pk-launch ${isPk ? 'active' : ''}`} onClick={() => changeScene(isPk ? 'quality' : 'pk')}><Users size={17} />{isPk ? '结束 PK' : '发起 PK'}</button>
           </div>
           {view === 'prelive' && (
@@ -728,7 +770,7 @@ function PreliveChecklist({ score }: { score: number }) {
   </div>
 }
 
-function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, isPk, applied, scene, liveAdjustment, pollVisible, liveTick, previewMode, isPreviewing }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; displayStream: MediaStream | null; layoutEditing: boolean; isPk: boolean; applied: boolean; scene: Scene; liveAdjustment: LiveAdjustment | null; pollVisible: boolean; liveTick: number; previewMode: PreviewMode; isPreviewing: boolean }) {
+function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, isPk, applied, scene, liveAdjustment, previewMode, isPreviewing }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; displayStream: MediaStream | null; layoutEditing: boolean; isPk: boolean; applied: boolean; scene: Scene; liveAdjustment: LiveAdjustment | null; previewMode: PreviewMode; isPreviewing: boolean }) {
   const displayVideoRef = useRef<HTMLVideoElement>(null)
   const visualSettings = useStudioStore((state) => state.visualSettings)
   const previewStyle = {
@@ -762,7 +804,7 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
       {scene === 'quality' && !applied && <div className="stage-hint"><Lightbulb size={14} />环境偏暗</div>}
       {scene === 'troubleshoot' && <div className="audio-meter"><AudioLines size={15} /><span>音频峰值偏低</span><i /><i /><i /><i /></div>}
       {liveAdjustment && <div className="adjustment-toast"><Zap size={14} /><div><b>{liveAdjustment.name}</b><span>{liveAdjustment.detail}</span></div></div>}
-      {pollVisible && <div className="live-poll"><span>点歌投票 · 00:{45 - (liveTick % 18)}</span><strong>下一首唱什么？</strong><div><button type="button">1 甜歌 <b>62%</b></button><button type="button">2 炸场 <b>38%</b></button></div></div>}
+      <LivePoll />
     </div>
     {isPk && <><div className="pk-versus">VS</div><div className="opponent-stage"><DemoOpponent /><div className="stage-label opponent"><span />陈妍</div></div><div className="pk-scorebar"><div><b>8,740</b><span>林小满</span></div><strong>01:18</strong><div><b>10,000</b><span>陈妍</span></div></div></>}
     {!isPk && <div className="viewer-bubble"><Users size={14} />1,286</div>}
