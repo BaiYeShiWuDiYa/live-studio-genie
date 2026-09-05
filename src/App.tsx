@@ -19,7 +19,6 @@ import {
   MonitorUp,
   Music2,
   Play,
-  RefreshCw,
   RotateCcw,
   Save,
   Send,
@@ -33,16 +32,20 @@ import {
 import './App.css'
 import './features.css'
 import { studioToolRegistry, type StudioToolContext } from './agent/tools/studioTools'
+import { getSceneWidgetSpec } from './agent/widgets/sceneWidgets'
+import type { StudioScene } from './agent/widgets/widgetSpec'
 import { requestCameraStream, requestDisplayStream, stopMediaStream } from './capabilities/media/browserMedia'
 import { useMediaMonitoring } from './capabilities/monitoring/useMediaMonitoring'
 import type { MediaMetric } from './capabilities/monitoring/types'
 import type { VisualSettings } from './capabilities/visual/types'
+import { Adjustment } from './components/genie/Adjustment'
+import { WidgetRenderer } from './components/genie/WidgetRenderer'
 import { EditableCameraLayer } from './components/studio/EditableCameraLayer'
 import { askGenie } from './services/genie'
 import { useStudioStore } from './store/studioStore'
 
 type AppView = 'onboarding' | 'prelive' | 'live'
-type Scene = 'quality' | 'interaction' | 'troubleshoot' | 'pk'
+type Scene = StudioScene
 type StreamKind = 'music' | 'chat' | 'game'
 type PreliveTask = 'layout' | 'visual' | 'content' | 'interaction'
 type PreviewMode = 'mobile' | 'studio'
@@ -255,9 +258,11 @@ function App() {
 
   const previewSuggestion = () => {
     if (scene === 'quality') {
+      const spec = getSceneWidgetSpec(scene)
+      if (spec.type !== 'visual-adjustment') return
       const result = studioToolRegistry.execute('studio.adjust_visual', {
         mode: 'preview',
-        settings: { brightness: 1.32, contrast: 1.08, warmth: 0.18 },
+        settings: spec.props.settings,
       }, studioToolContext)
       setLiveAdjustment(result)
       setIsSuggestionPreview(true)
@@ -501,7 +506,7 @@ function App() {
           </div>}
           {view === 'prelive'
             ? <PreliveTaskCard task={preliveTasks[preliveTaskIndex]} completedCount={preliveTaskIndex} onApply={completePreliveTask} />
-            : <SceneRecommendation scene={scene} applied={applied} isPreviewing={isSuggestionPreview} onPreview={previewSuggestion} onApply={applySuggestion} onUndo={undoSuggestion} onVisualChange={updateVisualPreview} />}
+            : <WidgetRenderer spec={getSceneWidgetSpec(scene)} applied={applied} isPreviewing={isSuggestionPreview} onPreview={previewSuggestion} onApply={applySuggestion} onUndo={undoSuggestion} onVisualChange={updateVisualPreview} />}
           {chatMessages.length > 0 && <div className="genie-conversation" aria-live="polite">
             {chatMessages.map((message, index) => (
               <article key={`${message.role}-${index}`} className={`chat-message ${message.role}`}>
@@ -686,47 +691,6 @@ function PreliveTaskCard({ task, completedCount, onApply }: { task: typeof preli
     <Button className="primary-button full-button" color="primary" onClick={onApply}><Check size={16} />{task.action}</Button>
     <button className="card-text-button" type="button">跳过并稍后处理</button>
   </div>
-}
-
-function SceneRecommendation({ scene, applied, isPreviewing, onPreview, onApply, onUndo, onVisualChange }: { scene: Scene; applied: boolean; isPreviewing: boolean; onPreview: () => void; onApply: () => void; onUndo: () => void; onVisualChange: (property: keyof VisualSettings, percentage: number) => void }) {
-  const copy = sceneCopy[scene]
-  const visualSettings = useStudioStore((state) => state.visualSettings)
-  return <div className={`recommendation-card ${scene}`}>
-    <span className="card-kicker">{scene === 'troubleshoot' ? '需要确认' : '实时建议'}</span>
-    <h2>{copy.title}</h2>
-    <p>{copy.detail}</p>
-    {scene === 'quality' && <div className="adjustments">
-      <Adjustment label="补光" value={`+${Math.round((visualSettings.brightness - 1) * 100)}`} onChange={(value) => onVisualChange('brightness', value)} />
-      <Adjustment label="对比度" value={`+${Math.round((visualSettings.contrast - 1) * 100)}`} onChange={(value) => onVisualChange('contrast', value)} />
-      <Adjustment label="暖色" value={`+${Math.round(visualSettings.warmth * 100)}`} onChange={(value) => onVisualChange('warmth', value)} />
-    </div>}
-    {scene === 'interaction' && <div className="interaction-widget"><div><Gift size={17} /><span>点歌投票</span></div><p>甜歌还是炸场？评论区打 1 或 2</p><small>展示 45 秒 · 评论即可参与</small></div>}
-    {scene === 'troubleshoot' && <div className="adjustments"><Adjustment label="麦克风" value="+8%" /><Adjustment label="BGM" value="-5%" /></div>}
-    {scene === 'pk' && <div className="goal-widget"><span>本轮冲刺目标</span><strong>再差 1,260 分反超</strong><div><i style={{ width: '76%' }} /></div><small>已获得 38 位观众响应</small></div>}
-    {!isPreviewing && !applied && <Button className="primary-button full-button" color="primary" onClick={onPreview}><Sparkles size={16} />预览调整</Button>}
-    {isPreviewing && <Button className="primary-button full-button" color="primary" onClick={onApply}><Check size={16} />{copy.action}</Button>}
-    {applied && <Button className="primary-button full-button" color="primary" disabled><Check size={16} />已应用</Button>}
-    {applied ? <button className="card-text-button" type="button" onClick={onUndo}><RotateCcw size={14} />撤回最近一次调整</button> : <button className="card-text-button" type="button"><RefreshCw size={14} />换一组建议</button>}
-  </div>
-}
-
-function Adjustment({ label, value, onChange }: { label: string; value: string; onChange?: (value: number) => void }) {
-  const numericValue = Number.parseInt(value, 10)
-  const initialValue = Number.isNaN(numericValue) ? 20 : Math.abs(numericValue)
-  const [internalValue, setInternalValue] = useState(initialValue)
-  const currentValue = onChange ? initialValue : internalValue
-  const suffix = value.includes('%') ? '%' : value.includes('20') && label === '磨皮' ? '%' : ''
-  const sign = value.startsWith('-') ? '-' : value.startsWith('+') ? '+' : ''
-
-  return <label className="adjustment">
-    <span>{label}</span>
-    <input type="range" min="0" max="60" value={currentValue} onChange={(event) => {
-      const nextValue = Number(event.target.value)
-      if (onChange) onChange(nextValue)
-      else setInternalValue(nextValue)
-    }} aria-label={`${label} 调节`} />
-    <b>{sign}{currentValue}{suffix}</b>
-  </label>
 }
 
 export default App
