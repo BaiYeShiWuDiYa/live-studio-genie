@@ -14,6 +14,7 @@ import {
   getMatchingCameraEffectPresetId,
   getMatchingCameraMakeupPresetId,
   isCameraEffectActive,
+  recommendCameraEffects,
   recommendedCameraEffects,
 } from './cameraEffects'
 
@@ -65,6 +66,23 @@ describe('camera effects', () => {
     expect(nude.backgroundMode).toBe('color')
     expect(cameraBeautyPresets).toHaveLength(4)
     expect(cameraMakeupPresets).toHaveLength(5)
+  })
+
+  it('recommends beauty and makeup that match the current prop and lighting', () => {
+    const recommendation = recommendCameraEffects({
+      ...defaultCameraEffects,
+      faceEffect: 'glasses',
+      backgroundMode: 'blur',
+    }, 32)
+
+    expect(recommendation).toMatchObject({
+      faceEffect: 'glasses',
+      backgroundMode: 'blur',
+      smoothness: 18,
+      exposure: 15,
+      lipstickColor: '#a64ab3',
+      eyeshadowIntensity: 55,
+    })
   })
 
   it('converts confidence values into alpha pixels', () => {

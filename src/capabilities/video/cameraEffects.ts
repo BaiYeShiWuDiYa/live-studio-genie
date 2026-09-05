@@ -278,6 +278,24 @@ export function getMatchingCameraMakeupPresetId(
   ))?.id ?? null
 }
 
+export function recommendCameraEffects(
+  settings: CameraEffects,
+  brightnessScore: number,
+): CameraEffects {
+  const beautyPreset = brightnessScore < 55 ? 'bright' : 'natural'
+  const makeupPreset: CameraMakeupPresetId = {
+    none: 'nude',
+    halo: 'stage',
+    sparkles: 'sweet',
+    glasses: 'cyber',
+  }[settings.faceEffect] as CameraMakeupPresetId
+
+  return applyCameraMakeupPreset(
+    applyCameraBeautyPreset(settings, beautyPreset),
+    makeupPreset,
+  )
+}
+
 export function isCameraEffectActive(settings: CameraEffects): boolean {
   return (
     settings.smoothness > 0 ||

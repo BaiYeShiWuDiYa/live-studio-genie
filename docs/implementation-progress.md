@@ -301,6 +301,25 @@ npm run build
 npm run lint
 ```
 
+### AI-generated Camera Effects
+
+- Added live brightness, face-framing, and current camera-effect settings to the Agent context.
+- Added a trusted `camera-effects` partial-update protocol that preserves unspecified active settings.
+- Added deterministic parsing for beauty, makeup, and supported face-prop instructions.
+- Added context-aware beauty and makeup recommendations based on lighting and the active prop.
+- Added a trusted local fallback when the model answers with text but omits the requested camera widget.
+- Added an `AI 人像效果` quick prompt and verified real Agent-generated camera controls in Chrome.
+
+Validation:
+
+```bash
+npm run test
+npm run build
+npm run lint
+```
+
+Result: 10 test files and 40 tests passed. Production build completed with the existing large-chunk warning.
+
 ## Next
 
 1. Add eyeliner and face-shape deformation.

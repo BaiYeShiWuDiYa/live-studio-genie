@@ -1,4 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  applyCameraEffectPreset,
+  defaultCameraEffects,
+} from '../capabilities/video/cameraEffects'
 import { askGenie, parseGenieContent } from './genie'
 
 afterEach(() => {
@@ -57,6 +61,78 @@ describe('parseGenieContent', () => {
           brightness: 1.6,
           contrast: 1.08,
           warmth: 0,
+        },
+      },
+    })
+  })
+
+  it('merges a generated prop with the current camera settings', () => {
+    const current = applyCameraEffectPreset('sweet')
+    const result = parseGenieContent(`已生成科技感道具。
+<widget>
+{"version":"1.0","type":"camera-effects","title":"科技眼镜","detail":"添加人脸跟踪眼镜","actionLabel":"预览道具","props":{"settings":{"faceEffect":"sparkles"}}}
+</widget>`, '给我生成科技眼镜道具', current, current)
+
+    expect(result.widget).toMatchObject({
+      type: 'camera-effects',
+      props: {
+        settings: {
+          faceEffect: 'glasses',
+          smoothness: current.smoothness,
+          lipstickColor: current.lipstickColor,
+          backgroundMode: current.backgroundMode,
+        },
+      },
+    })
+  })
+
+  it('creates a trusted camera widget when the model omits one', () => {
+    const recommendation = {
+      ...defaultCameraEffects,
+      smoothness: 18,
+      exposure: 15,
+      warmth: 5,
+      lipstickIntensity: 34,
+    }
+    const result = parseGenieContent(
+      '建议适度提亮并增加自然妆感。',
+      '根据当前人脸效果调整美颜和美妆',
+      defaultCameraEffects,
+      recommendation,
+    )
+
+    expect(result.widget).toMatchObject({
+      type: 'camera-effects',
+      props: {
+        settings: {
+          smoothness: 18,
+          exposure: 15,
+          warmth: 5,
+          lipstickIntensity: 34,
+          faceEffect: 'none',
+        },
+      },
+    })
+  })
+
+  it('normalizes explicit makeup values and a generated prop', () => {
+    const result = parseGenieContent(
+      '已生成方案。',
+      '柔肤 24，提亮 8，口红 35，腮红 20，眼影 18，加星环道具',
+      defaultCameraEffects,
+      defaultCameraEffects,
+    )
+
+    expect(result.widget).toMatchObject({
+      type: 'camera-effects',
+      props: {
+        settings: {
+          smoothness: 24,
+          exposure: 8,
+          lipstickIntensity: 35,
+          blushIntensity: 20,
+          eyeshadowIntensity: 18,
+          faceEffect: 'halo',
         },
       },
     })

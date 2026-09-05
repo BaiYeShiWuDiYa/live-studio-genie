@@ -48,7 +48,10 @@ import { requestCameraStream, requestDisplayStream, stopMediaStream } from './ca
 import { useMediaMonitoring } from './capabilities/monitoring/useMediaMonitoring'
 import type { MediaMetric } from './capabilities/monitoring/types'
 import type { VisualSettings } from './capabilities/visual/types'
-import type { CameraEffects } from './capabilities/video/cameraEffects'
+import {
+  recommendCameraEffects,
+  type CameraEffects,
+} from './capabilities/video/cameraEffects'
 import { Adjustment } from './components/genie/Adjustment'
 import { WidgetRenderer } from './components/genie/WidgetRenderer'
 import { CameraEffectsCanvas } from './components/studio/CameraEffectsCanvas'
@@ -142,7 +145,7 @@ const widgetProtocol = [
   'visual-adjustment，props.settings 包含 brightness(0.6-1.6)、contrast(0.6-1.6)、warmth(0-0.6)。',
   'audience-poll，props 包含 question、options(2-4项)、durationSeconds(15-180)。',
   'audio-adjustment，props 包含 microphoneGain(-20到20)、backgroundMusicGain(-20到20)。',
-  'camera-effects，props.settings 包含 smoothness、exposure、warmth、backgroundMode(none/blur/color)、backgroundColor、backgroundImageUrl(null)、faceEffect(none/halo/sparkles/glasses)，以及 lipstick/blush/eyeshadow 的 Intensity(0-100) 和 Color。',
+  'camera-effects，props.settings 可只返回要修改的字段：smoothness(0-100)、exposure(-20到30)、warmth(0-40)、backgroundMode(none/blur/color/image)、backgroundColor、faceEffect(none/halo/sparkles/glasses)，以及 lipstick/blush/eyeshadow 的 Intensity(0-100) 和 Color。',
   'live-goal，props 包含 label、current、target、supporters。',
 ].join('\n')
 
@@ -600,9 +603,15 @@ function App() {
     setGenieRequestStatus('loading')
 
     try {
+      const studioState = useStudioStore.getState()
       const result = await askGenie(request.prompt, {
         signal: controller.signal,
         instruction: request.question,
+        cameraEffects: studioState.cameraEffects,
+        recommendedCameraEffects: recommendCameraEffects(
+          studioState.cameraEffects,
+          studioState.mediaMetrics.brightness.score,
+        ),
       })
       if (genieAbortRef.current !== controller) return
       setChatMessages((messages) => [...messages, { role: 'assistant', text: result.text || '已生成可操作方案。' }])
@@ -636,9 +645,21 @@ function App() {
     const context = view === 'prelive'
       ? '当前处于开播准备阶段，直播主题是晚间唱歌聊天。'
       : `当前处于直播中，诊断场景是${sceneCopy[scene].title}。`
+    const studioState = useStudioStore.getState()
+    const cameraContext = [
+      `当前画面亮度：${studioState.mediaMetrics.brightness.value}，评分 ${studioState.mediaMetrics.brightness.score}/100。`,
+      `当前人脸构图：${studioState.mediaMetrics.framing.value}，评分 ${studioState.mediaMetrics.framing.score}/100。`,
+      `当前人像效果参数：${JSON.stringify({
+        ...studioState.cameraEffects,
+        backgroundImageUrl: studioState.cameraEffects.backgroundImageUrl ? 'local-image' : null,
+      })}`,
+      '涉及美颜、美妆或道具时必须返回 camera-effects 组件。settings 只需返回要修改的字段，未提及字段保持当前值。',
+      '可用道具仅限 none、halo、sparkles、glasses；不要生成图片 URL 或未注册的效果。',
+    ].join('\n')
     const prompt = [
       '你是 LIVE Studio Genie，一名专业、简洁的中文直播间助手。',
       context,
+      cameraContext,
       '根据当前状态回答主播的问题。给出可直接执行的建议，保持在 120 个汉字以内。',
       widgetProtocol,
       `主播问题：${question}`,
@@ -795,6 +816,7 @@ function App() {
             <button type="button" className={scene === 'quality' ? 'active' : ''} onClick={() => changeScene('quality')}>优化画面亮度</button>
             <button type="button" className={scene === 'interaction' ? 'active' : ''} onClick={() => changeScene('interaction')}>互动正在转冷</button>
             <button type="button" className={scene === 'troubleshoot' ? 'active' : ''} onClick={() => changeScene('troubleshoot')}>麦克风偏小</button>
+            <button type="button" onClick={() => setGenieInput('根据当前画面和人脸效果，生成合适的美颜、美妆和道具方案')}>AI 人像效果</button>
           </div>}
           {view === 'prelive' && activeWidgetSpec.type !== 'camera-effects'
             ? <PreliveTaskCard task={preliveTasks[preliveTaskIndex]} completedCount={preliveTaskIndex} onApply={completePreliveTask} />
