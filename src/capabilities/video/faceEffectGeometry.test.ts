@@ -25,8 +25,8 @@ describe('face effect geometry', () => {
     const geometry = createGlassesGeometry(landmarks, 1000, 500)
 
     expect(geometry).not.toBeNull()
-    expect(geometry!.lensWidth).toBeCloseTo(182.4)
-    expect(geometry!.lensHeight).toBeGreaterThan(120)
+    expect(geometry!.lensWidth).toBeCloseTo(228)
+    expect(geometry!.lensHeight).toBeGreaterThan(164)
     expect(geometry!.leftCenter.y).toBeLessThan(200)
     expect(geometry!.leftTemple.x).toBe(200)
     expect(geometry!.rightTemple.x).toBe(800)

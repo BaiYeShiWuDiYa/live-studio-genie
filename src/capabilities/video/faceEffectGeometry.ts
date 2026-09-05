@@ -83,8 +83,12 @@ export function createGlassesGeometry(
       rightPoints[3].y - rightPoints[2].y,
     ),
   )
-  const lensWidth = Math.max(leftEyeWidth, rightEyeWidth) * 1.52
-  const lensHeight = Math.max(lensWidth * 0.66, eyeOpening * 2.8)
+  const templeWidth = Math.abs(rightTemple.x - leftTemple.x) * width
+  const lensWidth = Math.max(
+    Math.max(leftEyeWidth, rightEyeWidth) * 1.9,
+    templeWidth * 0.38,
+  )
+  const lensHeight = Math.max(lensWidth * 0.72, eyeOpening * 3.2)
   const verticalOffset = lensHeight * 0.04
 
   leftCenter.y -= verticalOffset

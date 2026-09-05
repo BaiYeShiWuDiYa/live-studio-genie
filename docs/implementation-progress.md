@@ -324,6 +324,7 @@ Result: 10 test files and 40 tests passed. Production build completed with the e
 
 - Rebuilt glasses geometry from eye corners, upper and lower eyelids, and temple landmarks.
 - Expanded lens width and height so frames cover the full eye sockets instead of only the eyes.
+- Increased lens width to 1.9 times the eye width with a temple-distance minimum and raised lens height to 72%.
 - Added a curved bridge, rounded frames, and face-tracked temple arms.
 - Added geometry tests for frame coverage, vertical placement, and missing-landmark fallback.
 
