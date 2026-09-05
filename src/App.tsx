@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { ButtonV4 as Button } from '@byted/creator-ui'
 import {
   Activity,
   ArrowLeft,
@@ -369,7 +370,7 @@ function App() {
               <div><b>准备度 {readyScore} / 100</b><span>{readyScore === 100 ? '所有播前任务已完成' : `再完成 ${preliveTasks.length - preliveTaskIndex} 项即可开播`}</span></div>
               <div className="score-track"><i style={{ width: `${readyScore}%` }} /></div>
               {readyScore === 100
-                ? <button className="primary-button" type="button" onClick={saveConfiguration}><Save size={16} />保存配置</button>
+                ? <Button className="primary-button" color="primary" onClick={saveConfiguration}><Save size={16} />保存配置</Button>
                 : <button className="secondary-button" type="button" disabled>完成任务后保存</button>}
             </div>
           )}
@@ -419,9 +420,9 @@ function App() {
             <span>配置已保存</span>
             <h2>播前准备百分百，去开播</h2>
             <p>标题、画面预览、互动开场和脚本已同步到本场直播。</p>
-            <button className="primary-button golive-button" type="button" onClick={() => { setShowGoLive(false); setView('live') }}>
+            <Button className="primary-button golive-button" color="primary" size="large" onClick={() => { setShowGoLive(false); setView('live') }}>
               <Play size={17} fill="currentColor" />GO LIVE
-            </button>
+            </Button>
             <button className="card-text-button" type="button" onClick={() => setShowGoLive(false)}>返回继续调整</button>
           </section>
         </div>
@@ -477,7 +478,7 @@ function PreliveChecklist({ score }: { score: number }) {
   </div>
 }
 
-function LivePreview({ videoRef, cameraEnabled, isPk, applied, scene, liveAdjustment, pollVisible, liveTick, previewMode, isPreviewing }: { videoRef: React.RefObject<HTMLVideoElement | null>; cameraEnabled: boolean; isPk: boolean; applied: boolean; scene: Scene; liveAdjustment: LiveAdjustment | null; pollVisible: boolean; liveTick: number; previewMode: PreviewMode; isPreviewing: boolean }) {
+function LivePreview({ videoRef, cameraEnabled, isPk, applied, scene, liveAdjustment, pollVisible, liveTick, previewMode, isPreviewing }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; isPk: boolean; applied: boolean; scene: Scene; liveAdjustment: LiveAdjustment | null; pollVisible: boolean; liveTick: number; previewMode: PreviewMode; isPreviewing: boolean }) {
   return <div className={`live-stage ${applied ? 'applied' : ''} ${isPreviewing ? 'previewing' : ''} ${isPk ? 'pk-stage' : ''} scene-${scene} ${previewMode === 'studio' ? 'studio-preview' : 'mobile-preview'}`}>
     <div className="stage-glow" />
     <div className="scan-lines" />
@@ -516,7 +517,7 @@ function PreliveTaskCard({ task, completedCount, onApply }: { task: typeof preli
     {task.id === 'visual' && <div className="adjustments"><Adjustment label="暖色" value="+18" /><Adjustment label="磨皮" value="20%" /></div>}
     {task.id === 'content' && <button className={`script-preview ${isScriptExpanded ? 'expanded' : ''}`} type="button" onClick={() => setIsScriptExpanded((expanded) => !expanded)}><span>首 30 秒口播 {isScriptExpanded ? '收起' : '展开'}</span><p>“刚进来的朋友先选一首歌，今天我们轻松聊聊。”</p>{isScriptExpanded && <p className="script-extra">“评论区打 1 选甜歌，打 2 选炸场，今天由你们来定歌单。”</p>}</button>}
     {task.id === 'interaction' && <div className="interaction-widget"><div><Gift size={17} /><span>点歌投票</span></div><p>甜歌还是炸场？评论区打 1 或 2</p><small>仅预览，确认后在开播时上屏</small></div>}
-    <button className="primary-button full-button" type="button" onClick={onApply}><Check size={16} />{task.action}</button>
+    <Button className="primary-button full-button" color="primary" onClick={onApply}><Check size={16} />{task.action}</Button>
     <button className="card-text-button" type="button">跳过并稍后处理</button>
   </div>
 }
@@ -531,9 +532,9 @@ function SceneRecommendation({ scene, applied, isPreviewing, onPreview, onApply,
     {scene === 'interaction' && <div className="interaction-widget"><div><Gift size={17} /><span>点歌投票</span></div><p>甜歌还是炸场？评论区打 1 或 2</p><small>展示 45 秒 · 评论即可参与</small></div>}
     {scene === 'troubleshoot' && <div className="adjustments"><Adjustment label="麦克风" value="+8%" /><Adjustment label="BGM" value="-5%" /></div>}
     {scene === 'pk' && <div className="goal-widget"><span>本轮冲刺目标</span><strong>再差 1,260 分反超</strong><div><i style={{ width: '76%' }} /></div><small>已获得 38 位观众响应</small></div>}
-    {!isPreviewing && !applied && <button className="primary-button full-button" type="button" onClick={onPreview}><Sparkles size={16} />预览调整</button>}
-    {isPreviewing && <button className="primary-button full-button" type="button" onClick={onApply}><Check size={16} />{copy.action}</button>}
-    {applied && <button className="primary-button full-button" type="button" disabled><Check size={16} />已应用</button>}
+    {!isPreviewing && !applied && <Button className="primary-button full-button" color="primary" onClick={onPreview}><Sparkles size={16} />预览调整</Button>}
+    {isPreviewing && <Button className="primary-button full-button" color="primary" onClick={onApply}><Check size={16} />{copy.action}</Button>}
+    {applied && <Button className="primary-button full-button" color="primary" disabled><Check size={16} />已应用</Button>}
     {applied ? <button className="card-text-button" type="button" onClick={onUndo}><RotateCcw size={14} />撤回最近一次调整</button> : <button className="card-text-button" type="button"><RefreshCw size={14} />换一组建议</button>}
   </div>
 }

@@ -65,5 +65,8 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   return {
     plugins: [react(), genieProxy(env.GENIE_MODEL_AK, env.GENIE_MODEL_BASE_URL || defaultModelBaseUrl)],
+    build: {
+      cssMinify: 'esbuild',
+    },
   }
 })
