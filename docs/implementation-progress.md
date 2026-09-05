@@ -249,8 +249,25 @@ npm run build
 npm run lint
 ```
 
+### Audience Event Adapter and Comment Insights
+
+- Added a typed adapter contract for comments, gifts, and audience entry events.
+- Added a deterministic mock adapter that can be replaced by Live IM without UI changes.
+- Added rolling keyword classification for audio, visual, network, request, and positive feedback.
+- Connected comments, gifts, viewer count, comment density, and recent entrants to adapter snapshots.
+- Connected dominant comment insights to troubleshooting diagnostics.
+- Browser interaction verification is deferred until the workstation is unlocked.
+
+Validation:
+
+```bash
+npm run test
+npm run build
+npm run lint
+```
+
 ## Next
 
-1. Validate makeup, props, and framing with a face in the physical camera.
+1. Validate makeup, props, framing, and audience events in Chrome.
 2. Add eyeliner and face-shape deformation.
 3. Split remaining studio orchestration out of `App.tsx`.

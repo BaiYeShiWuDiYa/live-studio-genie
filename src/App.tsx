@@ -40,6 +40,10 @@ import {
   type BackgroundMusicPlayer,
 } from './capabilities/audio/backgroundMusic'
 import type { AudioSettings } from './capabilities/audio/types'
+import {
+  mockAudienceEventAdapter,
+  type AudienceSnapshot,
+} from './capabilities/audience/audienceEvents'
 import { requestCameraStream, requestDisplayStream, stopMediaStream } from './capabilities/media/browserMedia'
 import { useMediaMonitoring } from './capabilities/monitoring/useMediaMonitoring'
 import type { MediaMetric } from './capabilities/monitoring/types'
@@ -648,6 +652,11 @@ function App() {
     if (!lastGenieRequestRef.current || genieRequestStatus === 'loading') return
     void runGenieRequest(lastGenieRequestRef.current, false)
   }
+  const audienceSnapshot = mockAudienceEventAdapter.getSnapshot(
+    scene,
+    applied,
+    liveTick,
+  )
 
   if (view === 'onboarding') {
     return (
@@ -706,16 +715,17 @@ function App() {
                 <small><Signal size={12} />媒体实时采样 · 场景每 3 秒更新</small>
               </div>
               <div className="metric-stack">
-                <LiveMetricStack scene={scene} applied={applied} liveTick={liveTick} />
+                <LiveMetricStack scene={scene} applied={applied} liveTick={liveTick} audience={audienceSnapshot} />
               </div>
               <div className="comment-stream">
                 <div className="section-label"><MessageCircle size={15} />实时评论</div>
-                {getLiveComments(scene, applied, liveTick).map((comment) => <p key={comment.name}><b>{comment.name}</b>{comment.text}</p>)}
+                {audienceSnapshot.comments.map((comment) => <p key={comment.id}><b>{comment.userName}</b> {comment.text}</p>)}
               </div>
               <div className="gift-stream">
                 <div className="section-label"><Gift size={15} />礼物动态</div>
-                <p><span>🌹</span><b>Luna</b>送出 Rose ×5 <small>刚刚</small></p>
-                <p><span>💗</span><b>Mie</b>送出 Heart ×10 <small>1 分钟前</small></p>
+                {audienceSnapshot.gifts.map((gift, index) => (
+                  <p key={gift.id}><span>{gift.icon}</span><b>{gift.userName}</b>送出 {gift.giftName} ×{gift.count} <small>{index === 0 ? '刚刚' : '1 分钟前'}</small></p>
+                ))}
               </div>
             </>
           )}
@@ -746,7 +756,7 @@ function App() {
             <button type="button" className={previewMode === 'mobile' ? 'selected' : ''} onClick={() => setPreviewMode('mobile')}>移动端预览</button>
             <button type="button" className={previewMode === 'studio' ? 'selected' : ''} onClick={() => setPreviewMode('studio')}>Studio 视图</button>
           </div>
-          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} liveAdjustment={liveAdjustment} previewMode={previewMode} isPreviewing={isSuggestionPreview} />
+          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} liveAdjustment={liveAdjustment} previewMode={previewMode} isPreviewing={isSuggestionPreview} audience={audienceSnapshot} />
           {(cameraError || displayError || backgroundMusicError) && <p className="camera-warning">{displayError || cameraError || backgroundMusicError}</p>}
           <div className="stage-controls">
             <button type="button" className="control-button" onClick={enableCamera}><Camera size={18} /><span>{cameraEnabled ? '摄像头已连接' : '开启摄像头'}</span></button>
@@ -853,9 +863,9 @@ function MetricCard({ metric }: { metric: Metric }) {
   return <div className="metric-card"><div><span>{metric.label}</span><b>{metric.value}</b></div><div className="metric-track"><i className={metric.tone} style={{ width: `${metric.score}%` }} /></div></div>
 }
 
-function LiveMetricStack({ scene, applied, liveTick }: { scene: Scene; applied: boolean; liveTick: number }) {
+function LiveMetricStack({ scene, applied, liveTick, audience }: { scene: Scene; applied: boolean; liveTick: number; audience: AudienceSnapshot }) {
   const mediaMetrics = useStudioStore((state) => state.mediaMetrics)
-  return getLiveMetrics(scene, applied, liveTick, mediaMetrics)
+  return getLiveMetrics(scene, applied, liveTick, mediaMetrics, audience)
     .map((metric) => <MetricCard key={metric.label} metric={metric} />)
 }
 
@@ -864,6 +874,7 @@ function getLiveMetrics(
   applied: boolean,
   tick: number,
   mediaMetrics: Record<'brightness' | 'microphone' | 'framing', MediaMetric>,
+  audience: AudienceSnapshot,
 ): Metric[] {
   const drift = tick % 3
   let metrics: Metric[]
@@ -887,6 +898,26 @@ function getLiveMetrics(
   }
   if (scene === 'troubleshoot') {
     metrics[0] = toLiveMetric('麦克风电平', mediaMetrics.microphone)
+    metrics[1] = {
+      label: '评论反馈',
+      value: `${audience.insight.label} × ${audience.insight.count}`,
+      score: Math.max(12, 80 - audience.insight.count * 18),
+      tone: audience.insight.category === 'audio' ? 'bad' : 'warn',
+    }
+  }
+  if (scene === 'interaction') {
+    metrics[0] = {
+      label: '评论密度',
+      value: `${audience.commentsPerMinute} / min`,
+      score: Math.min(100, audience.commentsPerMinute * 2),
+      tone: audience.commentsPerMinute >= 35 ? 'good' : 'warn',
+    }
+    metrics[2] = {
+      label: '新观众进入',
+      value: `+ ${audience.entrantsLastMinute}`,
+      score: Math.min(100, audience.entrantsLastMinute * 2),
+      tone: audience.entrantsLastMinute >= 32 ? 'good' : 'warn',
+    }
   }
 
   return metrics
@@ -929,15 +960,6 @@ function withSign(value: number): string {
   return `${value >= 0 ? '+' : ''}${value}`
 }
 
-function getLiveComments(scene: Scene, applied: boolean, tick: number) {
-  if (applied && scene === 'interaction') {
-    return [{ name: '夏日汽水', text: ' 选 2！来首炸场的' }, { name: '星河入梦', text: ' 点歌投票好玩' }, { name: '甜甜圈', text: ' 主播唱得真好' }]
-  }
-  if (scene === 'troubleshoot') return [{ name: '星河入梦', text: ' 声音有点小' }, { name: '柚子茶', text: ' 听不清诶' }, { name: '晚风', text: ' 现在卡不卡？' }]
-  if (scene === 'quality') return [{ name: '甜甜圈', text: ' 背景有点暗诶' }, { name: '小满同学', text: ' 今天的氛围好舒服' }, { name: '阿福', text: ` 刚进来 ${tick % 2 ? '求一首歌单' : '主播好'}` }]
-  return [{ name: '小满同学', text: ' 今天唱哪首歌？' }, { name: '夜航星', text: ' 新来的报到' }, { name: '青柠', text: ' 好想听甜歌' }]
-}
-
 function PreliveChecklist({ score }: { score: number }) {
   return <div className="checklist">
     <div className="readiness-card"><span>当前准备度</span><strong>{score}<small>/ 100</small></strong><p>还有 3 步可以开播</p><div className="circle-progress"><i style={{ transform: `rotate(${score * 3.6}deg)` }} /></div></div>
@@ -945,7 +967,7 @@ function PreliveChecklist({ score }: { score: number }) {
   </div>
 }
 
-function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, isPk, applied, scene, liveAdjustment, previewMode, isPreviewing }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; displayStream: MediaStream | null; layoutEditing: boolean; isPk: boolean; applied: boolean; scene: Scene; liveAdjustment: LiveAdjustment | null; previewMode: PreviewMode; isPreviewing: boolean }) {
+function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, isPk, applied, scene, liveAdjustment, previewMode, isPreviewing, audience }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; displayStream: MediaStream | null; layoutEditing: boolean; isPk: boolean; applied: boolean; scene: Scene; liveAdjustment: LiveAdjustment | null; previewMode: PreviewMode; isPreviewing: boolean; audience: AudienceSnapshot }) {
   const displayVideoRef = useRef<HTMLVideoElement>(null)
   const visualSettings = useStudioStore((state) => state.visualSettings)
   const previewStyle = {
@@ -988,8 +1010,10 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
       <LiveGoal />
     </div>
     {isPk && <><div className="pk-versus">VS</div><div className="opponent-stage"><DemoOpponent /><div className="stage-label opponent"><span />陈妍</div></div><div className="pk-scorebar"><div><b>8,740</b><span>林小满</span></div><strong>01:18</strong><div><b>10,000</b><span>陈妍</span></div></div></>}
-    {!isPk && <div className="viewer-bubble"><Users size={14} />1,286</div>}
-    <div className="floating-comments"><span>{scene === 'interaction' ? '评论区打 1 或 2 投票' : '小满唱首《可爱女人》吧'}</span><span>{applied ? 'Genie 已应用推荐方案' : '今天的氛围好舒服'}</span></div>
+    {!isPk && <div className="viewer-bubble"><Users size={14} />{audience.viewerCount.toLocaleString()}</div>}
+    <div className="floating-comments">
+      {audience.comments.slice(0, 2).map((comment) => <span key={comment.id}>{comment.text}</span>)}
+    </div>
   </div>
 }
 
