@@ -16,6 +16,7 @@ import {
   LoaderCircle,
   Mic,
   MessageCircle,
+  MonitorUp,
   Music2,
   Play,
   RefreshCw,
@@ -30,6 +31,8 @@ import {
   Zap,
 } from 'lucide-react'
 import './App.css'
+import './features.css'
+import { requestCameraStream, requestDisplayStream, stopMediaStream } from './capabilities/media/browserMedia'
 import { useMediaMonitoring } from './capabilities/monitoring/useMediaMonitoring'
 import type { MediaMetric } from './capabilities/monitoring/types'
 import { askGenie } from './services/genie'
@@ -134,11 +137,13 @@ function App() {
   const [isPollVisible, setIsPollVisible] = useState(false)
   const [previewMode, setPreviewMode] = useState<PreviewMode>('mobile')
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null)
+  const [displayStream, setDisplayStream] = useState<MediaStream | null>(null)
+  const [displayError, setDisplayError] = useState('')
   const videoRef = useRef<HTMLVideoElement>(null)
   const cameraAttemptedRef = useRef(false)
 
   useEffect(() => {
-    return () => mediaStream?.getTracks().forEach((track) => track.stop())
+    return () => stopMediaStream(mediaStream)
   }, [mediaStream])
 
   useEffect(() => {
@@ -146,7 +151,11 @@ function App() {
     if (cameraEnabled && video && mediaStream) {
       video.srcObject = mediaStream
     }
-  }, [cameraEnabled, mediaStream, view])
+  }, [cameraEnabled, displayStream, mediaStream, view])
+
+  useEffect(() => {
+    return () => stopMediaStream(displayStream)
+  }, [displayStream])
 
   useEffect(() => {
     mediaStream?.getAudioTracks().forEach((track) => {
@@ -163,20 +172,43 @@ function App() {
 
   const enableCamera = useCallback(async () => {
     try {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error('Camera API is unavailable')
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      const stream = await requestCameraStream()
       setMediaStream((currentStream) => {
-        currentStream?.getTracks().forEach((track) => track.stop())
+        stopMediaStream(currentStream)
         return stream
       })
       setCameraEnabled(true)
       setCameraError('')
-    } catch {
-      setCameraError('未获取到摄像头权限，已使用演示画面。')
+    } catch (error) {
+      setCameraError(error instanceof Error ? error.message : '未获取到摄像头权限，已使用演示画面。')
     }
   }, [])
+
+  const stopScreenShare = useCallback(() => {
+    setDisplayStream((currentStream) => {
+      stopMediaStream(currentStream)
+      return null
+    })
+    setDisplayError('')
+  }, [])
+
+  const toggleScreenShare = useCallback(async () => {
+    if (displayStream) {
+      stopScreenShare()
+      return
+    }
+
+    try {
+      const stream = await requestDisplayStream()
+      stream.getVideoTracks()[0]?.addEventListener('ended', stopScreenShare, { once: true })
+      setDisplayStream(stream)
+      setDisplayError('')
+      setPreviewMode('studio')
+    } catch (error) {
+      const cancelled = error instanceof DOMException && error.name === 'NotAllowedError'
+      setDisplayError(cancelled ? '已取消屏幕投放。' : error instanceof Error ? error.message : '屏幕投放启动失败。')
+    }
+  }, [displayStream, stopScreenShare])
 
   useEffect(() => {
     if (view === 'onboarding' || cameraEnabled || cameraAttemptedRef.current) return
@@ -376,12 +408,13 @@ function App() {
             <button type="button" className={previewMode === 'mobile' ? 'selected' : ''} onClick={() => setPreviewMode('mobile')}>移动端预览</button>
             <button type="button" className={previewMode === 'studio' ? 'selected' : ''} onClick={() => setPreviewMode('studio')}>Studio 视图</button>
           </div>
-          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} isPk={isPk} applied={applied} scene={scene} liveAdjustment={liveAdjustment} pollVisible={isPollVisible} liveTick={liveTick} previewMode={previewMode} isPreviewing={isSuggestionPreview} />
-          {cameraError && <p className="camera-warning">{cameraError}</p>}
+          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} isPk={isPk} applied={applied} scene={scene} liveAdjustment={liveAdjustment} pollVisible={isPollVisible} liveTick={liveTick} previewMode={previewMode} isPreviewing={isSuggestionPreview} />
+          {(cameraError || displayError) && <p className="camera-warning">{displayError || cameraError}</p>}
           <div className="stage-controls">
             <button type="button" className="control-button" onClick={enableCamera}><Camera size={18} /><span>{cameraEnabled ? '摄像头已连接' : '开启摄像头'}</span></button>
             <button type="button" className={`control-button ${isMicMuted ? 'active-control' : ''}`} onClick={() => setIsMicMuted((muted) => !muted)}><Mic size={18} /><span>{isMicMuted ? '麦克风已静音' : '麦克风'}</span></button>
             <button type="button" className="control-button"><Volume2 size={18} /><span>扬声器</span></button>
+            <button type="button" className={`control-button ${displayStream ? 'active-control' : ''}`} onClick={toggleScreenShare}><MonitorUp size={18} /><span>{displayStream ? '停止投屏' : '游戏投屏'}</span></button>
             <button type="button" className="control-button" onClick={() => setIsPollVisible((visible) => !visible)}><LayoutTemplate size={18} /><span>{isPollVisible ? '隐藏组件' : '互动组件'}</span></button>
             <button type="button" className={`pk-launch ${isPk ? 'active' : ''}`} onClick={() => changeScene(isPk ? 'quality' : 'pk')}><Users size={17} />{isPk ? '结束 PK' : '发起 PK'}</button>
           </div>
@@ -530,12 +563,25 @@ function PreliveChecklist({ score }: { score: number }) {
   </div>
 }
 
-function LivePreview({ videoRef, cameraEnabled, isPk, applied, scene, liveAdjustment, pollVisible, liveTick, previewMode, isPreviewing }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; isPk: boolean; applied: boolean; scene: Scene; liveAdjustment: LiveAdjustment | null; pollVisible: boolean; liveTick: number; previewMode: PreviewMode; isPreviewing: boolean }) {
+function LivePreview({ videoRef, cameraEnabled, displayStream, isPk, applied, scene, liveAdjustment, pollVisible, liveTick, previewMode, isPreviewing }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; displayStream: MediaStream | null; isPk: boolean; applied: boolean; scene: Scene; liveAdjustment: LiveAdjustment | null; pollVisible: boolean; liveTick: number; previewMode: PreviewMode; isPreviewing: boolean }) {
+  const displayVideoRef = useRef<HTMLVideoElement>(null)
+
+  useEffect(() => {
+    if (displayVideoRef.current && displayStream) {
+      displayVideoRef.current.srcObject = displayStream
+    }
+  }, [displayStream])
+
   return <div className={`live-stage ${applied ? 'applied' : ''} ${isPreviewing ? 'previewing' : ''} ${isPk ? 'pk-stage' : ''} scene-${scene} ${previewMode === 'studio' ? 'studio-preview' : 'mobile-preview'}`}>
     <div className="stage-glow" />
     <div className="scan-lines" />
-    <div className="host-stage">
-      {cameraEnabled ? <video ref={videoRef} autoPlay muted playsInline className="camera-feed" /> : <DemoHost />}
+    <div className={`host-stage ${displayStream ? 'screen-sharing' : ''}`}>
+      {displayStream
+        ? <>
+            <video ref={displayVideoRef} autoPlay muted playsInline className="screen-feed" />
+            {cameraEnabled && <div className="camera-picture-in-picture"><video ref={videoRef} autoPlay muted playsInline className="camera-feed" /></div>}
+          </>
+        : cameraEnabled ? <video ref={videoRef} autoPlay muted playsInline className="camera-feed" /> : <DemoHost />}
       {previewMode === 'studio' && <div className="studio-guides"><i /><i /><i /></div>}
       <div className="stage-label"><span />林小满</div>
       {applied && <div className="applied-badge"><Check size={13} />方案已应用</div>}
