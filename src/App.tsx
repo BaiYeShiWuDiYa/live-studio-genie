@@ -35,6 +35,7 @@ import './features.css'
 import { requestCameraStream, requestDisplayStream, stopMediaStream } from './capabilities/media/browserMedia'
 import { useMediaMonitoring } from './capabilities/monitoring/useMediaMonitoring'
 import type { MediaMetric } from './capabilities/monitoring/types'
+import { EditableCameraLayer } from './components/studio/EditableCameraLayer'
 import { askGenie } from './services/genie'
 import { useStudioStore } from './store/studioStore'
 
@@ -139,8 +140,10 @@ function App() {
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null)
   const [displayStream, setDisplayStream] = useState<MediaStream | null>(null)
   const [displayError, setDisplayError] = useState('')
+  const [isLayoutEditing, setIsLayoutEditing] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const cameraAttemptedRef = useRef(false)
+  const resetCameraLayerLayout = useStudioStore((state) => state.resetCameraLayerLayout)
 
   useEffect(() => {
     return () => stopMediaStream(mediaStream)
@@ -190,6 +193,7 @@ function App() {
       return null
     })
     setDisplayError('')
+    setIsLayoutEditing(false)
   }, [])
 
   const toggleScreenShare = useCallback(async () => {
@@ -204,6 +208,7 @@ function App() {
       setDisplayStream(stream)
       setDisplayError('')
       setPreviewMode('studio')
+      setIsLayoutEditing(true)
     } catch (error) {
       const cancelled = error instanceof DOMException && error.name === 'NotAllowedError'
       setDisplayError(cancelled ? '已取消屏幕投放。' : error instanceof Error ? error.message : '屏幕投放启动失败。')
@@ -408,13 +413,15 @@ function App() {
             <button type="button" className={previewMode === 'mobile' ? 'selected' : ''} onClick={() => setPreviewMode('mobile')}>移动端预览</button>
             <button type="button" className={previewMode === 'studio' ? 'selected' : ''} onClick={() => setPreviewMode('studio')}>Studio 视图</button>
           </div>
-          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} isPk={isPk} applied={applied} scene={scene} liveAdjustment={liveAdjustment} pollVisible={isPollVisible} liveTick={liveTick} previewMode={previewMode} isPreviewing={isSuggestionPreview} />
+          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} liveAdjustment={liveAdjustment} pollVisible={isPollVisible} liveTick={liveTick} previewMode={previewMode} isPreviewing={isSuggestionPreview} />
           {(cameraError || displayError) && <p className="camera-warning">{displayError || cameraError}</p>}
           <div className="stage-controls">
             <button type="button" className="control-button" onClick={enableCamera}><Camera size={18} /><span>{cameraEnabled ? '摄像头已连接' : '开启摄像头'}</span></button>
             <button type="button" className={`control-button ${isMicMuted ? 'active-control' : ''}`} onClick={() => setIsMicMuted((muted) => !muted)}><Mic size={18} /><span>{isMicMuted ? '麦克风已静音' : '麦克风'}</span></button>
             <button type="button" className="control-button"><Volume2 size={18} /><span>扬声器</span></button>
             <button type="button" className={`control-button ${displayStream ? 'active-control' : ''}`} onClick={toggleScreenShare}><MonitorUp size={18} /><span>{displayStream ? '停止投屏' : '游戏投屏'}</span></button>
+            <button type="button" className={`control-button ${isLayoutEditing ? 'active-control' : ''}`} disabled={!displayStream} onClick={() => setIsLayoutEditing((editing) => !editing)}><LayoutTemplate size={18} /><span>{isLayoutEditing ? '锁定布局' : '编辑布局'}</span></button>
+            {displayStream && isLayoutEditing && <button type="button" className="control-button" onClick={resetCameraLayerLayout}><RotateCcw size={18} /><span>重置布局</span></button>}
             <button type="button" className="control-button" onClick={() => setIsPollVisible((visible) => !visible)}><LayoutTemplate size={18} /><span>{isPollVisible ? '隐藏组件' : '互动组件'}</span></button>
             <button type="button" className={`pk-launch ${isPk ? 'active' : ''}`} onClick={() => changeScene(isPk ? 'quality' : 'pk')}><Users size={17} />{isPk ? '结束 PK' : '发起 PK'}</button>
           </div>
@@ -563,7 +570,7 @@ function PreliveChecklist({ score }: { score: number }) {
   </div>
 }
 
-function LivePreview({ videoRef, cameraEnabled, displayStream, isPk, applied, scene, liveAdjustment, pollVisible, liveTick, previewMode, isPreviewing }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; displayStream: MediaStream | null; isPk: boolean; applied: boolean; scene: Scene; liveAdjustment: LiveAdjustment | null; pollVisible: boolean; liveTick: number; previewMode: PreviewMode; isPreviewing: boolean }) {
+function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, isPk, applied, scene, liveAdjustment, pollVisible, liveTick, previewMode, isPreviewing }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; displayStream: MediaStream | null; layoutEditing: boolean; isPk: boolean; applied: boolean; scene: Scene; liveAdjustment: LiveAdjustment | null; pollVisible: boolean; liveTick: number; previewMode: PreviewMode; isPreviewing: boolean }) {
   const displayVideoRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
@@ -579,7 +586,7 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, isPk, applied, sc
       {displayStream
         ? <>
             <video ref={displayVideoRef} autoPlay muted playsInline className="screen-feed" />
-            {cameraEnabled && <div className="camera-picture-in-picture"><video ref={videoRef} autoPlay muted playsInline className="camera-feed" /></div>}
+            {cameraEnabled && <EditableCameraLayer videoRef={videoRef} editing={layoutEditing} />}
           </>
         : cameraEnabled ? <video ref={videoRef} autoPlay muted playsInline className="camera-feed" /> : <DemoHost />}
       {previewMode === 'studio' && <div className="studio-guides"><i /><i /><i /></div>}

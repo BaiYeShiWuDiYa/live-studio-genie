@@ -28,3 +28,31 @@
   height: 100%;
   object-fit: cover;
 }
+
+.camera-picture-in-picture.is-editing {
+  cursor: move;
+  border-color: #7ef0dc;
+  box-shadow: 0 0 0 1px rgba(126, 240, 220, 0.25), 0 12px 32px rgba(0, 0, 0, 0.42);
+}
+
+.moveable-control-box {
+  z-index: 8 !important;
+}
+
+.moveable-line {
+  background: #7ef0dc !important;
+}
+
+.moveable-control {
+  width: 9px !important;
+  height: 9px !important;
+  margin-top: -4px !important;
+  margin-left: -4px !important;
+  border: 1px solid #071411 !important;
+  background: #7ef0dc !important;
+}
+
+.control-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
