@@ -45,6 +45,27 @@ Commit: `6875140 feat: add editable studio layout`
 - Added tests for valid, invalid, and unknown tool execution.
 - Verified the complete preview, apply, and undo flow in the browser.
 
+Commit: `055b5bb feat: add studio tool registry`
+
+### Schema-driven Gen-UI
+
+- Added versioned Zod schemas for visual, poll, audio, and live-goal widgets.
+- Added a trusted component registry keyed by allowlisted widget types.
+- Migrated deterministic scene cards out of `App.tsx`.
+- Added a safe fallback for invalid or unknown widget data.
+- Added schema tests and verified scene-to-widget switching in the browser.
+
+Commit: `c665147 feat: add schema driven gen ui`
+
+### Validated Agent Widget Output
+
+- Added an optional `<widget>JSON</widget>` protocol to Agent prompts.
+- Strips protocol data from the chat message before rendering.
+- Validates Agent widget output with the same allowlisted Zod schema.
+- Keeps the deterministic scene widget when model output is absent or invalid.
+- Routes validated widgets through the existing preview, apply, and undo flow.
+- Verified a real model response and its generated visual settings in the browser.
+
 Validation:
 
 ```bash
@@ -55,11 +76,10 @@ npm run lint
 
 ## In Progress
 
-- Schema-driven trusted Gen-UI component registry.
+- Tool-backed audio gain and interactive widget lifecycle.
 
 ## Next
 
-1. Define versioned Widget Specs.
-2. Render only allowlisted components.
-3. Route deterministic scene recommendations through Widget Specs.
-4. Connect validated Agent output with a local fallback.
+1. Add a Web Audio `GainNode` processing pipeline.
+2. Move poll and live-goal lifecycle into Tool Registry actions.
+3. Add timeout and cancellation states for Agent-generated widgets.

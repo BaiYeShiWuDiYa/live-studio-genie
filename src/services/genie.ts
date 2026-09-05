@@ -1,5 +1,8 @@
+import { widgetSpecSchema, type WidgetSpec } from '../agent/widgets/widgetSpec'
+
 export type GenieChatResult = {
   text: string
+  widget?: WidgetSpec
 }
 
 type ModelResponse = {
@@ -27,6 +30,19 @@ function extractText(response: ModelResponse): string {
   return ''
 }
 
+export function parseGenieContent(content: string): GenieChatResult {
+  const match = content.match(/<widget>\s*([\s\S]*?)\s*<\/widget>/i)
+  if (!match) return { text: content.trim() }
+
+  const text = content.replace(match[0], '').trim()
+  try {
+    const parsedWidget = widgetSpecSchema.safeParse(JSON.parse(match[1]))
+    return parsedWidget.success ? { text, widget: parsedWidget.data } : { text }
+  } catch {
+    return { text }
+  }
+}
+
 export async function askGenie(prompt: string): Promise<GenieChatResult> {
   const response = await fetch('/api/genie/chat', {
     method: 'POST',
@@ -41,5 +57,5 @@ export async function askGenie(prompt: string): Promise<GenieChatResult> {
     throw new Error(message || 'Genie 暂时无法生成建议。')
   }
 
-  return { text }
+  return parseGenieContent(text)
 }

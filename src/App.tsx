@@ -33,7 +33,7 @@ import './App.css'
 import './features.css'
 import { studioToolRegistry, type StudioToolContext } from './agent/tools/studioTools'
 import { getSceneWidgetSpec } from './agent/widgets/sceneWidgets'
-import type { StudioScene } from './agent/widgets/widgetSpec'
+import type { StudioScene, WidgetSpec } from './agent/widgets/widgetSpec'
 import { requestCameraStream, requestDisplayStream, stopMediaStream } from './capabilities/media/browserMedia'
 import { useMediaMonitoring } from './capabilities/monitoring/useMediaMonitoring'
 import type { MediaMetric } from './capabilities/monitoring/types'
@@ -120,6 +120,16 @@ const preliveTasks: Array<{ id: PreliveTask; title: string; detail: string; acti
   { id: 'interaction', title: '设置互动开场', detail: '建议首屏展示点歌投票，降低新观众参与门槛。', action: '添加点歌投票' },
 ]
 
+const widgetProtocol = [
+  '如果建议适合用控件执行，请在正文末尾追加 <widget>JSON</widget>，不要使用 Markdown 代码块。',
+  'JSON 公共字段：version 固定为 "1.0"，并包含 type、title、detail、actionLabel、props。',
+  '允许类型：',
+  'visual-adjustment，props.settings 包含 brightness(0.6-1.6)、contrast(0.6-1.6)、warmth(0-0.6)。',
+  'audience-poll，props 包含 question、options(2-4项)、durationSeconds(15-180)。',
+  'audio-adjustment，props 包含 microphoneGain(-20到20)、backgroundMusicGain(-20到20)。',
+  'live-goal，props 包含 label、current、target、supporters。',
+].join('\n')
+
 function App() {
   const [view, setView] = useState<AppView>('onboarding')
   const [streamType, setStreamType] = useState<StreamKind>('music')
@@ -134,6 +144,7 @@ function App() {
   const [showGoLive, setShowGoLive] = useState(false)
   const [genieInput, setGenieInput] = useState('')
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [agentWidgetSpec, setAgentWidgetSpec] = useState<WidgetSpec | null>(null)
   const [genieError, setGenieError] = useState('')
   const [isAskingGenie, setIsAskingGenie] = useState(false)
   const [liveTick, setLiveTick] = useState(0)
@@ -159,6 +170,7 @@ function App() {
     resetVisualPreview,
     undoVisualSettings,
   }
+  const activeWidgetSpec = agentWidgetSpec ?? getSceneWidgetSpec(scene)
 
   useEffect(() => {
     return () => stopMediaStream(mediaStream)
@@ -244,6 +256,7 @@ function App() {
 
   const changeScene = (nextScene: Scene) => {
     studioToolRegistry.execute('studio.reset_visual_preview', {}, studioToolContext)
+    setAgentWidgetSpec(null)
     setScene(nextScene)
     setApplied(false)
     setIsSuggestionPreview(false)
@@ -257,32 +270,24 @@ function App() {
   }
 
   const previewSuggestion = () => {
-    if (scene === 'quality') {
-      const spec = getSceneWidgetSpec(scene)
-      if (spec.type !== 'visual-adjustment') return
+    if (activeWidgetSpec.type === 'visual-adjustment') {
       const result = studioToolRegistry.execute('studio.adjust_visual', {
         mode: 'preview',
-        settings: spec.props.settings,
+        settings: activeWidgetSpec.props.settings,
       }, studioToolContext)
       setLiveAdjustment(result)
       setIsSuggestionPreview(true)
       return
     }
 
-    const preview: Record<Scene, LiveAdjustment> = {
-      quality: { name: '正在预览柔光氛围', detail: '仅作用于本地预览，尚未影响直播画面' },
-      interaction: { name: '正在预览互动挂件', detail: '确认后才会在观众侧上屏' },
-      troubleshoot: { name: '正在试听音频调整', detail: '试听 3 秒后可确认应用' },
-      pk: { name: '正在预览冲刺目标', detail: '确认后向观众展示目标组件' },
-    }
-    setLiveAdjustment(preview[scene])
+    setLiveAdjustment(getWidgetAdjustment(activeWidgetSpec, 'preview'))
     setIsSuggestionPreview(true)
-    setIsPollVisible(scene === 'interaction')
+    setIsPollVisible(activeWidgetSpec.type === 'audience-poll')
   }
 
   const applySuggestion = () => {
     setApplied(true)
-    if (scene === 'quality') {
+    if (activeWidgetSpec.type === 'visual-adjustment') {
       const result = studioToolRegistry.execute('studio.adjust_visual', {
         mode: 'apply',
         settings: useStudioStore.getState().visualSettings,
@@ -292,15 +297,9 @@ function App() {
       return
     }
 
-    const adjustment: Record<Scene, LiveAdjustment> = {
-      quality: { name: '柔光氛围已预览', detail: '补光 +32、暖色 +18、磨皮 20%' },
-      interaction: { name: '点歌投票已上屏', detail: '将在 45 秒后自动收起' },
-      troubleshoot: { name: '音频调整已应用', detail: '麦克风 +8%，BGM -5%' },
-      pk: { name: '冲刺目标已上屏', detail: '正在召集观众助力反超' },
-    }
-    setLiveAdjustment(adjustment[scene])
+    setLiveAdjustment(getWidgetAdjustment(activeWidgetSpec, 'apply'))
     setIsSuggestionPreview(false)
-    setIsPollVisible(scene === 'interaction')
+    setIsPollVisible(activeWidgetSpec.type === 'audience-poll')
   }
 
   const completePreliveTask = () => {
@@ -318,7 +317,7 @@ function App() {
   }
 
   const undoSuggestion = () => {
-    if (scene === 'quality') {
+    if (activeWidgetSpec.type === 'visual-adjustment') {
       const result = studioToolRegistry.execute('studio.undo_visual', {}, studioToolContext)
       setLiveAdjustment(result)
     } else {
@@ -355,6 +354,7 @@ function App() {
       '你是 LIVE Studio Genie，一名专业、简洁的中文直播间助手。',
       context,
       '根据当前状态回答主播的问题。给出可直接执行的建议，保持在 120 个汉字以内。',
+      widgetProtocol,
       `主播问题：${question}`,
     ].join('\n')
 
@@ -365,7 +365,14 @@ function App() {
 
     try {
       const result = await askGenie(prompt)
-      setChatMessages((messages) => [...messages, { role: 'assistant', text: result.text }])
+      setChatMessages((messages) => [...messages, { role: 'assistant', text: result.text || '已生成可操作方案。' }])
+      if (view === 'live' && result.widget) {
+        setAgentWidgetSpec(result.widget)
+        setApplied(false)
+        setIsSuggestionPreview(false)
+        setLiveAdjustment(null)
+        setIsPollVisible(false)
+      }
     } catch (error) {
       setGenieError(error instanceof Error ? error.message : 'Genie 暂时无法响应。')
     } finally {
@@ -497,7 +504,7 @@ function App() {
           <PanelHeading icon={<Bot size={17} />} title="Genie" status="AI 在线" />
           <div className="genie-intro">
             <div className="mini-orb"><Sparkles size={17} /></div>
-            <div><strong>{view === 'prelive' ? '为你生成了开播方案' : '我发现了一个机会点'}</strong><p>{view === 'prelive' ? '根据音乐聊天主题，已匹配舒适陪伴型场景。' : sceneCopy[scene].detail}</p></div>
+            <div><strong>{view === 'prelive' ? '为你生成了开播方案' : agentWidgetSpec ? '已生成可操作组件' : '我发现了一个机会点'}</strong><p>{view === 'prelive' ? '根据音乐聊天主题，已匹配舒适陪伴型场景。' : activeWidgetSpec.detail}</p></div>
           </div>
           {view === 'live' && <div className="suggestion-tabs" aria-label="Genie 建议">
             <button type="button" className={scene === 'quality' ? 'active' : ''} onClick={() => changeScene('quality')}>优化画面亮度</button>
@@ -506,7 +513,7 @@ function App() {
           </div>}
           {view === 'prelive'
             ? <PreliveTaskCard task={preliveTasks[preliveTaskIndex]} completedCount={preliveTaskIndex} onApply={completePreliveTask} />
-            : <WidgetRenderer spec={getSceneWidgetSpec(scene)} applied={applied} isPreviewing={isSuggestionPreview} onPreview={previewSuggestion} onApply={applySuggestion} onUndo={undoSuggestion} onVisualChange={updateVisualPreview} />}
+            : <WidgetRenderer spec={activeWidgetSpec} applied={applied} isPreviewing={isSuggestionPreview} onPreview={previewSuggestion} onApply={applySuggestion} onUndo={undoSuggestion} onVisualChange={updateVisualPreview} />}
           {chatMessages.length > 0 && <div className="genie-conversation" aria-live="polite">
             {chatMessages.map((message, index) => (
               <article key={`${message.role}-${index}`} className={`chat-message ${message.role}`}>
@@ -609,6 +616,34 @@ function toLiveMetric(label: string, metric: MediaMetric): Metric {
     score: metric.status === 'ready' ? metric.score : 8,
     tone: metric.tone,
   }
+}
+
+function getWidgetAdjustment(spec: WidgetSpec, mode: 'preview' | 'apply'): LiveAdjustment {
+  if (spec.type === 'audience-poll') {
+    return mode === 'preview'
+      ? { name: '正在预览互动挂件', detail: '确认后才会在观众侧上屏' }
+      : { name: '互动挂件已上屏', detail: `将在 ${spec.props.durationSeconds} 秒后自动收起` }
+  }
+
+  if (spec.type === 'audio-adjustment') {
+    return mode === 'preview'
+      ? { name: '正在试听音频调整', detail: '试听完成后可确认应用' }
+      : { name: '音频调整已应用', detail: `麦克风 ${withSign(spec.props.microphoneGain)}%，BGM ${withSign(spec.props.backgroundMusicGain)}%` }
+  }
+
+  if (spec.type === 'live-goal') {
+    return mode === 'preview'
+      ? { name: '正在预览冲刺目标', detail: '确认后向观众展示目标组件' }
+      : { name: '冲刺目标已上屏', detail: `目标 ${spec.props.target.toLocaleString()}，正在召集观众助力` }
+  }
+
+  return mode === 'preview'
+    ? { name: '正在预览画面调整', detail: '确认后才会应用到正式配置' }
+    : { name: '画面调整已应用', detail: '新的画面参数已经生效' }
+}
+
+function withSign(value: number): string {
+  return `${value >= 0 ? '+' : ''}${value}`
 }
 
 function getLiveComments(scene: Scene, applied: boolean, tick: number) {
