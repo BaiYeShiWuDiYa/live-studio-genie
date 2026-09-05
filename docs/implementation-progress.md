@@ -398,6 +398,23 @@ git diff --check
 
 Result: 11 test files and 45 tests passed. Production build completed with the existing large-chunk warning. The automated browser loaded the updated controls, but camera-based profile verification remains manual because that browser session has camera permission denied.
 
+### Chinese Feature Status and Usage Guide
+
+- Added a Chinese status matrix for all requested monitoring and component capabilities.
+- Separated real browser capabilities, deterministic Demo/Mock data, partial implementations, and missing capabilities.
+- Documented the complete experience flow from onboarding and pre-live preparation through monitoring, beautification, screen sharing, polls, PK, LIVE Goal, and Genie.
+- Added operating constraints, recommended competition demo order, and follow-up priorities.
+- Linked the guide from the project README.
+
+Validation:
+
+```bash
+npm run test
+npm run build
+npm run lint
+git diff --check
+```
+
 ## Next
 
 1. Add eyebrow controls and face-shape deformation.

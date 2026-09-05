@@ -94,6 +94,11 @@ vite.config.ts         开发环境 Agent 同源代理，密钥仅在服务端�
 4. 用左侧“演示场景”切换画质、互动、排障和 PK。
 5. 在右侧输入框向 Genie 询问针对当前直播状态的建议。
 
+## 功能文档
+
+- [功能实现状态与完整操作指南](docs/feature-status-and-usage-guide.md)
+- [开发进展](docs/implementation-progress.md)
+
 ## 协作约定
 
 - 不要提交 `.env`、密钥或本地调试文件。
