@@ -1,6 +1,7 @@
 import { useRef, type RefObject } from 'react'
 import Moveable from 'react-moveable'
 import { useStudioStore } from '../../store/studioStore'
+import { CameraEffectsCanvas } from './CameraEffectsCanvas'
 
 interface EditableCameraLayerProps {
   videoRef: RefObject<HTMLVideoElement>
@@ -23,7 +24,10 @@ export function EditableCameraLayer({ videoRef, editing }: EditableCameraLayerPr
           transform: `translate(${layout.x}px, ${layout.y}px)`,
         }}
       >
-        <video ref={videoRef} autoPlay muted playsInline className="camera-feed" />
+        <div className="camera-source">
+          <video ref={videoRef} autoPlay muted playsInline className="camera-feed" />
+          <CameraEffectsCanvas videoRef={videoRef} />
+        </div>
       </div>
       {editing && (
         <Moveable

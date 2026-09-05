@@ -20,6 +20,10 @@ function createContext(): StudioToolContext {
     applyVisualSettings: vi.fn(),
     resetVisualPreview: vi.fn(),
     undoVisualSettings: vi.fn(),
+    previewCameraEffects: vi.fn(),
+    applyCameraEffects: vi.fn(),
+    resetCameraEffectsPreview: vi.fn(),
+    undoCameraEffects: vi.fn(),
   }
 }
 
@@ -64,6 +68,23 @@ describe('studio tool registry', () => {
       microphoneGainDb: 8,
       backgroundMusicGainDb: -5,
     })
+  })
+
+  it('previews validated camera effects', () => {
+    const context = createContext()
+    const cameraEffects = {
+      smoothness: 24,
+      exposure: 8,
+      warmth: 12,
+      backgroundMode: 'blur' as const,
+      backgroundColor: '#163d38',
+    }
+    studioToolRegistry.execute('studio.adjust_camera_effects', {
+      mode: 'preview',
+      settings: cameraEffects,
+    }, context)
+
+    expect(context.previewCameraEffects).toHaveBeenCalledWith(cameraEffects)
   })
 
   it('publishes a validated audience poll', () => {

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { visualSettingsSchema } from '../../capabilities/visual/types'
+import { cameraEffectsSchema } from '../../capabilities/video/cameraEffects'
 import { liveGoalConfigSchema } from '../../capabilities/widgets/liveGoal'
 import { pollConfigSchema } from '../../capabilities/widgets/poll'
 
@@ -14,6 +15,13 @@ const widgetBase = {
 }
 
 export const widgetSpecSchema = z.discriminatedUnion('type', [
+  z.object({
+    ...widgetBase,
+    type: z.literal('camera-effects'),
+    props: z.object({
+      settings: cameraEffectsSchema,
+    }),
+  }),
   z.object({
     ...widgetBase,
     type: z.literal('visual-adjustment'),

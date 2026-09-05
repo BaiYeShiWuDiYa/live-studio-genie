@@ -36,6 +36,76 @@
   object-fit: cover;
 }
 
+.camera-source {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #080b11;
+}
+
+.camera-source > .camera-feed {
+  position: absolute;
+  inset: 0;
+}
+
+.camera-effects-canvas {
+  z-index: 1;
+  pointer-events: none;
+}
+
+.effect-mode-control {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin: 12px 0;
+  padding: 3px;
+  border: 1px solid rgba(101, 126, 158, 0.28);
+  border-radius: 6px;
+  background: rgba(11, 16, 27, 0.68);
+}
+
+.effect-mode-control button {
+  min-width: 0;
+  padding: 6px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #8f9caf;
+  font-size: 10px;
+}
+
+.effect-mode-control button.selected {
+  background: linear-gradient(110deg, rgba(50, 153, 142, 0.72), rgba(75, 101, 168, 0.74));
+  color: #effffc;
+}
+
+.effect-color-control {
+  display: grid;
+  grid-template-columns: 1fr 25px auto;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 12px;
+  color: #aab6c7;
+  font-size: 10px;
+}
+
+.effect-color-control input {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(126, 240, 220, 0.38);
+  border-radius: 4px;
+  background: transparent;
+}
+
+.effect-color-control b {
+  color: #d9e4ef;
+  font-size: 10px;
+  font-weight: 500;
+}
+
 .camera-picture-in-picture.is-editing {
   cursor: move;
   border-color: #7ef0dc;

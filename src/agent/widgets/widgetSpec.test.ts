@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getSceneWidgetSpec } from './sceneWidgets'
+import { getCameraEffectsWidgetSpec, getSceneWidgetSpec } from './sceneWidgets'
 import { widgetSpecSchema } from './widgetSpec'
 
 describe('widget specs', () => {
@@ -26,6 +26,12 @@ describe('widget specs', () => {
     })
 
     expect(result.success).toBe(false)
+  })
+
+  it('provides a validated camera effects widget', () => {
+    const spec = getCameraEffectsWidgetSpec()
+    expect(spec.type).toBe('camera-effects')
+    expect(widgetSpecSchema.safeParse(spec).success).toBe(true)
   })
 
   it('rejects malformed widget properties', () => {

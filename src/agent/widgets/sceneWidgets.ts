@@ -1,4 +1,5 @@
 import { widgetSpecSchema, type StudioScene, type WidgetSpec } from './widgetSpec'
+import { recommendedCameraEffects } from '../../capabilities/video/cameraEffects'
 
 const sceneWidgets: Record<StudioScene, WidgetSpec> = {
   quality: {
@@ -55,4 +56,17 @@ const sceneWidgets: Record<StudioScene, WidgetSpec> = {
 
 export function getSceneWidgetSpec(scene: StudioScene): WidgetSpec {
   return widgetSpecSchema.parse(sceneWidgets[scene])
+}
+
+export function getCameraEffectsWidgetSpec(): WidgetSpec {
+  return widgetSpecSchema.parse({
+    version: '1.0',
+    type: 'camera-effects',
+    title: '让人物更自然，背景更干净',
+    detail: '使用本地人像分割与轻量美化处理，不上传摄像头画面。',
+    actionLabel: '应用美化方案',
+    props: {
+      settings: recommendedCameraEffects,
+    },
+  })
 }

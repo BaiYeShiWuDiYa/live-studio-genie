@@ -32,7 +32,7 @@ import {
 import './App.css'
 import './features.css'
 import { studioToolRegistry, type StudioToolContext } from './agent/tools/studioTools'
-import { getSceneWidgetSpec } from './agent/widgets/sceneWidgets'
+import { getCameraEffectsWidgetSpec, getSceneWidgetSpec } from './agent/widgets/sceneWidgets'
 import type { StudioScene, WidgetSpec } from './agent/widgets/widgetSpec'
 import { createAudioProcessor, type AudioProcessor } from './capabilities/audio/audioProcessor'
 import {
@@ -44,8 +44,10 @@ import { requestCameraStream, requestDisplayStream, stopMediaStream } from './ca
 import { useMediaMonitoring } from './capabilities/monitoring/useMediaMonitoring'
 import type { MediaMetric } from './capabilities/monitoring/types'
 import type { VisualSettings } from './capabilities/visual/types'
+import type { CameraEffects } from './capabilities/video/cameraEffects'
 import { Adjustment } from './components/genie/Adjustment'
 import { WidgetRenderer } from './components/genie/WidgetRenderer'
+import { CameraEffectsCanvas } from './components/studio/CameraEffectsCanvas'
 import { EditableCameraLayer } from './components/studio/EditableCameraLayer'
 import { LiveGoal } from './components/studio/LiveGoal'
 import { LivePoll } from './components/studio/LivePoll'
@@ -136,6 +138,7 @@ const widgetProtocol = [
   'visual-adjustment，props.settings 包含 brightness(0.6-1.6)、contrast(0.6-1.6)、warmth(0-0.6)。',
   'audience-poll，props 包含 question、options(2-4项)、durationSeconds(15-180)。',
   'audio-adjustment，props 包含 microphoneGain(-20到20)、backgroundMusicGain(-20到20)。',
+  'camera-effects，props.settings 包含 smoothness、exposure、warmth、backgroundMode、backgroundColor。',
   'live-goal，props 包含 label、current、target、supporters。',
 ].join('\n')
 
@@ -179,6 +182,10 @@ function App() {
   const applyVisualSettings = useStudioStore((state) => state.applyVisualSettings)
   const resetVisualPreview = useStudioStore((state) => state.resetVisualPreview)
   const undoVisualSettings = useStudioStore((state) => state.undoVisualSettings)
+  const previewCameraEffects = useStudioStore((state) => state.previewCameraEffects)
+  const applyCameraEffects = useStudioStore((state) => state.applyCameraEffects)
+  const resetCameraEffectsPreview = useStudioStore((state) => state.resetCameraEffectsPreview)
+  const undoCameraEffects = useStudioStore((state) => state.undoCameraEffects)
   const previewAudioSettings = useStudioStore((state) => state.previewAudioSettings)
   const applyAudioSettings = useStudioStore((state) => state.applyAudioSettings)
   const resetAudioPreview = useStudioStore((state) => state.resetAudioPreview)
@@ -212,6 +219,10 @@ function App() {
     applyVisualSettings,
     resetVisualPreview,
     undoVisualSettings,
+    previewCameraEffects,
+    applyCameraEffects,
+    resetCameraEffectsPreview,
+    undoCameraEffects,
   }
   const activeWidgetSpec = agentWidgetSpec ?? getSceneWidgetSpec(scene)
 
@@ -326,6 +337,7 @@ function App() {
     studioToolRegistry.execute('studio.reset_audio_preview', {}, studioToolContext)
     studioToolRegistry.execute('studio.reset_poll_preview', {}, studioToolContext)
     studioToolRegistry.execute('studio.reset_live_goal_preview', {}, studioToolContext)
+    studioToolRegistry.execute('studio.reset_camera_effects_preview', {}, studioToolContext)
     setAgentWidgetSpec(null)
     setScene(nextScene)
     setApplied(false)
@@ -339,6 +351,16 @@ function App() {
   }
 
   const previewSuggestion = () => {
+    if (activeWidgetSpec.type === 'camera-effects') {
+      const result = studioToolRegistry.execute('studio.adjust_camera_effects', {
+        mode: 'preview',
+        settings: activeWidgetSpec.props.settings,
+      }, studioToolContext)
+      setLiveAdjustment(result)
+      setIsSuggestionPreview(true)
+      return
+    }
+
     if (activeWidgetSpec.type === 'visual-adjustment') {
       const result = studioToolRegistry.execute('studio.adjust_visual', {
         mode: 'preview',
@@ -388,6 +410,16 @@ function App() {
 
   const applySuggestion = () => {
     setApplied(true)
+    if (activeWidgetSpec.type === 'camera-effects') {
+      const result = studioToolRegistry.execute('studio.adjust_camera_effects', {
+        mode: 'apply',
+        settings: useStudioStore.getState().cameraEffects,
+      }, studioToolContext)
+      setLiveAdjustment(result)
+      setIsSuggestionPreview(false)
+      return
+    }
+
     if (activeWidgetSpec.type === 'visual-adjustment') {
       const result = studioToolRegistry.execute('studio.adjust_visual', {
         mode: 'apply',
@@ -447,7 +479,10 @@ function App() {
   }
 
   const undoSuggestion = () => {
-    if (activeWidgetSpec.type === 'visual-adjustment') {
+    if (activeWidgetSpec.type === 'camera-effects') {
+      const result = studioToolRegistry.execute('studio.undo_camera_effects', {}, studioToolContext)
+      setLiveAdjustment(result)
+    } else if (activeWidgetSpec.type === 'visual-adjustment') {
       const result = studioToolRegistry.execute('studio.undo_visual', {}, studioToolContext)
       setLiveAdjustment(result)
     } else if (activeWidgetSpec.type === 'audio-adjustment') {
@@ -491,6 +526,23 @@ function App() {
     }, studioToolContext)
     setLiveAdjustment(result)
     setIsSuggestionPreview(true)
+  }
+
+  const updateCameraEffectsPreview = (settings: CameraEffects) => {
+    const result = studioToolRegistry.execute('studio.adjust_camera_effects', {
+      mode: 'preview',
+      settings,
+    }, studioToolContext)
+    setLiveAdjustment(result)
+    setIsSuggestionPreview(true)
+  }
+
+  const openCameraEffects = () => {
+    studioToolRegistry.execute('studio.reset_camera_effects_preview', {}, studioToolContext)
+    setAgentWidgetSpec(getCameraEffectsWidgetSpec())
+    setApplied(false)
+    setIsSuggestionPreview(false)
+    setLiveAdjustment(null)
   }
 
   const togglePollWidget = () => {
@@ -694,6 +746,7 @@ function App() {
             <button type="button" className="control-button" onClick={enableCamera}><Camera size={18} /><span>{cameraEnabled ? '摄像头已连接' : '开启摄像头'}</span></button>
             <button type="button" className={`control-button ${isMicMuted ? 'active-control' : ''}`} onClick={() => setIsMicMuted((muted) => !muted)}><Mic size={18} /><span>{isMicMuted ? '麦克风已静音' : '麦克风'}</span></button>
             <button type="button" className={`control-button ${isBackgroundMusicPlaying ? 'active-control' : ''}`} onClick={toggleBackgroundMusic}><Music2 size={18} /><span>{isBackgroundMusicPlaying ? '停止 BGM' : '播放 BGM'}</span></button>
+            <button type="button" className={`control-button ${activeWidgetSpec.type === 'camera-effects' ? 'active-control' : ''}`} onClick={openCameraEffects}><WandSparkles size={18} /><span>美化工具</span></button>
             <button type="button" className={`control-button ${displayStream ? 'active-control' : ''}`} onClick={toggleScreenShare}><MonitorUp size={18} /><span>{displayStream ? '停止投屏' : '游戏投屏'}</span></button>
             <button type="button" className={`control-button ${isLayoutEditing ? 'active-control' : ''}`} disabled={!displayStream} onClick={() => setIsLayoutEditing((editing) => !editing)}><LayoutTemplate size={18} /><span>{isLayoutEditing ? '锁定布局' : '编辑布局'}</span></button>
             {displayStream && isLayoutEditing && <button type="button" className="control-button" onClick={resetCameraLayerLayout}><RotateCcw size={18} /><span>重置布局</span></button>}
@@ -715,16 +768,16 @@ function App() {
           <PanelHeading icon={<Bot size={17} />} title="Genie" status="AI 在线" />
           <div className="genie-intro">
             <div className="mini-orb"><Sparkles size={17} /></div>
-            <div><strong>{view === 'prelive' ? '为你生成了开播方案' : agentWidgetSpec ? '已生成可操作组件' : '我发现了一个机会点'}</strong><p>{view === 'prelive' ? '根据音乐聊天主题，已匹配舒适陪伴型场景。' : activeWidgetSpec.detail}</p></div>
+            <div><strong>{view === 'prelive' && activeWidgetSpec.type !== 'camera-effects' ? '为你生成了开播方案' : agentWidgetSpec ? '已生成可操作组件' : '我发现了一个机会点'}</strong><p>{view === 'prelive' && activeWidgetSpec.type !== 'camera-effects' ? '根据音乐聊天主题，已匹配舒适陪伴型场景。' : activeWidgetSpec.detail}</p></div>
           </div>
           {view === 'live' && <div className="suggestion-tabs" aria-label="Genie 建议">
             <button type="button" className={scene === 'quality' ? 'active' : ''} onClick={() => changeScene('quality')}>优化画面亮度</button>
             <button type="button" className={scene === 'interaction' ? 'active' : ''} onClick={() => changeScene('interaction')}>互动正在转冷</button>
             <button type="button" className={scene === 'troubleshoot' ? 'active' : ''} onClick={() => changeScene('troubleshoot')}>麦克风偏小</button>
           </div>}
-          {view === 'prelive'
+          {view === 'prelive' && activeWidgetSpec.type !== 'camera-effects'
             ? <PreliveTaskCard task={preliveTasks[preliveTaskIndex]} completedCount={preliveTaskIndex} onApply={completePreliveTask} />
-            : <WidgetRenderer spec={activeWidgetSpec} applied={applied} isPreviewing={isSuggestionPreview} onPreview={previewSuggestion} onApply={applySuggestion} onUndo={undoSuggestion} onAudioChange={updateAudioPreview} onVisualChange={updateVisualPreview} />}
+            : <WidgetRenderer spec={activeWidgetSpec} applied={applied} isPreviewing={isSuggestionPreview} onPreview={previewSuggestion} onApply={applySuggestion} onUndo={undoSuggestion} onAudioChange={updateAudioPreview} onVisualChange={updateVisualPreview} onCameraEffectsChange={updateCameraEffectsPreview} />}
           {chatMessages.length > 0 && <div className="genie-conversation" aria-live="polite">
             {chatMessages.map((message, index) => (
               <article key={`${message.role}-${index}`} className={`chat-message ${message.role}`}>
@@ -912,7 +965,12 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
             <video ref={displayVideoRef} autoPlay muted playsInline className="screen-feed" />
             {cameraEnabled && <EditableCameraLayer videoRef={videoRef} editing={layoutEditing} />}
           </>
-        : cameraEnabled ? <video ref={videoRef} autoPlay muted playsInline className="camera-feed" /> : <DemoHost />}
+        : cameraEnabled
+          ? <div className="camera-source">
+              <video ref={videoRef} autoPlay muted playsInline className="camera-feed" />
+              <CameraEffectsCanvas videoRef={videoRef} />
+            </div>
+          : <DemoHost />}
       {previewMode === 'studio' && <div className="studio-guides"><i /><i /><i /></div>}
       <div className="stage-label"><span />林小满</div>
       {applied && <div className="applied-badge"><Check size={13} />方案已应用</div>}

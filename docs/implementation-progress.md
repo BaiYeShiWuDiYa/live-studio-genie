@@ -145,6 +145,25 @@ npm run build
 npm run lint
 ```
 
+### Camera Beauty and Virtual Background
+
+- Added `@mediapipe/tasks-vision@0.10.14`, matching the proven LIVE Studio integration.
+- Added a local official Selfie Segmenter model and lazy-loaded Vision runtime.
+- Added Canvas-based skin softening, exposure, and warmth processing.
+- Added real person segmentation for background blur and solid-color replacement.
+- Added a validated camera-effects Tool and trusted Gen-UI widget.
+- Added preview, apply, reset-preview, and undo state in Zustand.
+- Verified blur, color replacement, apply, and undo with a real camera in Chrome.
+
+Validation:
+
+```bash
+npm run test
+npm run build
+npm run lint
+```
+
 ## Next
 
-1. Split remaining studio orchestration out of `App.tsx`.
+1. Add custom image backgrounds and face-tracked stickers.
+2. Split remaining studio orchestration out of `App.tsx`.

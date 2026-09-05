@@ -4,6 +4,7 @@ import { type ComponentType } from 'react'
 import { widgetSpecSchema, type WidgetSpec } from '../../agent/widgets/widgetSpec'
 import type { AudioSettings } from '../../capabilities/audio/types'
 import type { VisualSettings } from '../../capabilities/visual/types'
+import type { CameraEffects } from '../../capabilities/video/cameraEffects'
 import { useStudioStore } from '../../store/studioStore'
 import { Adjustment } from './Adjustment'
 
@@ -16,6 +17,7 @@ interface WidgetRendererProps {
   onUndo: () => void
   onAudioChange: (property: keyof AudioSettings, value: number) => void
   onVisualChange: (property: keyof VisualSettings, percentage: number) => void
+  onCameraEffectsChange: (settings: CameraEffects) => void
 }
 
 interface WidgetBodyProps {
@@ -24,9 +26,11 @@ interface WidgetBodyProps {
   isPreviewing: boolean
   onAudioChange: WidgetRendererProps['onAudioChange']
   onVisualChange: WidgetRendererProps['onVisualChange']
+  onCameraEffectsChange: WidgetRendererProps['onCameraEffectsChange']
 }
 
 const widgetRegistry: Record<WidgetSpec['type'], ComponentType<WidgetBodyProps>> = {
+  'camera-effects': CameraEffectsWidget,
   'visual-adjustment': VisualAdjustmentWidget,
   'audience-poll': AudiencePollWidget,
   'audio-adjustment': AudioAdjustmentWidget,
@@ -42,6 +46,7 @@ export function WidgetRenderer(props: WidgetRendererProps) {
   const spec = parsedSpec.data
   const WidgetBody = widgetRegistry[spec.type]
   const tone = {
+    'camera-effects': 'quality',
     'visual-adjustment': 'quality',
     'audience-poll': 'interaction',
     'audio-adjustment': 'troubleshoot',
@@ -59,6 +64,7 @@ export function WidgetRenderer(props: WidgetRendererProps) {
         isPreviewing={props.isPreviewing}
         onAudioChange={props.onAudioChange}
         onVisualChange={props.onVisualChange}
+        onCameraEffectsChange={props.onCameraEffectsChange}
       />
       {!props.isPreviewing && !props.applied && <Button className="primary-button full-button" color="primary" onClick={props.onPreview}><Sparkles size={16} />预览调整</Button>}
       {props.isPreviewing && <Button className="primary-button full-button" color="primary" onClick={props.onApply}><Check size={16} />{spec.actionLabel}</Button>}
@@ -67,6 +73,60 @@ export function WidgetRenderer(props: WidgetRendererProps) {
         ? <button className="card-text-button" type="button" onClick={props.onUndo}><RotateCcw size={14} />撤回最近一次调整</button>
         : <button className="card-text-button" type="button"><RefreshCw size={14} />换一组建议</button>}
     </div>
+  )
+}
+
+function CameraEffectsWidget({
+  spec,
+  applied,
+  isPreviewing,
+  onCameraEffectsChange,
+}: WidgetBodyProps) {
+  const cameraEffects = useStudioStore((state) => state.cameraEffects)
+  if (spec.type !== 'camera-effects') return null
+  const settings = applied || isPreviewing
+    ? cameraEffects
+    : spec.props.settings
+  const update = (patch: Partial<CameraEffects>) => {
+    onCameraEffectsChange({ ...settings, ...patch })
+  }
+
+  return (
+    <>
+      <div className="effect-mode-control" role="group" aria-label="虚拟背景模式">
+        {([
+          ['none', '原始'],
+          ['blur', '虚化'],
+          ['color', '纯色'],
+        ] as const).map(([mode, label]) => (
+          <button
+            type="button"
+            className={settings.backgroundMode === mode ? 'selected' : ''}
+            key={mode}
+            onClick={() => update({ backgroundMode: mode })}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {settings.backgroundMode === 'color' && (
+        <label className="effect-color-control">
+          <span>背景颜色</span>
+          <input
+            type="color"
+            value={settings.backgroundColor}
+            onChange={(event) => update({ backgroundColor: event.target.value })}
+            aria-label="背景颜色"
+          />
+          <b>{settings.backgroundColor.toUpperCase()}</b>
+        </label>
+      )}
+      <div className="adjustments">
+        <Adjustment label="柔肤" max={100} value={`${settings.smoothness}%`} onChange={(value) => update({ smoothness: value })} />
+        <Adjustment label="提亮" min={-20} max={30} value={`${withSign(settings.exposure)}%`} onChange={(value) => update({ exposure: value })} />
+        <Adjustment label="暖肤" max={40} value={`${settings.warmth}%`} onChange={(value) => update({ warmth: value })} />
+      </div>
+    </>
   )
 }
 

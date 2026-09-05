@@ -21,6 +21,11 @@ import {
   type VisualSettings,
 } from '../capabilities/visual/types'
 import {
+  cameraEffectsSchema,
+  defaultCameraEffects,
+  type CameraEffects,
+} from '../capabilities/video/cameraEffects'
+import {
   hiddenLiveGoalState,
   liveGoalConfigSchema,
   type LiveGoalConfig,
@@ -42,6 +47,9 @@ interface StudioState {
   visualSettings: VisualSettings
   committedVisualSettings: VisualSettings
   previousVisualSettings: VisualSettings | null
+  cameraEffects: CameraEffects
+  committedCameraEffects: CameraEffects
+  previousCameraEffects: CameraEffects | null
   pollState: PollState
   committedPollState: PollState
   previousPollState: PollState | null
@@ -59,6 +67,10 @@ interface StudioState {
   applyVisualSettings: (settings: VisualSettings) => void
   resetVisualPreview: () => void
   undoVisualSettings: () => void
+  previewCameraEffects: (settings: CameraEffects) => void
+  applyCameraEffects: (settings: CameraEffects) => void
+  resetCameraEffectsPreview: () => void
+  undoCameraEffects: () => void
   previewPoll: (config: PollConfig) => void
   publishPoll: (config: PollConfig) => void
   resetPollPreview: () => void
@@ -82,6 +94,9 @@ export const useStudioStore = create<StudioState>((set) => ({
   visualSettings: defaultVisualSettings,
   committedVisualSettings: defaultVisualSettings,
   previousVisualSettings: null,
+  cameraEffects: defaultCameraEffects,
+  committedCameraEffects: defaultCameraEffects,
+  previousCameraEffects: null,
   pollState: hiddenPollState,
   committedPollState: hiddenPollState,
   previousPollState: null,
@@ -143,6 +158,30 @@ export const useStudioStore = create<StudioState>((set) => ({
         visualSettings: restoredSettings,
         committedVisualSettings: restoredSettings,
         previousVisualSettings: null,
+      }
+    })
+  },
+  previewCameraEffects: (settings) => {
+    set({ cameraEffects: cameraEffectsSchema.parse(settings) })
+  },
+  applyCameraEffects: (settings) => {
+    const validatedSettings = cameraEffectsSchema.parse(settings)
+    set((state) => ({
+      cameraEffects: validatedSettings,
+      previousCameraEffects: state.committedCameraEffects,
+      committedCameraEffects: validatedSettings,
+    }))
+  },
+  resetCameraEffectsPreview: () => {
+    set((state) => ({ cameraEffects: state.committedCameraEffects }))
+  },
+  undoCameraEffects: () => {
+    set((state) => {
+      const restoredSettings = state.previousCameraEffects ?? defaultCameraEffects
+      return {
+        cameraEffects: restoredSettings,
+        committedCameraEffects: restoredSettings,
+        previousCameraEffects: null,
       }
     })
   },

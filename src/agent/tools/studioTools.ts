@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { audioSettingsSchema, type AudioSettings } from '../../capabilities/audio/types'
 import { visualSettingsSchema, type VisualSettings } from '../../capabilities/visual/types'
+import { cameraEffectsSchema, type CameraEffects } from '../../capabilities/video/cameraEffects'
 import { liveGoalConfigSchema, type LiveGoalConfig } from '../../capabilities/widgets/liveGoal'
 import { pollConfigSchema, type PollConfig } from '../../capabilities/widgets/poll'
 import { defineTool, ToolRegistry } from './toolRegistry'
@@ -22,6 +23,10 @@ export interface StudioToolContext {
   applyVisualSettings: (settings: VisualSettings) => void
   resetVisualPreview: () => void
   undoVisualSettings: () => void
+  previewCameraEffects: (settings: CameraEffects) => void
+  applyCameraEffects: (settings: CameraEffects) => void
+  resetCameraEffectsPreview: () => void
+  undoCameraEffects: () => void
 }
 
 const visualInputSchema = z.object({
@@ -44,7 +49,54 @@ const liveGoalInputSchema = z.object({
   config: liveGoalConfigSchema,
 })
 
+const cameraEffectsInputSchema = z.object({
+  mode: z.enum(['preview', 'apply']),
+  settings: cameraEffectsSchema,
+})
+
 export const studioToolRegistry = new ToolRegistry<StudioToolContext>()
+  .register(defineTool({
+    name: 'studio.adjust_camera_effects',
+    description: '预览或应用基础美颜和虚拟背景。',
+    inputSchema: cameraEffectsInputSchema,
+    requiresConfirmation: true,
+    execute: ({ mode, settings }, context) => {
+      if (mode === 'preview') {
+        context.previewCameraEffects(settings)
+      } else {
+        context.applyCameraEffects(settings)
+      }
+
+      const backgroundLabel = {
+        none: '原始背景',
+        blur: '背景虚化',
+        color: '纯色背景',
+      }[settings.backgroundMode]
+      return {
+        name: mode === 'preview' ? '正在预览美化效果' : '美化效果已应用',
+        detail: `${backgroundLabel} · 柔肤 ${settings.smoothness}% · 暖肤 ${settings.warmth}%`,
+      }
+    },
+  }))
+  .register(defineTool({
+    name: 'studio.reset_camera_effects_preview',
+    description: '取消尚未应用的美化效果预览。',
+    inputSchema: z.object({}),
+    execute: (_, context) => {
+      context.resetCameraEffectsPreview()
+      return { name: '已取消美化预览', detail: '摄像头已恢复为当前正式配置。' }
+    },
+  }))
+  .register(defineTool({
+    name: 'studio.undo_camera_effects',
+    description: '撤回最近一次正式应用的美化效果。',
+    inputSchema: z.object({}),
+    requiresConfirmation: true,
+    execute: (_, context) => {
+      context.undoCameraEffects()
+      return { name: '已撤回美化效果', detail: '摄像头已恢复到应用前的配置。' }
+    },
+  }))
   .register(defineTool({
     name: 'studio.adjust_visual',
     description: '预览或应用直播画面的亮度、对比度与暖色参数。',
