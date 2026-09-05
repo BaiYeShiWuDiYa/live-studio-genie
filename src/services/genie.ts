@@ -23,6 +23,7 @@ export class GenieRequestError extends Error {
 type AskGenieOptions = {
   signal?: AbortSignal
   timeoutMs?: number
+  instruction?: string
 }
 
 type ModelResponse = {
@@ -50,14 +51,64 @@ function extractText(response: ModelResponse): string {
   return ''
 }
 
-export function parseGenieContent(content: string): GenieChatResult {
+function readExplicitPercentage(instruction: string, labels: string): number | undefined {
+  const match = instruction.match(
+    new RegExp(`(?:${labels})\\s*(?:(?:调(?:整)?|设(?:置)?)(?:为|到)?|为|到)?\\s*([-+＋－]?\\d+(?:\\.\\d+)?)\\s*%?`, 'i'),
+  )
+  if (!match) return undefined
+
+  const value = Number(match[1].replace('＋', '+').replace('－', '-'))
+  return Number.isFinite(value) ? value : undefined
+}
+
+function normalizeExplicitVisualSettings(
+  widget: WidgetSpec,
+  instruction: string,
+): WidgetSpec {
+  if (widget.type !== 'visual-adjustment' || !instruction) return widget
+
+  const brightness = readExplicitPercentage(instruction, '亮度|补光')
+  const contrast = readExplicitPercentage(instruction, '对比度')
+  const warmth = readExplicitPercentage(instruction, '暖色|暖肤')
+  if (brightness === undefined && contrast === undefined && warmth === undefined) return widget
+
+  const clamp = (value: number, min: number, max: number) =>
+    Math.min(max, Math.max(min, value))
+  const settings = {
+    ...widget.props.settings,
+    ...(brightness === undefined
+      ? {}
+      : { brightness: 1 + clamp(brightness, -40, 60) / 100 }),
+    ...(contrast === undefined
+      ? {}
+      : { contrast: 1 + clamp(contrast, -40, 60) / 100 }),
+    ...(warmth === undefined
+      ? {}
+      : { warmth: clamp(warmth, 0, 60) / 100 }),
+  }
+
+  return widgetSpecSchema.parse({
+    ...widget,
+    props: { settings },
+  })
+}
+
+export function parseGenieContent(
+  content: string,
+  instruction = '',
+): GenieChatResult {
   const match = content.match(/<widget>\s*([\s\S]*?)\s*<\/widget>/i)
   if (!match) return { text: content.trim() }
 
   const text = content.replace(match[0], '').trim()
   try {
     const parsedWidget = widgetSpecSchema.safeParse(JSON.parse(match[1]))
-    return parsedWidget.success ? { text, widget: parsedWidget.data } : { text }
+    return parsedWidget.success
+      ? {
+          text,
+          widget: normalizeExplicitVisualSettings(parsedWidget.data, instruction),
+        }
+      : { text }
   } catch {
     return { text }
   }
@@ -96,7 +147,7 @@ export async function askGenie(
       throw new Error(message || 'Genie 暂时无法生成建议。')
     }
 
-    return parseGenieContent(text)
+    return parseGenieContent(text, options.instruction)
   } catch (error) {
     if (controller.signal.aborted) {
       throw new GenieRequestError(

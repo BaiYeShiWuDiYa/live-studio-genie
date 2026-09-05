@@ -600,7 +600,10 @@ function App() {
     setGenieRequestStatus('loading')
 
     try {
-      const result = await askGenie(request.prompt, { signal: controller.signal })
+      const result = await askGenie(request.prompt, {
+        signal: controller.signal,
+        instruction: request.question,
+      })
       if (genieAbortRef.current !== controller) return
       setChatMessages((messages) => [...messages, { role: 'assistant', text: result.text || '已生成可操作方案。' }])
       if (view === 'live' && result.widget) {

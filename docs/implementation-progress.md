@@ -266,8 +266,30 @@ npm run build
 npm run lint
 ```
 
+### Full Chrome Regression and Agent Parameter Normalization
+
+- Verified the real camera, microphone level, brightness, and face-framing diagnostics.
+- Verified independent beauty, makeup, and face-tracked prop switching.
+- Verified local image upload, automatic image-background selection, and Canvas compositing.
+- Verified tab sharing, camera picture-in-picture dragging, sharing stop, and layout persistence.
+- Verified BGM playback, audio preview/apply, audience poll voting, and LIVE Goal completion.
+- Verified dynamic comments, gifts, viewer counts, entrants, and comment keyword insights.
+- Added deterministic normalization for explicit brightness, contrast, and warmth percentages in Agent visual widgets.
+- Verified the real Agent flow renders requested values as brightness `+10`, contrast `+5`, and warmth `+3`.
+
+Validation:
+
+```bash
+npm run test
+npm run build
+npm run lint
+```
+
+Result: 10 test files and 36 tests passed. Production build completed with the existing large-chunk warning.
+
 ## Next
 
-1. Validate makeup, props, framing, and audience events in Chrome.
-2. Add eyeliner and face-shape deformation.
+1. Add eyeliner and face-shape deformation.
+2. Improve makeup edge fitting and skin-region rendering.
 3. Split remaining studio orchestration out of `App.tsx`.
+4. Reduce the Creator UI production bundle through code splitting.

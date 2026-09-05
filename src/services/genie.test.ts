@@ -27,6 +27,40 @@ describe('parseGenieContent', () => {
   it('supports plain text responses', () => {
     expect(parseGenieContent('当前状态稳定。')).toEqual({ text: '当前状态稳定。' })
   })
+
+  it('normalizes explicit visual percentages from the user instruction', () => {
+    const result = parseGenieContent(`已生成画面调节组件。
+<widget>
+{"version":"1.0","type":"visual-adjustment","title":"调整画面","detail":"提高主体质感","actionLabel":"预览调整","props":{"settings":{"brightness":1,"contrast":1,"warmth":0.3}}}
+</widget>`, '亮度 10，对比度 5，暖色 3')
+
+    expect(result.widget).toMatchObject({
+      props: {
+        settings: {
+          brightness: 1.1,
+          contrast: 1.05,
+          warmth: 0.03,
+        },
+      },
+    })
+  })
+
+  it('only overrides explicit visual fields and clamps them to valid ranges', () => {
+    const result = parseGenieContent(`保持当前对比度。
+<widget>
+{"version":"1.0","type":"visual-adjustment","title":"调整画面","detail":"提高主体质感","actionLabel":"预览调整","props":{"settings":{"brightness":1.2,"contrast":1.08,"warmth":0.1}}}
+</widget>`, '补光设置为 80%，暖肤 -5')
+
+    expect(result.widget).toMatchObject({
+      props: {
+        settings: {
+          brightness: 1.6,
+          contrast: 1.08,
+          warmth: 0,
+        },
+      },
+    })
+  })
 })
 
 describe('askGenie', () => {
