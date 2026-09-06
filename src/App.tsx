@@ -11,6 +11,7 @@ import {
   CircleStop,
   Gamepad2,
   Gift,
+  History,
   LayoutTemplate,
   Lightbulb,
   LoaderCircle,
@@ -62,6 +63,16 @@ import {
   recommendCameraEffects,
   type CameraEffects,
 } from './capabilities/video/cameraEffects'
+import {
+  STREAM_THEMES,
+  formatLastLiveTime,
+  getStreamTheme,
+  loadLastLiveConfig,
+  recognizeStreamTheme,
+  saveLastLiveConfig,
+  type LastLiveConfig,
+  type StreamThemeId,
+} from './capabilities/onboarding/onboarding'
 import { Adjustment } from './components/genie/Adjustment'
 import { WidgetRenderer } from './components/genie/WidgetRenderer'
 import { CameraEffectsCanvas } from './components/studio/CameraEffectsCanvas'
@@ -165,7 +176,12 @@ function App() {
   const [streamType, setStreamType] = useState<StreamKind>('music')
   const [streamTopic, setStreamTopic] = useState('晚间唱歌聊天')
   const [onboardingInput, setOnboardingInput] = useState('')
-  const [selectedEntryCategory, setSelectedEntryCategory] = useState<StreamKind | 'other' | null>(null)
+  const [lastLiveConfig, setLastLiveConfig] = useState<LastLiveConfig | null>(() =>
+    loadLastLiveConfig(),
+  )
+  const [selectedEntryCategory, setSelectedEntryCategory] = useState<StreamThemeId | 'other' | null>(
+    () => lastLiveConfig?.theme ?? null,
+  )
   const [scene, setScene] = useState<Scene>('quality')
   const [demoStrategy, setDemoStrategy] = useState<AudienceStrategyId>('normal')
   const [strategyMenuOpen, setStrategyMenuOpen] = useState(false)
@@ -595,33 +611,54 @@ function App() {
     })
   }
 
-  const enterPrelive = (type: StreamKind, topic: string) => {
-    setStreamType(type)
-    setStreamTopic(topic)
-    setPreliveAnnouncement(`今晚 20:00 · ${topic}`)
-    setView('prelive')
-  }
-
-  const chooseEntryCategory = (
-    category: StreamKind | 'other',
-    type: StreamKind,
-    topic: string,
-  ) => {
-    setSelectedEntryCategory(category)
-    const chatCompanion = category === 'chat'
+  const beginPrelive = (theme: StreamThemeId, topic?: string) => {
+    const finalTopic = topic?.trim() || getStreamTheme(theme).defaultTopic
+    setStreamType(theme)
+    setStreamTopic(finalTopic)
+    setPreliveAnnouncement(`今晚 20:00 · ${finalTopic}`)
+    const chatCompanion = theme === 'chat'
     setIsChatCompanion(chatCompanion)
     if (chatCompanion) {
       setPreliveLayout('portrait')
       setPreviewMode('mobile')
     }
-    enterPrelive(type, topic)
+    setView('prelive')
   }
 
-  const startWorkspace = () => {
-    const topic = onboardingInput.trim()
-    if (!topic) return
-    setIsChatCompanion(false)
-    enterPrelive(streamType, topic)
+  const selectEntryTheme = (theme: StreamThemeId | 'other') => {
+    setSelectedEntryCategory(theme)
+  }
+
+  const startFromSelectedTheme = () => {
+    if (!selectedEntryCategory || selectedEntryCategory === 'other') return
+    beginPrelive(selectedEntryCategory)
+  }
+
+  const submitOnboardingInput = () => {
+    const description = onboardingInput.trim()
+    if (!description) return
+    const theme = recognizeStreamTheme(description)
+    setSelectedEntryCategory(theme)
+    beginPrelive(theme, description)
+  }
+
+  const restoreLastLiveConfig = () => {
+    if (!lastLiveConfig) return
+    const { theme, savedConfig } = lastLiveConfig
+    setStreamType(theme)
+    setStreamTopic(savedConfig.topic)
+    setPreliveAnnouncement(`今晚 20:00 · ${savedConfig.topic}`)
+    setIsChatCompanion(savedConfig.isChatCompanion)
+    setPreliveLayout(savedConfig.layout)
+    setPreviewMode(savedConfig.layout === 'portrait' ? 'mobile' : 'studio')
+    setChatTextEnabled(savedConfig.chatTextEnabled)
+    setChatTextValue(savedConfig.chatTextValue || defaultChatText)
+    setChatTextDraft(savedConfig.chatTextValue || defaultChatText)
+    setChatGoalEnabled(savedConfig.chatGoalEnabled)
+    setCompletedPreliveTasks(preliveTasks.map((task) => task.id))
+    setPreliveTaskIndex(0)
+    setSelectedEntryCategory(theme)
+    setView('prelive')
   }
 
   const previewSuggestion = (widgetSpec: WidgetSpec = activeWidgetSpec) => {
@@ -888,6 +925,22 @@ function App() {
   }
 
   const startLiveFromPrelive = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    const lastConfig: LastLiveConfig = {
+      theme: streamType,
+      themeName: getStreamTheme(streamType).name,
+      lastLiveTime: new Date().toISOString(),
+      savedConfig: {
+        topic: streamTopic,
+        isChatCompanion,
+        layout: preliveLayout,
+        chatTextEnabled,
+        chatTextValue: chatTextValue,
+        chatGoalEnabled,
+        completedTaskIds: completedPreliveTasks,
+      },
+    }
+    saveLastLiveConfig(lastConfig)
+    setLastLiveConfig(lastConfig)
     if (prelivePollEnabled) {
       studioToolRegistry.execute('studio.configure_poll', {
         mode: 'apply',
@@ -1113,21 +1166,59 @@ function App() {
         <section className="welcome-card">
           <div className="genie-beacon" aria-hidden="true"><div><Sparkles size={26} fill="currentColor" /></div></div>
           <span className="eyebrow"><i />LIVE STUDIO GENIE</span>
-          <h1>要开启你的直播<span>之旅</span>了吗！<br />先告诉我，你今天想播什么？</h1>
-          <p>选一个方向，或者用你自己的话告诉精灵。</p>
-          <div className="stream-options" role="list" aria-label="直播问题类别">
-            <StreamOption icon={<MessageCircle />} label="聊天陪伴" active={selectedEntryCategory === 'chat'} onClick={() => chooseEntryCategory('chat', 'chat', '轻松聊天陪伴')} />
-            <StreamOption icon={<Music2 />} label="音乐现场" active={selectedEntryCategory === 'music'} onClick={() => chooseEntryCategory('music', 'music', '晚间音乐现场')} />
-            <StreamOption icon={<Gamepad2 />} label="游戏直播" active={selectedEntryCategory === 'game'} onClick={() => chooseEntryCategory('game', 'game', '今晚游戏挑战')} />
-            <StreamOption icon={<Sparkles />} label="其他" active={selectedEntryCategory === 'other'} onClick={() => chooseEntryCategory('other', 'chat', '我的主题直播')} />
+          <h1>陪伴你的<span>直播旅程</span></h1>
+          <p>今天想播什么？告诉我，我来帮你准备。</p>
+          <div className="stream-options" role="list" aria-label="直播主题">
+            {STREAM_THEMES.map((theme) => (
+              <StreamOption
+                key={theme.id}
+                icon={themeIcon(theme.id)}
+                label={theme.name}
+                active={selectedEntryCategory === theme.id}
+                onClick={() => selectEntryTheme(theme.id)}
+              />
+            ))}
+            <StreamOption
+              icon={<Sparkles />}
+              label="其他"
+              active={selectedEntryCategory === 'other'}
+              onClick={() => selectEntryTheme('other')}
+            />
           </div>
-          <form className="theme-input" onSubmit={(event) => { event.preventDefault(); startWorkspace() }}>
-            <WandSparkles size={17} />
-            <input value={onboardingInput} onChange={(event) => setOnboardingInput(event.target.value)} placeholder="用一句话描述今晚的直播…（或从上方选一个方向）" aria-label="本场主题" />
-            <button type="submit" aria-label="生成工作台" disabled={!onboardingInput.trim()}>召唤精灵 <ArrowLeft size={16} className="arrow-forward" /></button>
-          </form>
+          {lastLiveConfig && (
+            <button type="button" className="history-restore-card" onClick={restoreLastLiveConfig}>
+              <span className="history-restore-icon"><History size={17} /></span>
+              <span className="history-restore-body">
+                <b>沿用历史直播设置</b>
+                <small>点击恢复主播上场保存的直播配置</small>
+              </span>
+              <span className="history-restore-meta">
+                <em>{lastLiveConfig.themeName}</em>
+                {lastLiveConfig.lastLiveTime && (
+                  <i>{formatLastLiveTime(lastLiveConfig.lastLiveTime)}</i>
+                )}
+              </span>
+              <ArrowLeft size={15} className="arrow-forward" />
+            </button>
+          )}
+          {selectedEntryCategory === 'other' && (
+            <form className="theme-input" onSubmit={(event) => { event.preventDefault(); submitOnboardingInput() }}>
+              <WandSparkles size={17} />
+              <input value={onboardingInput} onChange={(event) => setOnboardingInput(event.target.value)} placeholder="用一句话描述你今天的直播..." aria-label="本场主题" autoFocus />
+              <button type="submit" aria-label="识别主题并开始准备" disabled={!onboardingInput.trim()}>确认 <ArrowLeft size={16} className="arrow-forward" /></button>
+            </form>
+          )}
+          {selectedEntryCategory !== 'other' && (
+            <button
+              type="button"
+              className="onboarding-start-button"
+              disabled={!selectedEntryCategory}
+              onClick={startFromSelectedTheme}
+            >
+              <Sparkles size={16} />开始准备
+            </button>
+          )}
         </section>
-        <button className="professional-mode" type="button" onClick={() => { setIsChatCompanion(false); enterPrelive('music', '晚间唱歌聊天') }}><i />我很熟，直接进入专业模式 <ArrowLeft size={15} className="arrow-forward" /></button>
       </main>
     )
   }
@@ -1477,6 +1568,12 @@ function App() {
 
 function StreamOption({ icon, label, active, onClick }: { icon: ReactNode; label: string; active: boolean; onClick: () => void }) {
   return <button type="button" className={`stream-option ${active ? 'active' : ''}`} onClick={onClick}>{icon}<span>{label}</span>{active && <Check size={14} />}</button>
+}
+
+function themeIcon(theme: StreamThemeId) {
+  if (theme === 'music') return <Music2 />
+  if (theme === 'game') return <Gamepad2 />
+  return <MessageCircle />
 }
 
 function StrategyIcon({ strategyId }: { strategyId: AudienceStrategyId }) {
