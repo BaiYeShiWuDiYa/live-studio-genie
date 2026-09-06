@@ -22,6 +22,8 @@ import {
   RotateCcw,
   Send,
   Sparkles,
+  Target,
+  Type,
   Users,
   WandSparkles,
   WifiOff,
@@ -66,6 +68,7 @@ import { CameraEffectsCanvas } from './components/studio/CameraEffectsCanvas'
 import { EditableCameraLayer } from './components/studio/EditableCameraLayer'
 import { LiveGoal } from './components/studio/LiveGoal'
 import { LivePoll } from './components/studio/LivePoll'
+import { CanvasGoalRing, CanvasTextSource, type WidgetOffset } from './components/studio/PreliveCanvasWidgets'
 import {
   audienceStrategies,
   doesSuggestionResolveStrategy,
@@ -132,6 +135,12 @@ const preliveTasks: Array<{ id: PreliveTask; title: string; detail: string; acti
   { id: 'interaction', title: '互动预热与开场', detail: '配置预热文案和首屏点歌投票，降低新观众的互动门槛。', action: '保存互动方案', priority: '可选增强' },
 ]
 
+const chatLayoutTaskTitle = '完成直播布局调整'
+const chatLayoutTaskDetail = '已根据你的直播内容推荐全屏摄像头布局，可选择画布小组件，可在画布中调整位置'
+const defaultChatText = 'Good things will happen today ❤️'
+const defaultChatGoal = { label: 'Good things happen today ❤️', current: 0, target: 60000 }
+type CanvasWidgetKind = 'text' | 'goal'
+
 const emptyAudienceSnapshot: AudienceSnapshot = {
   comments: [],
   gifts: [],
@@ -188,6 +197,14 @@ function App() {
   const [preliveCoverApplied, setPreliveCoverApplied] = useState(false)
   const [prelivePollEnabled, setPrelivePollEnabled] = useState(true)
   const [prelivePollQuestion, setPrelivePollQuestion] = useState('下一首唱什么？')
+  const [isChatCompanion, setIsChatCompanion] = useState(false)
+  const [chatTextEnabled, setChatTextEnabled] = useState(true)
+  const [chatTextDraft, setChatTextDraft] = useState(defaultChatText)
+  const [chatTextValue, setChatTextValue] = useState(defaultChatText)
+  const [chatGoalEnabled, setChatGoalEnabled] = useState(false)
+  const [selectedCanvasWidget, setSelectedCanvasWidget] = useState<CanvasWidgetKind | null>(null)
+  const [chatTextOffset, setChatTextOffset] = useState<WidgetOffset>({ x: 0, y: 0 })
+  const [chatGoalOffset, setChatGoalOffset] = useState<WidgetOffset>({ x: 0, y: 0 })
   const readyScore = 20 + completedPreliveTasks.length * 20
   const [genieInput, setGenieInput] = useState('')
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
@@ -596,12 +613,19 @@ function App() {
     topic: string,
   ) => {
     setSelectedEntryCategory(category)
+    const chatCompanion = category === 'chat'
+    setIsChatCompanion(chatCompanion)
+    if (chatCompanion) {
+      setPreliveLayout('portrait')
+      setPreviewMode('mobile')
+    }
     enterPrelive(type, topic)
   }
 
   const startWorkspace = () => {
     const topic = onboardingInput.trim()
     if (!topic) return
+    setIsChatCompanion(false)
     enterPrelive(streamType, topic)
   }
 
@@ -1095,7 +1119,7 @@ function App() {
             <button type="submit" aria-label="生成工作台" disabled={!onboardingInput.trim()}>召唤精灵 <ArrowLeft size={16} className="arrow-forward" /></button>
           </form>
         </section>
-        <button className="professional-mode" type="button" onClick={() => enterPrelive('music', '晚间唱歌聊天')}><i />我很熟，直接进入专业模式 <ArrowLeft size={15} className="arrow-forward" /></button>
+        <button className="professional-mode" type="button" onClick={() => { setIsChatCompanion(false); enterPrelive('music', '晚间唱歌聊天') }}><i />我很熟，直接进入专业模式 <ArrowLeft size={15} className="arrow-forward" /></button>
       </main>
     )
   }
@@ -1196,7 +1220,17 @@ function App() {
             <button type="button" className={previewMode === 'mobile' ? 'selected' : ''} onClick={() => setPreviewMode('mobile')}>移动端预览</button>
             <button type="button" className={previewMode === 'studio' ? 'selected' : ''} onClick={() => setPreviewMode('studio')}>Studio 视图</button>
           </div>
-          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} strategy={strategyCommentState === 'issue' ? demoStrategy : 'normal'} liveAdjustment={liveAdjustment} previewMode={previewMode} isPreviewing={isSuggestionPreview} audience={audienceSnapshot} isLive={view === 'live'} preliveTitle={streamTopic} preliveLayout={preliveLayout} />
+          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} strategy={strategyCommentState === 'issue' ? demoStrategy : 'normal'} liveAdjustment={liveAdjustment} previewMode={previewMode} isPreviewing={isSuggestionPreview} audience={audienceSnapshot} isLive={view === 'live'} preliveTitle={streamTopic} preliveLayout={preliveLayout} chatWidgets={isChatCompanion ? {
+            text: chatTextEnabled ? chatTextValue : '',
+            goalVisible: chatGoalEnabled,
+            goal: defaultChatGoal,
+            selectedWidget: selectedCanvasWidget,
+            onSelectWidget: setSelectedCanvasWidget,
+            textOffset: chatTextOffset,
+            goalOffset: chatGoalOffset,
+            onTextOffsetChange: setChatTextOffset,
+            onGoalOffsetChange: setChatGoalOffset,
+          } : null} />
           {(cameraError || displayError || backgroundMusicError) && <p className="camera-warning">{displayError || cameraError || backgroundMusicError}</p>}
           <div className="stage-controls">
             <button type="button" className="control-button" onClick={enableCamera}><Camera size={18} /><span>{cameraEnabled ? '摄像头已连接' : '开启摄像头'}</span></button>
@@ -1207,7 +1241,7 @@ function App() {
             <button type="button" className={`control-button ${isLayoutEditing ? 'active-control' : ''}`} disabled={!displayStream} onClick={() => setIsLayoutEditing((editing) => !editing)}><LayoutTemplate size={18} /><span>{isLayoutEditing ? '锁定布局' : '编辑布局'}</span></button>
             {displayStream && isLayoutEditing && <button type="button" className="control-button" onClick={resetCameraLayerLayout}><RotateCcw size={18} /><span>重置布局</span></button>}
             <button type="button" className={`control-button ${pollStatus !== 'hidden' ? 'active-control' : ''}`} onClick={togglePollWidget}><LayoutTemplate size={18} /><span>{pollStatus !== 'hidden' ? '隐藏组件' : '互动组件'}</span></button>
-            <button type="button" className={`pk-launch ${isPk ? 'active' : ''}`} onClick={() => changeScene(isPk ? 'quality' : 'pk')}><Users size={17} />{isPk ? '结束 PK' : '发起 PK'}</button>
+            {view === 'live' && <button type="button" className={`pk-launch ${isPk ? 'active' : ''}`} onClick={() => changeScene(isPk ? 'quality' : 'pk')}><Users size={17} />{isPk ? '结束 PK' : '发起 PK'}</button>}
           </div>
           {view === 'prelive' && (
             <div className="prelive-go-live-bar">
@@ -1361,6 +1395,14 @@ function App() {
                       warmupCopy={preliveWarmupCopy}
                       pollEnabled={prelivePollEnabled}
                       pollQuestion={prelivePollQuestion}
+                      isChatCompanion={isChatCompanion}
+                      chatTextEnabled={chatTextEnabled}
+                      chatTextDraft={chatTextDraft}
+                      chatGoalEnabled={chatGoalEnabled}
+                      onChatTextEnabledChange={setChatTextEnabled}
+                      onChatTextDraftChange={setChatTextDraft}
+                      onChatTextApply={() => setChatTextValue(chatTextDraft)}
+                      onChatGoalEnabledChange={setChatGoalEnabled}
                       onLayoutChange={(layout) => {
                         setPreliveLayout(layout)
                         setPreviewMode(layout === 'portrait' ? 'mobile' : 'studio')
@@ -1629,7 +1671,19 @@ function PreliveChecklist({
   </div>
 }
 
-function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, isPk, applied, scene, strategy, liveAdjustment, previewMode, isPreviewing, audience, isLive, preliveTitle, preliveLayout }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; displayStream: MediaStream | null; layoutEditing: boolean; isPk: boolean; applied: boolean; scene: Scene; strategy: AudienceStrategyId; liveAdjustment: LiveAdjustment | null; previewMode: PreviewMode; isPreviewing: boolean; audience: AudienceSnapshot; isLive: boolean; preliveTitle: string; preliveLayout: PreliveLayout }) {
+type ChatCanvasWidgets = {
+  text: string
+  goalVisible: boolean
+  goal: { label: string; current: number; target: number }
+  selectedWidget: CanvasWidgetKind | null
+  onSelectWidget: (widget: CanvasWidgetKind | null) => void
+  textOffset: WidgetOffset
+  goalOffset: WidgetOffset
+  onTextOffsetChange: (offset: WidgetOffset) => void
+  onGoalOffsetChange: (offset: WidgetOffset) => void
+}
+
+function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, isPk, applied, scene, strategy, liveAdjustment, previewMode, isPreviewing, audience, isLive, preliveTitle, preliveLayout, chatWidgets }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; displayStream: MediaStream | null; layoutEditing: boolean; isPk: boolean; applied: boolean; scene: Scene; strategy: AudienceStrategyId; liveAdjustment: LiveAdjustment | null; previewMode: PreviewMode; isPreviewing: boolean; audience: AudienceSnapshot; isLive: boolean; preliveTitle: string; preliveLayout: PreliveLayout; chatWidgets: ChatCanvasWidgets | null }) {
   const displayVideoRef = useRef<HTMLVideoElement>(null)
   const visualSettings = useStudioStore((state) => state.visualSettings)
   const previewStyle = {
@@ -1650,7 +1704,10 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
   return <div style={previewStyle} className={`live-stage ${applied ? 'applied' : ''} ${isPreviewing ? 'previewing' : ''} ${isPk ? 'pk-stage' : ''} scene-${scene} ${previewMode === 'studio' ? 'studio-preview' : 'mobile-preview'} ${!isLive ? `prelive-${preliveLayout}` : ''}`}>
     <div className="stage-glow" />
     <div className="scan-lines" />
-    <div className={`host-stage ${displayStream ? 'screen-sharing' : ''}`}>
+    <div
+      className={`host-stage ${displayStream ? 'screen-sharing' : ''}`}
+      onPointerDown={() => chatWidgets?.onSelectWidget(null)}
+    >
       {displayStream
         ? <>
             <video ref={displayVideoRef} autoPlay muted playsInline className="screen-feed" />
@@ -1673,6 +1730,28 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
       {liveAdjustment && <div className="adjustment-toast"><Zap size={14} /><div><b>{liveAdjustment.name}</b><span>{liveAdjustment.detail}</span></div></div>}
       <LivePoll />
       <LiveGoal />
+      {chatWidgets && (
+        <>
+          <CanvasTextSource
+            text={chatWidgets.text}
+            selected={chatWidgets.selectedWidget === 'text'}
+            onSelect={() => chatWidgets.onSelectWidget('text')}
+            offset={chatWidgets.textOffset}
+            onOffsetChange={chatWidgets.onTextOffsetChange}
+          />
+          {chatWidgets.goalVisible && (
+            <CanvasGoalRing
+              label={chatWidgets.goal.label}
+              current={chatWidgets.goal.current}
+              target={chatWidgets.goal.target}
+              selected={chatWidgets.selectedWidget === 'goal'}
+              onSelect={() => chatWidgets.onSelectWidget('goal')}
+              offset={chatWidgets.goalOffset}
+              onOffsetChange={chatWidgets.onGoalOffsetChange}
+            />
+          )}
+        </>
+      )}
     </div>
     {isPk && <><div className="pk-versus">VS</div><div className="opponent-stage"><DemoOpponent /><div className="stage-label opponent"><span />陈妍</div></div><div className="pk-scorebar"><div><b>8,740</b><span>林小满</span></div><strong>01:18</strong><div><b>10,000</b><span>陈妍</span></div></div></>}
     {isLive && <div className="floating-comments">
@@ -1704,6 +1783,14 @@ function PreliveTaskCard({
   coverApplied,
   pollEnabled,
   pollQuestion,
+  isChatCompanion,
+  chatTextEnabled,
+  chatTextDraft,
+  chatGoalEnabled,
+  onChatTextEnabledChange,
+  onChatTextDraftChange,
+  onChatTextApply,
+  onChatGoalEnabledChange,
   onLayoutChange,
   onTitleChange,
   onScriptChange,
@@ -1734,6 +1821,14 @@ function PreliveTaskCard({
   coverApplied: boolean
   pollEnabled: boolean
   pollQuestion: string
+  isChatCompanion: boolean
+  chatTextEnabled: boolean
+  chatTextDraft: string
+  chatGoalEnabled: boolean
+  onChatTextEnabledChange: (enabled: boolean) => void
+  onChatTextDraftChange: (draft: string) => void
+  onChatTextApply: () => void
+  onChatGoalEnabledChange: (enabled: boolean) => void
   onLayoutChange: (layout: PreliveLayout) => void
   onTitleChange: (title: string) => void
   onScriptChange: (script: string) => void
@@ -1752,6 +1847,9 @@ function PreliveTaskCard({
 }) {
   const visualSettings = useStudioStore((state) => state.visualSettings)
   const audioSettings = useStudioStore((state) => state.audioSettings)
+  const isChatLayout = isChatCompanion && task.id === 'layout'
+  const cardTitle = isChatLayout ? chatLayoutTaskTitle : task.title
+  const cardDetail = isChatLayout ? chatLayoutTaskDetail : task.detail
   const canApply = task.id !== 'content'
     ? task.id !== 'interaction' || (
         warmupCopy.trim().length > 0 &&
@@ -1771,13 +1869,44 @@ function PreliveTaskCard({
       <span className="card-kicker">{task.priority} · 任务 {taskIndex + 1} / {preliveTasks.length}</span>
       {completed && <em><Check size={11} />已完成</em>}
     </div>
-    <h2>{task.title}</h2>
-    <p>{task.detail}</p>
+    <h2>{cardTitle}</h2>
+    <p>{cardDetail}</p>
     {task.id === 'layout' && (
-      <div className="task-choice-row">
-        <button type="button" className={`task-choice ${layout === 'portrait' ? 'selected' : ''}`} onClick={() => onLayoutChange('portrait')}><Camera size={15} /><span><b>单人竖屏</b><small>9:16 · 聊天 / 音乐</small></span></button>
-        <button type="button" className={`task-choice ${layout === 'stage' ? 'selected' : ''}`} onClick={() => onLayoutChange('stage')}><LayoutTemplate size={15} /><span><b>秀场舞台</b><small>16:9 · 表演 / 游戏</small></span></button>
-      </div>
+      isChatLayout ? (
+        <div className="chat-widget-picker">
+          <div className="chat-layout-recommend">
+            <Sparkles size={14} />
+            <span><b>已推荐全屏摄像头布局</b><small>单人竖屏 · 9:16，最适合聊天陪伴</small></span>
+          </div>
+          <b className="chat-widget-picker-title">画布小组件</b>
+          <label className="prelive-toggle-row chat-widget-toggle">
+            <span><Type size={15} />文字源</span>
+            <input type="checkbox" checked={chatTextEnabled} onChange={(event) => onChatTextEnabledChange(event.target.checked)} />
+          </label>
+          {chatTextEnabled && (
+            <div className="chat-text-config">
+              <input
+                value={chatTextDraft}
+                maxLength={40}
+                placeholder="输入画布上展示的文字"
+                aria-label="文字源内容"
+                onChange={(event) => onChatTextDraftChange(event.target.value)}
+              />
+              <button type="button" onClick={onChatTextApply}>更新</button>
+            </div>
+          )}
+          <label className="prelive-toggle-row chat-widget-toggle">
+            <span><Target size={15} />目标源</span>
+            <input type="checkbox" checked={chatGoalEnabled} onChange={(event) => onChatGoalEnabledChange(event.target.checked)} />
+          </label>
+          {chatGoalEnabled && <small className="chat-widget-tip">已在画布中添加环形目标，可在画布中拖动调整位置</small>}
+        </div>
+      ) : (
+        <div className="task-choice-row">
+          <button type="button" className={`task-choice ${layout === 'portrait' ? 'selected' : ''}`} onClick={() => onLayoutChange('portrait')}><Camera size={15} /><span><b>单人竖屏</b><small>9:16 · 聊天 / 音乐</small></span></button>
+          <button type="button" className={`task-choice ${layout === 'stage' ? 'selected' : ''}`} onClick={() => onLayoutChange('stage')}><LayoutTemplate size={15} /><span><b>秀场舞台</b><small>16:9 · 表演 / 游戏</small></span></button>
+        </div>
+      )
     )}
     {task.id === 'visual' && (
       <div className="prelive-adjustment-stack">
