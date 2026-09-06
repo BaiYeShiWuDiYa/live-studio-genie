@@ -52,11 +52,12 @@ import { requestCameraStream, requestDisplayStream, stopMediaStream } from './ca
 import { useMediaMonitoring } from './capabilities/monitoring/useMediaMonitoring'
 import {
   buildLiveDiagnostics,
+  type LiveDiagnostics,
   type LiveSuggestion,
 } from './capabilities/monitoring/liveDiagnostics'
 import {
   appendNewSuggestions,
-  markSuggestionSeen,
+  removeSuggestionWidget,
   type QueuedSuggestion,
 } from './capabilities/monitoring/suggestionQueue'
 import type { VisualSettings } from './capabilities/visual/types'
@@ -116,6 +117,13 @@ const goalKindOptions: ReadonlyArray<{ id: GoalKind; label: string; defaultTitle
 type PreviewMode = 'mobile' | 'studio'
 type GenieRequestStatus = 'idle' | 'loading' | 'cancelled' | 'timeout' | 'error'
 type StrategyCommentState = 'issue' | 'recovery' | 'normal'
+
+const audienceTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
+})
 
 type ChatMessage = {
   role: 'user' | 'assistant'
@@ -367,23 +375,35 @@ function App() {
     scene,
   ])
   const [suggestionQueue, setSuggestionQueue] = useState<QueuedSuggestion[]>([])
-  const [selectedSuggestionId, setSelectedSuggestionId] = useState<string | null>(null)
-  const [removingSuggestionId, setRemovingSuggestionId] = useState<string | null>(null)
+  const [previewingComponentId, setPreviewingComponentId] = useState<string | null>(null)
+  const [removingComponentIds, setRemovingComponentIds] = useState<Set<string>>(
+    () => new Set(),
+  )
   const latestDiagnosticsRef = useRef(diagnostics)
   const strategyActivatedRef = useRef(false)
   const dismissedSignalIdsRef = useRef(new Set<LiveSuggestion['signalId']>())
-  const removalTimeoutRef = useRef<number | null>(null)
-  const selectedSuggestion = suggestionQueue.find(
-    (suggestion) => suggestion.queueId === selectedSuggestionId,
-  ) ?? suggestionQueue.find(
-    (suggestion) => suggestion.queueId !== removingSuggestionId,
-  ) ?? null
-  const activeSelectedSuggestionId = selectedSuggestion?.queueId ?? null
-  const visibleWidgetSpecs = agentWidgetSpec
-    ? [agentWidgetSpec]
-    : selectedSuggestion?.widgets ?? []
+  const removalTimeoutsRef = useRef(new Map<string, number>())
+  const suggestionComponents = suggestionQueue.flatMap((suggestion) =>
+    suggestion.widgets.map((widgetSpec, widgetIndex) => ({
+      componentId: `${suggestion.queueId}-${widgetIndex}`,
+      suggestion,
+      widgetIndex,
+      widgetSpec,
+    })),
+  )
+  const recalledComponents = [
+    ...(agentWidgetSpec
+      ? [{
+          componentId: `agent-${agentWidgetSpec.type}-${agentWidgetSpec.title}`,
+          suggestion: null,
+          widgetIndex: -1,
+          widgetSpec: agentWidgetSpec,
+        }]
+      : []),
+    ...suggestionComponents,
+  ]
   const activeWidgetSpec = agentWidgetSpec
-    ?? visibleWidgetSpecs[0]
+    ?? recalledComponents[0]?.widgetSpec
     ?? getSceneWidgetSpec(scene)
 
   useEffect(() => {
@@ -414,7 +434,6 @@ function App() {
       dismissedSignalIdsRef.current,
     )
     setSuggestionQueue(nextQueue)
-    setSelectedSuggestionId(nextQueue[0]?.queueId ?? null)
     strategyActivatedRef.current = true
   }, [activeAudienceStrategy, strategyWarmupActive, view])
 
@@ -463,15 +482,15 @@ function App() {
   }, [])
 
   useEffect(() => {
+    const removalTimeouts = removalTimeoutsRef.current
     return () => {
       genieAbortRef.current?.abort()
       const backgroundImageUrl = useStudioStore.getState().cameraEffects.backgroundImageUrl
       if (backgroundImageUrl?.startsWith('blob:')) {
         URL.revokeObjectURL(backgroundImageUrl)
       }
-      if (removalTimeoutRef.current !== null) {
-        window.clearTimeout(removalTimeoutRef.current)
-      }
+      removalTimeouts.forEach((timeoutId) => window.clearTimeout(timeoutId))
+      removalTimeouts.clear()
       if (strategyRecoveryTimeoutRef.current !== null) {
         window.clearTimeout(strategyRecoveryTimeoutRef.current)
       }
@@ -609,7 +628,10 @@ function App() {
     setApplied(false)
     setAgentWidgetSpec(null)
     setSuggestionQueue([])
-    setSelectedSuggestionId(null)
+    setPreviewingComponentId(null)
+    setRemovingComponentIds(new Set())
+    removalTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId))
+    removalTimeoutsRef.current.clear()
     dismissedSignalIdsRef.current.clear()
     strategyActivatedRef.current = false
     applyVisualSettings(strategy.visualSettings)
@@ -617,20 +639,6 @@ function App() {
     setLiveAdjustment({
       name: `已切换为${strategy.label}`,
       detail: strategy.description,
-    })
-  }
-
-  const selectSuggestion = (suggestion: QueuedSuggestion) => {
-    setAgentWidgetSpec(null)
-    setSuggestionQueue((queue) => markSuggestionSeen(queue, suggestion.queueId))
-    setSelectedSuggestionId(suggestion.queueId)
-    setScene(suggestion.scene)
-    setIsPk(false)
-    setApplied(false)
-    setIsSuggestionPreview(false)
-    setLiveAdjustment({
-      name: '已选择改进建议',
-      detail: suggestion.action,
     })
   }
 
@@ -790,30 +798,46 @@ function App() {
     setIsSuggestionPreview(true)
   }
 
-  const scheduleSuggestionRemoval = (
-    queueId: string | undefined,
-    signalId: LiveSuggestion['signalId'] | undefined,
-    clearQueue = false,
+  const scheduleComponentRemoval = (
+    componentId: string | undefined,
+    suggestion: QueuedSuggestion | null,
+    widgetIndex: number,
   ) => {
-    if (!queueId || !signalId) return
+    if (!componentId) return
 
-    dismissedSignalIdsRef.current.add(signalId)
-    setRemovingSuggestionId(queueId)
-    if (removalTimeoutRef.current !== null) {
-      window.clearTimeout(removalTimeoutRef.current)
+    if (suggestion?.widgets.length === 1) {
+      dismissedSignalIdsRef.current.add(suggestion.signalId)
     }
-    removalTimeoutRef.current = window.setTimeout(() => {
-      setSuggestionQueue((queue) => clearQueue
-        ? []
-        : queue.filter((suggestion) => suggestion.queueId !== queueId))
-      setSelectedSuggestionId((currentId) =>
-        clearQueue || currentId === queueId ? null : currentId,
+    setRemovingComponentIds((currentIds) => {
+      const nextIds = new Set(currentIds)
+      nextIds.add(componentId)
+      return nextIds
+    })
+    const existingTimeout = removalTimeoutsRef.current.get(componentId)
+    if (existingTimeout !== undefined) {
+      window.clearTimeout(existingTimeout)
+    }
+    const timeoutId = window.setTimeout(() => {
+      if (suggestion) {
+        setSuggestionQueue((queue) =>
+          removeSuggestionWidget(queue, suggestion.queueId, widgetIndex),
+        )
+      } else {
+        setAgentWidgetSpec(null)
+      }
+      setRemovingComponentIds((currentIds) => {
+        const nextIds = new Set(currentIds)
+        nextIds.delete(componentId)
+        return nextIds
+      })
+      setPreviewingComponentId((currentId) =>
+        currentId === componentId ? null : currentId,
       )
-      setRemovingSuggestionId(null)
       setApplied(false)
       setIsSuggestionPreview(false)
-      removalTimeoutRef.current = null
+      removalTimeoutsRef.current.delete(componentId)
     }, 320)
+    removalTimeoutsRef.current.set(componentId, timeoutId)
   }
 
   const beginStrategyRecovery = (
@@ -844,21 +868,22 @@ function App() {
   const applySuggestion = (
     widgetSpec: WidgetSpec = activeWidgetSpec,
     suggestion: QueuedSuggestion | null = null,
+    componentId?: string,
+    widgetIndex = -1,
   ) => {
-    const resolvesStrategy = beginStrategyRecovery(suggestion)
+    beginStrategyRecovery(suggestion)
     setApplied(true)
+    const finishApplication = () => {
+      setIsSuggestionPreview(false)
+      scheduleComponentRemoval(componentId, suggestion, widgetIndex)
+    }
     if (widgetSpec.type === 'camera-effects') {
       const result = studioToolRegistry.execute('studio.adjust_camera_effects', {
         mode: 'apply',
         settings: useStudioStore.getState().cameraEffects,
       }, studioToolContext)
       setLiveAdjustment(result)
-      setIsSuggestionPreview(false)
-      scheduleSuggestionRemoval(
-        suggestion?.queueId,
-        suggestion?.signalId,
-        resolvesStrategy,
-      )
+      finishApplication()
       return
     }
 
@@ -868,12 +893,7 @@ function App() {
         settings: useStudioStore.getState().visualSettings,
       }, studioToolContext)
       setLiveAdjustment(result)
-      setIsSuggestionPreview(false)
-      scheduleSuggestionRemoval(
-        suggestion?.queueId,
-        suggestion?.signalId,
-        resolvesStrategy,
-      )
+      finishApplication()
       return
     }
 
@@ -883,12 +903,7 @@ function App() {
         settings: useStudioStore.getState().audioSettings,
       }, studioToolContext)
       setLiveAdjustment(result)
-      setIsSuggestionPreview(false)
-      scheduleSuggestionRemoval(
-        suggestion?.queueId,
-        suggestion?.signalId,
-        resolvesStrategy,
-      )
+      finishApplication()
       return
     }
 
@@ -898,12 +913,7 @@ function App() {
         config: widgetSpec.props,
       }, studioToolContext)
       setLiveAdjustment(result)
-      setIsSuggestionPreview(false)
-      scheduleSuggestionRemoval(
-        suggestion?.queueId,
-        suggestion?.signalId,
-        resolvesStrategy,
-      )
+      finishApplication()
       return
     }
 
@@ -913,22 +923,12 @@ function App() {
         config: widgetSpec.props,
       }, studioToolContext)
       setLiveAdjustment(result)
-      setIsSuggestionPreview(false)
-      scheduleSuggestionRemoval(
-        suggestion?.queueId,
-        suggestion?.signalId,
-        resolvesStrategy,
-      )
+      finishApplication()
       return
     }
 
     setLiveAdjustment(getWidgetAdjustment(widgetSpec, 'apply'))
-    setIsSuggestionPreview(false)
-    scheduleSuggestionRemoval(
-      suggestion?.queueId,
-      suggestion?.signalId,
-      resolvesStrategy,
-    )
+    finishApplication()
   }
 
   const completePreliveTask = () => {
@@ -1036,7 +1036,10 @@ function App() {
     setScene(selectedStrategy.scene)
     setIsPk(selectedStrategy.scene === 'pk')
     setSuggestionQueue([])
-    setSelectedSuggestionId(null)
+    setPreviewingComponentId(null)
+    setRemovingComponentIds(new Set())
+    removalTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId))
+    removalTimeoutsRef.current.clear()
     dismissedSignalIdsRef.current.clear()
     strategyActivatedRef.current = false
     setApplied(false)
@@ -1367,14 +1370,18 @@ function App() {
       </header>
       <section className="workspace">
         <aside className="monitor-panel panel">
-          <LiveChatPanel
-            isLive={view === 'live'}
-            cameraEnabled={cameraEnabled}
-            isMicMuted={isMicMuted}
-            audience={audienceSnapshot}
-            hostComments={hostComments}
-            onSendComment={sendHostComment}
-          />
+          {view === 'live' ? (
+            <LiveOperationsPanel audience={audienceSnapshot} diagnostics={diagnostics} />
+          ) : (
+            <LiveChatPanel
+              isLive={false}
+              cameraEnabled={cameraEnabled}
+              isMicMuted={isMicMuted}
+              audience={audienceSnapshot}
+              hostComments={hostComments}
+              onSendComment={sendHostComment}
+            />
+          )}
         </aside>
 
         <section className="stage-column">
@@ -1393,7 +1400,7 @@ function App() {
             <button type="button" className={previewMode === 'mobile' ? 'selected' : ''} onClick={() => setPreviewMode('mobile')}>移动端预览</button>
             <button type="button" className={previewMode === 'studio' ? 'selected' : ''} onClick={() => setPreviewMode('studio')}>Studio 视图</button>
           </div>
-          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} strategy={strategyCommentState === 'issue' ? demoStrategy : 'normal'} liveAdjustment={liveAdjustment} previewMode={previewMode} isPreviewing={isSuggestionPreview} audience={audienceSnapshot} isLive={view === 'live'} preliveTitle={streamTopic} preliveLayout={preliveLayout} stageBackgroundUrl={stageBackgroundUrl} chatWidgets={showCanvasWidgets ? {
+          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} strategy={strategyCommentState === 'issue' ? demoStrategy : 'normal'} liveAdjustment={liveAdjustment} previewMode={previewMode} isPreviewing={isSuggestionPreview} audience={audienceSnapshot} isLive={view === 'live'} preliveTitle={streamTopic} preliveLayout={preliveLayout} stageBackgroundUrl={stageBackgroundUrl} chatWidgets={view === 'prelive' && showCanvasWidgets ? {
             text: chatTextEnabled ? chatTextValue : '',
             goalVisible: chatGoalEnabled,
             goal: { label: chatGoalTitle, current: 0, target: chatGoalTarget },
@@ -1431,7 +1438,7 @@ function App() {
               <div className="live-genie-heading">
                 <span><i />GENIE · READY TO ASSIST</span>
                 <div className="live-follow-status">
-                  <b>{suggestionQueue.length} 条待处理</b>
+                  <b>{suggestionQueue.length} 条建议</b>
                   <span className="suggestion-sync-status"><i />每分钟同步</span>
                 </div>
               </div>
@@ -1442,33 +1449,29 @@ function App() {
                 </div>
                 <div className="generated-suggestion-list" role="list">
                   {suggestionQueue.map((suggestion) => (
-                    <button
+                    <article
                       aria-label={`${suggestion.metric}，建议：${suggestion.action}`}
-                      aria-pressed={activeSelectedSuggestionId === suggestion.queueId}
                       className={[
                         'generated-suggestion',
                         `tone-${suggestion.tone}`,
-                        activeSelectedSuggestionId === suggestion.queueId ? 'is-selected' : '',
                         suggestion.isNew ? 'is-new' : '',
-                        removingSuggestionId === suggestion.queueId ? 'is-removing' : '',
+                        suggestion.widgets.length === 0 ? 'is-resolved' : '',
                       ].filter(Boolean).join(' ')}
                       key={suggestion.queueId}
-                      onClick={() => selectSuggestion(suggestion)}
                       role="listitem"
-                      type="button"
                     >
                       <span className="suggestion-item-heading">
                         <b>{suggestion.metric}</b>
                         <em>
-                          {suggestion.isNew
-                            ? '新增'
-                            : activeSelectedSuggestionId === suggestion.queueId
-                              ? '已选中'
+                          {suggestion.widgets.length === 0
+                            ? '已应用'
+                            : suggestion.isNew
+                              ? '新增'
                               : '待处理'}
                         </em>
                       </span>
                       <span className="suggestion-item-description">{suggestion.action}</span>
-                    </button>
+                    </article>
                   ))}
                   {suggestionQueue.length === 0 && (
                     <div className="suggestion-empty-state" role="status">
@@ -1482,41 +1485,56 @@ function App() {
               <section className="live-recommendations" aria-label="建议对应组件">
                 <div className="component-recall-heading">
                   <span><Zap size={13} />对应组件</span>
-                  <b>{agentWidgetSpec?.title ?? selectedSuggestion?.metric ?? '等待选择建议'}</b>
-                  <small>
-                    {agentWidgetSpec
-                      ? '由 Genie 对话生成'
-                      : selectedSuggestion
-                        ? `${selectedSuggestion.widgets.length} 个可操作组件`
-                        : '从上方建议列表中选择'}
-                  </small>
+                  <b>全部建议的可操作组件</b>
+                  <small>{recalledComponents.length} 个待应用</small>
                 </div>
                 <div className="recalled-component-list">
-                  {visibleWidgetSpecs.map((widgetSpec, index) => (
+                  {recalledComponents.map(({
+                    componentId,
+                    suggestion,
+                    widgetIndex,
+                    widgetSpec,
+                  }) => (
                     <div
-                      className={`recalled-component-item ${removingSuggestionId === selectedSuggestion?.queueId ? 'is-removing' : ''}`}
-                      key={`${widgetSpec.type}-${widgetSpec.title}-${index}`}
+                      className={`recalled-component-item ${removingComponentIds.has(componentId) ? 'is-removing' : ''}`}
+                      key={componentId}
                     >
+                      <div className="component-source-heading">
+                        <span>{suggestion?.metric ?? 'Genie 对话建议'}</span>
+                        <small>{suggestion ? '实时监控召回' : '对话生成'}</small>
+                      </div>
                       <WidgetRenderer
                         spec={widgetSpec}
-                        applied={applied}
-                        isPreviewing={isSuggestionPreview}
-                        onPreview={() => previewSuggestion(widgetSpec)}
+                        applied={applied && removingComponentIds.has(componentId)}
+                        isPreviewing={isSuggestionPreview && previewingComponentId === componentId}
+                        onPreview={() => {
+                          setPreviewingComponentId(componentId)
+                          if (suggestion) {
+                            setScene(suggestion.scene)
+                            setIsPk(false)
+                          }
+                          previewSuggestion(widgetSpec)
+                        }}
                         onApply={() => applySuggestion(
                           widgetSpec,
-                          agentWidgetSpec ? null : selectedSuggestion,
+                          suggestion,
+                          componentId,
+                          widgetIndex,
                         )}
-                        onUndo={() => undoSuggestion(widgetSpec)}
+                        onUndo={() => {
+                          setPreviewingComponentId(null)
+                          undoSuggestion(widgetSpec)
+                        }}
                         onAudioChange={updateAudioPreview}
                         onVisualChange={updateVisualPreview}
                         onCameraEffectsChange={updateCameraEffectsPreview}
                       />
                     </div>
                   ))}
-                  {visibleWidgetSpecs.length === 0 && (
+                  {recalledComponents.length === 0 && (
                     <div className="component-empty-state">
                       <LayoutTemplate size={18} />
-                      <span>选择建议后将在此显示对应组件</span>
+                      <span>暂无待应用组件</span>
                     </div>
                   )}
                 </div>
@@ -1668,6 +1686,95 @@ function StrategyIcon({ strategyId }: { strategyId: AudienceStrategyId }) {
   if (strategyId === 'network-lag') return <WifiOff size={15} />
   if (strategyId === 'pk-push') return <Users size={15} />
   return <Activity size={15} />
+}
+
+function LiveOperationsPanel({ audience, diagnostics }: {
+  audience: AudienceSnapshot
+  diagnostics: LiveDiagnostics
+}) {
+  const commentListRef = useRef<HTMLDivElement>(null)
+  const newestCommentId = audience.comments.at(-1)?.id
+  const gifts = [
+    { icon: '🌹', user: audience.gifts[0]?.userName ?? 'Luna', gift: 'Rose', count: audience.gifts[0]?.count ?? 5, time: '12:41:30' },
+    { icon: '♪', user: 'Alex', gift: 'TikTok', count: 1, time: '12:42:02' },
+    { icon: '♥', user: audience.gifts[1]?.userName ?? 'Mie', gift: 'Heart', count: audience.gifts[1]?.count ?? 10, time: '12:42:10' },
+  ]
+
+  useEffect(() => {
+    const commentList = commentListRef.current
+    if (commentList) {
+      commentList.scrollTop = commentList.scrollHeight
+    }
+  }, [newestCommentId])
+
+  return (
+    <div className="live-operations">
+      <section className="indicator-section" aria-label="实时指标">
+        <h2>Real-time Indicators</h2>
+        <span className="monitoring-summary"><i />实时采样中 · {diagnostics.healthyCount} 项正常</span>
+        <section className="metric-group good-metrics" aria-label="做得好的">
+          <h3><Check size={13} />做得好的</h3>
+          <div className="indicator-list">
+            {diagnostics.goodSignals.map((indicator) => <IndicatorRow key={indicator.id} {...indicator} />)}
+          </div>
+        </section>
+        <section className="metric-group improvement-metrics" aria-label="需要改进的">
+          <h3><Zap size={13} />需要改进的</h3>
+          <div className="indicator-list improvement-list">
+            {diagnostics.improvements.map((indicator) => <IndicatorRow key={indicator.id} {...indicator} />)}
+          </div>
+        </section>
+      </section>
+      <section className="activity-section gift-activity">
+        <h2>Gift</h2>
+        {gifts.map((gift, index) => (
+          <div className={index === 1 ? 'activity-row highlighted' : 'activity-row'} key={`${gift.user}-${gift.gift}`}>
+            <i>{gift.icon}</i>
+            <span><b>{gift.user}</b> 送出 <em>{gift.gift}</em> ×{gift.count}</span>
+            <time>{gift.time}</time>
+          </div>
+        ))}
+      </section>
+      <section className="activity-section comment-activity">
+        <h2>Comment</h2>
+        <div className="prototype-comment-list" ref={commentListRef} role="log" aria-label="实时评论列表" aria-live="polite" tabIndex={0}>
+          {audience.comments.map((comment, index) => (
+            <div className="prototype-comment" key={comment.id}>
+              <i className={`avatar avatar-${index % 4 + 1}`}>{comment.userName.slice(0, 1)}</i>
+              <span><b>{comment.userName}:</b> {comment.text}</span>
+              <time dateTime={new Date(comment.occurredAt).toISOString()}>
+                {audienceTimeFormatter.format(comment.occurredAt)}
+              </time>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function IndicatorRow({ label, value, score, tone, direction, trendLabel, audio = false }: {
+  label: string
+  value: string
+  score: number
+  tone: string
+  direction: 'up' | 'down'
+  trendLabel: string
+  audio?: boolean
+}) {
+  const displayValue = label === '人脸构图'
+    ? value.replace('人脸 ', '')
+    : value
+
+  return (
+    <div className={`indicator-row ${tone}`}>
+      <span className="indicator-label"><i />{label}</span>
+      {audio
+        ? <span className="audio-wave" aria-hidden="true">{Array.from({ length: 17 }, (_, index) => <i key={index} />)}</span>
+        : <span className="indicator-track"><i style={{ width: `${Math.max(8, Math.min(100, score))}%` }} /></span>}
+      <b>{displayValue}<em>{direction === 'up' ? ` ${trendLabel} ↑` : ` ${trendLabel} ↓`}</em></b>
+    </div>
+  )
 }
 
 function getWidgetAdjustment(spec: WidgetSpec, mode: 'preview' | 'apply'): LiveAdjustment {

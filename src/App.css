@@ -3282,7 +3282,6 @@
 
 .generated-suggestion {
   position: relative;
-  appearance: none;
   width: 100%;
   min-width: 0;
   min-height: clamp(52px, 4.2vw, 82px);
@@ -3296,7 +3295,6 @@
   border-radius: 7px;
   background: rgba(49, 44, 51, 0.64);
   color: #ddd5db;
-  cursor: pointer;
   animation: suggestion-in 260ms ease both;
   transition:
     border-color 160ms ease,
@@ -3305,24 +3303,13 @@
     transform 260ms ease;
 }
 
-.generated-suggestion:hover {
-  border-color: rgba(150, 139, 150, 0.62);
-  background: rgba(61, 55, 62, 0.76);
-}
-
-.generated-suggestion:focus-visible {
-  outline: 2px solid #75dfbd;
-  outline-offset: 2px;
-}
-
 .generated-suggestion.tone-bad {
   border-color: rgba(230, 91, 116, 0.42);
 }
 
-.generated-suggestion.is-selected {
-  border-color: rgba(111, 226, 182, 0.7);
-  background: rgba(56, 103, 88, 0.42);
-  color: #dffff3;
+.generated-suggestion.is-resolved {
+  border-color: rgba(117, 223, 189, 0.22);
+  background: rgba(42, 57, 52, 0.38);
 }
 
 .generated-suggestion.is-new::before {
@@ -3364,10 +3351,14 @@
   font-style: normal;
 }
 
-.generated-suggestion.is-new .suggestion-item-heading em,
-.generated-suggestion.is-selected .suggestion-item-heading em {
+.generated-suggestion.is-new .suggestion-item-heading em {
   background: rgba(92, 197, 163, 0.16);
   color: #9edfc9;
+}
+
+.generated-suggestion.is-resolved .suggestion-item-heading em {
+  background: rgba(92, 197, 163, 0.12);
+  color: #83cdb4;
 }
 
 .suggestion-item-description {
@@ -3379,11 +3370,6 @@
   white-space: nowrap;
 }
 
-.generated-suggestion.is-selected .suggestion-item-description {
-  color: #cbe8de;
-}
-
-.generated-suggestion.is-removing,
 .recalled-component-item.is-removing {
   pointer-events: none;
   opacity: 0;
@@ -3474,7 +3460,34 @@
 
 .recalled-component-item {
   min-width: 0;
+  display: grid;
+  gap: 6px;
   transition: opacity 260ms ease, transform 260ms ease;
+}
+
+.component-source-heading {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 2px;
+}
+
+.component-source-heading span {
+  min-width: 0;
+  overflow: hidden;
+  color: #d9d0d6;
+  font-size: clamp(8px, 0.62vw, 13px);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.component-source-heading small {
+  flex: none;
+  color: #7cbeaa;
+  font-size: clamp(7px, 0.5vw, 10px);
 }
 
 .live-app .recommendation-card {

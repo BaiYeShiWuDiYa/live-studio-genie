@@ -4,6 +4,7 @@ import type { LiveSuggestion } from './liveDiagnostics'
 import {
   appendNewSuggestions,
   markSuggestionSeen,
+  removeSuggestionWidget,
 } from './suggestionQueue'
 
 const suggestion = (
@@ -76,5 +77,50 @@ describe('suggestion queue', () => {
     const result = markSuggestionSeen(queue, queue[0].queueId)
 
     expect(result.map((item) => item.isNew)).toEqual([false, true])
+  })
+
+  it('removes only the applied widget and keeps its suggestion history', () => {
+    const queue = appendNewSuggestions(
+      [],
+      [suggestion('comments'), suggestion('retention')],
+      new Set(),
+      100,
+    )
+    queue[0].widgets.push({
+      ...queue[0].widgets[0],
+      title: 'comments secondary widget',
+    })
+
+    const result = removeSuggestionWidget(queue, queue[0].queueId, 0)
+
+    expect(result).toHaveLength(2)
+    expect(result[0].signalId).toBe('comments')
+    expect(result[0].isNew).toBe(false)
+    expect(result[0].widgets.map((widget) => widget.title)).toEqual([
+      'comments secondary widget',
+    ])
+    expect(result[1]).toBe(queue[1])
+  })
+
+  it('can append a recurring issue after its historical card was applied', () => {
+    const queue = appendNewSuggestions([], [suggestion('comments')], new Set(), 100)
+    const history = removeSuggestionWidget(queue, queue[0].queueId, 0)
+    const suppressed = appendNewSuggestions(
+      history,
+      [suggestion('comments')],
+      new Set<LiveSuggestion['signalId']>(['comments']),
+      200,
+    )
+    const recurring = appendNewSuggestions(
+      history,
+      [suggestion('comments')],
+      new Set(),
+      300,
+    )
+
+    expect(suppressed).toBe(history)
+    expect(recurring).toHaveLength(2)
+    expect(recurring[0].widgets).toEqual([])
+    expect(recurring[1].widgets).toHaveLength(1)
   })
 })

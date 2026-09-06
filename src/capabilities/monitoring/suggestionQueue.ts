@@ -14,7 +14,11 @@ export function appendNewSuggestions(
   dismissedSignalIds: ReadonlySet<LiveSuggestion['signalId']>,
   addedAt = Date.now(),
 ): QueuedSuggestion[] {
-  const queuedSignalIds = new Set(queue.map((suggestion) => suggestion.signalId))
+  const queuedSignalIds = new Set(
+    queue
+      .filter((suggestion) => suggestion.widgets.length > 0)
+      .map((suggestion) => suggestion.signalId),
+  )
   const additions = incoming
     .filter((suggestion) =>
       suggestion.tone !== 'good' &&
@@ -41,4 +45,20 @@ export function markSuggestionSeen(
       ? { ...suggestion, isNew: false }
       : suggestion,
   )
+}
+
+export function removeSuggestionWidget(
+  queue: QueuedSuggestion[],
+  queueId: string,
+  widgetIndex: number,
+): QueuedSuggestion[] {
+  return queue.map((suggestion) => {
+    if (suggestion.queueId !== queueId) return suggestion
+
+    return {
+      ...suggestion,
+      isNew: false,
+      widgets: suggestion.widgets.filter((_, index) => index !== widgetIndex),
+    }
+  })
 }
