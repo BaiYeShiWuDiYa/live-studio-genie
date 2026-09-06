@@ -39,6 +39,7 @@ export interface AudienceSnapshot {
   viewerCount: number
   entrantsLastMinute: number
   commentsPerMinute: number
+  newViewerRetention: number
   insight: CommentInsight
 }
 
@@ -48,6 +49,7 @@ export interface AudienceEventAdapter {
     applied: boolean,
     tick: number,
   ) => AudienceSnapshot
+  getRealtimeSnapshot: (applied: boolean, tick: number) => AudienceSnapshot
 }
 
 const commentsByScene: Record<StudioScene, string[]> = {
@@ -114,50 +116,68 @@ export function analyzeCommentKeywords(
     : { category: 'none', label: '暂无集中反馈', count: 0 }
 }
 
-export const mockAudienceEventAdapter: AudienceEventAdapter = {
-  getSnapshot(scene, applied, tick) {
-    const sourceComments = commentsByScene[scene]
-    const comments = Array.from({ length: visibleCommentCount }, (_, index): AudienceComment => {
-      const sourceIndex = (tick + index) % sourceComments.length
-      return {
-        id: `comment-${scene}-${tick}-${index}`,
-        type: 'comment',
-        userName: userNames[(tick + index) % userNames.length],
-        text: applied && scene === 'interaction' && index === 0
-          ? '选 2，来首炸场的'
-          : sourceComments[sourceIndex],
-        occurredAt: Math.max(0, tick * 3500 - index * 8000),
-      }
-    })
+function buildSnapshot(scene: StudioScene, applied: boolean, tick: number): AudienceSnapshot {
+  const sourceComments = commentsByScene[scene]
+  const comments = Array.from({ length: visibleCommentCount }, (_, index): AudienceComment => {
+    const sourceIndex = (tick + index) % sourceComments.length
+    return {
+      id: `comment-${scene}-${tick}-${index}`,
+      type: 'comment',
+      userName: userNames[(tick + index) % userNames.length],
+      text: applied && scene === 'interaction' && index === 0
+        ? '选 2，来首炸场的'
+        : sourceComments[sourceIndex],
+      occurredAt: Math.max(0, tick * 3500 - index * 8000),
+    }
+  })
 
-    const gifts: AudienceGift[] = [
-      {
-        id: `gift-rose-${tick}`,
-        type: 'gift',
-        userName: 'Luna',
-        giftName: 'Rose',
-        count: 5 + tick % 3,
-        icon: '🌹',
-        occurredAt: tick * 3500,
-      },
-      {
-        id: `gift-heart-${tick}`,
-        type: 'gift',
-        userName: 'Mie',
-        giftName: 'Heart',
-        count: 10,
-        icon: '💗',
-        occurredAt: Math.max(0, tick * 3500 - 60000),
-      },
-    ]
+  const gifts: AudienceGift[] = [
+    {
+      id: `gift-rose-${tick}`,
+      type: 'gift',
+      userName: 'Luna',
+      giftName: 'Rose',
+      count: 5 + tick % 3,
+      icon: '🌹',
+      occurredAt: tick * 3500,
+    },
+    {
+      id: `gift-heart-${tick}`,
+      type: 'gift',
+      userName: 'Mie',
+      giftName: 'Heart',
+      count: 10,
+      icon: '💗',
+      occurredAt: Math.max(0, tick * 3500 - 60000),
+    },
+  ]
+
+  return {
+    comments,
+    gifts,
+    viewerCount: 1286 + tick * 3,
+    entrantsLastMinute: 24 + (tick * 7) % 23,
+    commentsPerMinute: 18 + (tick * 5) % 31,
+    newViewerRetention: 36 + (tick * 6) % 29,
+    insight: analyzeCommentKeywords(comments),
+  }
+}
+
+export const mockAudienceEventAdapter: AudienceEventAdapter = {
+  getSnapshot: buildSnapshot,
+  getRealtimeSnapshot(applied, tick) {
+    const phase = Math.floor(tick / 2) % 3
+    const scene: StudioScene = ['quality', 'interaction', 'troubleshoot'][phase] as StudioScene
+    const snapshot = buildSnapshot(scene, applied, tick)
+    const phaseMetrics = [
+      { commentsPerMinute: 42, entrantsLastMinute: 38, newViewerRetention: 48 },
+      { commentsPerMinute: 16, entrantsLastMinute: 19, newViewerRetention: 22 },
+      { commentsPerMinute: 31, entrantsLastMinute: 29, newViewerRetention: 43 },
+    ][phase]
 
     return {
-      comments,
-      gifts,
-      viewerCount: 1286 + tick * 3,
-      entrantsLastMinute: 24 + (tick * 7) % 23,
-      commentsPerMinute: 18 + (tick * 5) % 31,
-      insight: analyzeCommentKeywords(comments),
+      ...snapshot,
+      ...phaseMetrics,
     }
   },
 }

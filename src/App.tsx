@@ -1,14 +1,13 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
 import { ButtonV4 as Button } from '@byted/creator-ui'
 import {
   Activity,
   ArrowLeft,
   AudioLines,
-  Bot,
+  Bell,
   Camera,
   Check,
   ChevronDown,
-  CircleHelp,
   CircleStop,
   Gamepad2,
   Gift,
@@ -21,9 +20,7 @@ import {
   Music2,
   Play,
   RotateCcw,
-  Save,
   Send,
-  Signal,
   Sparkles,
   Users,
   WandSparkles,
@@ -46,7 +43,17 @@ import {
 } from './capabilities/audience/audienceEvents'
 import { requestCameraStream, requestDisplayStream, stopMediaStream } from './capabilities/media/browserMedia'
 import { useMediaMonitoring } from './capabilities/monitoring/useMediaMonitoring'
-import type { MediaMetric } from './capabilities/monitoring/types'
+import {
+  buildLiveDiagnostics,
+  type LiveDiagnostics,
+  type LiveSuggestion,
+} from './capabilities/monitoring/liveDiagnostics'
+import {
+  appendNewSuggestions,
+  markSuggestionSeen,
+  RIGHT_PANEL_SYNC_INTERVAL_MS,
+  type QueuedSuggestion,
+} from './capabilities/monitoring/suggestionQueue'
 import type { VisualSettings } from './capabilities/visual/types'
 import {
   recommendCameraEffects,
@@ -65,15 +72,9 @@ type AppView = 'onboarding' | 'prelive' | 'live'
 type Scene = StudioScene
 type StreamKind = 'music' | 'chat' | 'game'
 type PreliveTask = 'layout' | 'visual' | 'content' | 'interaction'
+type PreliveLayout = 'portrait' | 'stage'
 type PreviewMode = 'mobile' | 'studio'
 type GenieRequestStatus = 'idle' | 'loading' | 'cancelled' | 'timeout' | 'error'
-
-type Metric = {
-  label: string
-  value: string
-  score: number
-  tone: 'good' | 'warn' | 'bad'
-}
 
 type ChatMessage = {
   role: 'user' | 'assistant'
@@ -108,35 +109,26 @@ const sceneCopy: Record<Scene, { title: string; detail: string; action: string }
   },
 }
 
-const sceneMetrics: Record<Scene, Metric[]> = {
-  quality: [
-    { label: '画面亮度', value: '42 / 100', score: 42, tone: 'bad' },
-    { label: '画面清晰度', value: '720p', score: 72, tone: 'good' },
-    { label: '背景氛围', value: '待增强', score: 36, tone: 'warn' },
-  ],
-  interaction: [
-    { label: '评论密度', value: '低', score: 28, tone: 'bad' },
-    { label: '静默时长', value: '57 s', score: 34, tone: 'warn' },
-    { label: '新观众进入', value: '+ 38', score: 62, tone: 'good' },
-  ],
-  troubleshoot: [
-    { label: '麦克风峰值', value: '偏低', score: 31, tone: 'bad' },
-    { label: '负向反馈', value: '声音小 × 6', score: 32, tone: 'bad' },
-    { label: '画面质量', value: '正常', score: 79, tone: 'good' },
-  ],
-  pk: [
-    { label: '当前贡献值', value: '8,740', score: 66, tone: 'warn' },
-    { label: '对手贡献值', value: '10,000', score: 76, tone: 'good' },
-    { label: '冲刺互动率', value: '68%', score: 68, tone: 'good' },
-  ],
-}
-
-const preliveTasks: Array<{ id: PreliveTask; title: string; detail: string; action: string }> = [
-  { id: 'layout', title: '确认画布布局', detail: '当前为单人竖屏相机布局，你可以换一种布局或选择画面源后生成。', action: '确认当前布局' },
-  { id: 'visual', title: '完成画风检测', detail: '检测到光线偏冷，建议预览暖色补光和轻度磨皮。', action: '应用画面预览' },
-  { id: 'content', title: '确认标题与开场脚本', detail: '已生成直播标题、首 3 分钟口播与点歌顺序。', action: '应用内容方案' },
-  { id: 'interaction', title: '设置互动开场', detail: '建议首屏展示点歌投票，降低新观众参与门槛。', action: '添加点歌投票' },
+const preliveTasks: Array<{ id: PreliveTask; title: string; detail: string; action: string; priority: string }> = [
+  { id: 'layout', title: '选择场景与画布', detail: '根据直播类型确认竖屏构图或秀场舞台，并检查画面源。', action: '确认画布方案', priority: '必须完成' },
+  { id: 'visual', title: '检查画面与音频', detail: '预览补光、对比度和人声参数，确保开播时状态稳定。', action: '应用设备方案', priority: '必须完成' },
+  { id: 'content', title: '直播信息与内容', detail: '完善直播预告、主播介绍、主题说明和首 3 分钟内容脚本。', action: '保存内容方案', priority: '建议优化' },
+  { id: 'interaction', title: '互动预热与开场', detail: '配置预热文案和首屏点歌投票，降低新观众的互动门槛。', action: '保存互动方案', priority: '可选增强' },
 ]
+
+const emptyAudienceSnapshot: AudienceSnapshot = {
+  comments: [],
+  gifts: [],
+  viewerCount: 0,
+  entrantsLastMinute: 0,
+  commentsPerMinute: 0,
+  newViewerRetention: 0,
+  insight: {
+    category: 'none',
+    label: '暂无观众数据',
+    count: 0,
+  },
+}
 
 const widgetProtocol = [
   '如果建议适合用控件执行，请在正文末尾追加 <widget>JSON</widget>，不要使用 Markdown 代码块。',
@@ -153,14 +145,32 @@ function App() {
   const [view, setView] = useState<AppView>('onboarding')
   const [streamType, setStreamType] = useState<StreamKind>('music')
   const [streamTopic, setStreamTopic] = useState('晚间唱歌聊天')
+  const [onboardingInput, setOnboardingInput] = useState('')
+  const [selectedEntryCategory, setSelectedEntryCategory] = useState<StreamKind | 'other' | null>(null)
   const [scene, setScene] = useState<Scene>('quality')
   const [isPk, setIsPk] = useState(false)
   const [applied, setApplied] = useState(false)
   const [cameraEnabled, setCameraEnabled] = useState(false)
   const [cameraError, setCameraError] = useState('')
-  const [readyScore, setReadyScore] = useState(45)
   const [preliveTaskIndex, setPreliveTaskIndex] = useState(0)
-  const [showGoLive, setShowGoLive] = useState(false)
+  const [completedPreliveTasks, setCompletedPreliveTasks] = useState<PreliveTask[]>([])
+  const [preliveLayout, setPreliveLayout] = useState<PreliveLayout>('portrait')
+  const [preliveScript, setPreliveScript] = useState(
+    '刚进来的朋友先选一首歌，今天我们轻松聊聊；评论区打 1 选甜歌，打 2 选炸场。',
+  )
+  const [preliveAnnouncement, setPreliveAnnouncement] = useState('今晚 20:00 · 晚间唱歌聊天')
+  const [preliveHostName, setPreliveHostName] = useState('林小满')
+  const [preliveHostBio, setPreliveHostBio] = useState('音乐聊天主播，用轻松歌单陪大家结束一天。')
+  const [preliveThemeDescription, setPreliveThemeDescription] = useState(
+    '观众参与决定今晚歌单，包含点歌、聊天和阶段互动。',
+  )
+  const [preliveWarmupCopy, setPreliveWarmupCopy] = useState(
+    '提前留言你最想听的歌，开播后优先安排。',
+  )
+  const [preliveCoverApplied, setPreliveCoverApplied] = useState(false)
+  const [prelivePollEnabled, setPrelivePollEnabled] = useState(true)
+  const [prelivePollQuestion, setPrelivePollQuestion] = useState('下一首唱什么？')
+  const readyScore = 20 + completedPreliveTasks.length * 20
   const [genieInput, setGenieInput] = useState('')
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [agentWidgetSpec, setAgentWidgetSpec] = useState<WidgetSpec | null>(null)
@@ -209,6 +219,9 @@ function App() {
   const undoLiveGoal = useStudioStore((state) => state.undoLiveGoal)
   const microphoneGainDb = useStudioStore((state) => state.audioSettings.microphoneGainDb)
   const backgroundMusicGainDb = useStudioStore((state) => state.audioSettings.backgroundMusicGainDb)
+  const committedMicrophoneGainDb = useStudioStore((state) => state.committedAudioSettings.microphoneGainDb)
+  const committedBrightness = useStudioStore((state) => state.committedVisualSettings.brightness)
+  const mediaMetrics = useStudioStore((state) => state.mediaMetrics)
   const studioToolContext: StudioToolContext = {
     previewAudioSettings,
     applyAudioSettings,
@@ -231,7 +244,87 @@ function App() {
     resetCameraEffectsPreview,
     undoCameraEffects,
   }
-  const activeWidgetSpec = agentWidgetSpec ?? getSceneWidgetSpec(scene)
+  const audienceSnapshot = useMemo(
+    () => view === 'live'
+      ? mockAudienceEventAdapter.getRealtimeSnapshot(applied, liveTick)
+      : emptyAudienceSnapshot,
+    [applied, liveTick, view],
+  )
+  const diagnostics = useMemo(() => buildLiveDiagnostics({
+    mediaMetrics,
+    audience: audienceSnapshot,
+    tick: liveTick,
+    resolvedScene: applied ? scene : null,
+    brightnessCompensation: (committedBrightness - 1) * 100,
+    microphoneGainDb: committedMicrophoneGainDb,
+  }), [
+    applied,
+    audienceSnapshot,
+    committedBrightness,
+    committedMicrophoneGainDb,
+    liveTick,
+    mediaMetrics,
+    scene,
+  ])
+  const [suggestionQueue, setSuggestionQueue] = useState<QueuedSuggestion[]>(() =>
+    appendNewSuggestions([], diagnostics.suggestions, new Set(), Date.now()),
+  )
+  const [selectedSuggestionId, setSelectedSuggestionId] = useState<string | null>(
+    suggestionQueue[0]?.queueId ?? null,
+  )
+  const [removingSuggestionId, setRemovingSuggestionId] = useState<string | null>(null)
+  const latestDiagnosticsRef = useRef(diagnostics)
+  const dismissedSignalIdsRef = useRef(new Set<LiveSuggestion['signalId']>())
+  const removalTimeoutRef = useRef<number | null>(null)
+  const selectedSuggestion = suggestionQueue.find(
+    (suggestion) => suggestion.queueId === selectedSuggestionId,
+  ) ?? suggestionQueue.find(
+    (suggestion) => suggestion.queueId !== removingSuggestionId,
+  ) ?? null
+  const activeSelectedSuggestionId = selectedSuggestion?.queueId ?? null
+  const visibleWidgetSpecs = agentWidgetSpec
+    ? [agentWidgetSpec]
+    : selectedSuggestion?.widgets ?? []
+  const activeWidgetSpec = agentWidgetSpec
+    ?? visibleWidgetSpecs[0]
+    ?? getSceneWidgetSpec(scene)
+
+  useEffect(() => {
+    latestDiagnosticsRef.current = diagnostics
+  }, [diagnostics])
+
+  useEffect(() => {
+    if (view !== 'live') return
+
+    let nextSyncAt = Date.now() + RIGHT_PANEL_SYNC_INTERVAL_MS
+    let timeoutId = 0
+    const synchronizeSuggestions = () => {
+      const incoming = latestDiagnosticsRef.current.suggestions
+      const activeSignalIds = new Set(incoming.map((suggestion) => suggestion.signalId))
+      dismissedSignalIdsRef.current.forEach((signalId) => {
+        if (!activeSignalIds.has(signalId)) {
+          dismissedSignalIdsRef.current.delete(signalId)
+        }
+      })
+      setSuggestionQueue((queue) =>
+        appendNewSuggestions(queue, incoming, dismissedSignalIdsRef.current),
+      )
+
+      do {
+        nextSyncAt += RIGHT_PANEL_SYNC_INTERVAL_MS
+      } while (nextSyncAt <= Date.now())
+      timeoutId = window.setTimeout(
+        synchronizeSuggestions,
+        Math.max(0, nextSyncAt - Date.now()),
+      )
+    }
+
+    timeoutId = window.setTimeout(
+      synchronizeSuggestions,
+      Math.max(0, nextSyncAt - Date.now()),
+    )
+    return () => window.clearTimeout(timeoutId)
+  }, [view])
 
   useEffect(() => {
     return () => stopMediaStream(mediaStream)
@@ -250,6 +343,9 @@ function App() {
       const backgroundImageUrl = useStudioStore.getState().cameraEffects.backgroundImageUrl
       if (backgroundImageUrl?.startsWith('blob:')) {
         URL.revokeObjectURL(backgroundImageUrl)
+      }
+      if (removalTimeoutRef.current !== null) {
+        window.clearTimeout(removalTimeoutRef.current)
       }
     }
   }, [])
@@ -359,37 +455,69 @@ function App() {
     setIsPk(nextScene === 'pk')
   }
 
-  const startWorkspace = () => {
-    if (streamTopic.trim()) setView('prelive')
+  const selectSuggestion = (suggestion: QueuedSuggestion) => {
+    setAgentWidgetSpec(null)
+    setSuggestionQueue((queue) => markSuggestionSeen(queue, suggestion.queueId))
+    setSelectedSuggestionId(suggestion.queueId)
+    setScene(suggestion.scene)
+    setIsPk(false)
+    setApplied(false)
+    setIsSuggestionPreview(false)
+    setLiveAdjustment({
+      name: '已选择改进建议',
+      detail: suggestion.action,
+    })
   }
 
-  const previewSuggestion = () => {
-    if (activeWidgetSpec.type === 'camera-effects') {
+  const enterPrelive = (type: StreamKind, topic: string) => {
+    setStreamType(type)
+    setStreamTopic(topic)
+    setPreliveAnnouncement(`今晚 20:00 · ${topic}`)
+    setView('prelive')
+  }
+
+  const chooseEntryCategory = (
+    category: StreamKind | 'other',
+    type: StreamKind,
+    topic: string,
+  ) => {
+    setSelectedEntryCategory(category)
+    enterPrelive(type, topic)
+  }
+
+  const startWorkspace = () => {
+    const topic = onboardingInput.trim()
+    if (!topic) return
+    enterPrelive(streamType, topic)
+  }
+
+  const previewSuggestion = (widgetSpec: WidgetSpec = activeWidgetSpec) => {
+    if (widgetSpec.type === 'camera-effects') {
       const result = studioToolRegistry.execute('studio.adjust_camera_effects', {
         mode: 'preview',
-        settings: activeWidgetSpec.props.settings,
+        settings: widgetSpec.props.settings,
       }, studioToolContext)
       setLiveAdjustment(result)
       setIsSuggestionPreview(true)
       return
     }
 
-    if (activeWidgetSpec.type === 'visual-adjustment') {
+    if (widgetSpec.type === 'visual-adjustment') {
       const result = studioToolRegistry.execute('studio.adjust_visual', {
         mode: 'preview',
-        settings: activeWidgetSpec.props.settings,
+        settings: widgetSpec.props.settings,
       }, studioToolContext)
       setLiveAdjustment(result)
       setIsSuggestionPreview(true)
       return
     }
 
-    if (activeWidgetSpec.type === 'audio-adjustment') {
+    if (widgetSpec.type === 'audio-adjustment') {
       const result = studioToolRegistry.execute('studio.adjust_audio', {
         mode: 'preview',
         settings: {
-          microphoneGainDb: activeWidgetSpec.props.microphoneGain,
-          backgroundMusicGainDb: activeWidgetSpec.props.backgroundMusicGain,
+          microphoneGainDb: widgetSpec.props.microphoneGain,
+          backgroundMusicGainDb: widgetSpec.props.backgroundMusicGain,
         },
       }, studioToolContext)
       setLiveAdjustment(result)
@@ -397,114 +525,198 @@ function App() {
       return
     }
 
-    if (activeWidgetSpec.type === 'audience-poll') {
+    if (widgetSpec.type === 'audience-poll') {
       const result = studioToolRegistry.execute('studio.configure_poll', {
         mode: 'preview',
-        config: activeWidgetSpec.props,
+        config: widgetSpec.props,
       }, studioToolContext)
       setLiveAdjustment(result)
       setIsSuggestionPreview(true)
       return
     }
 
-    if (activeWidgetSpec.type === 'live-goal') {
+    if (widgetSpec.type === 'live-goal') {
       const result = studioToolRegistry.execute('studio.configure_live_goal', {
         mode: 'preview',
-        config: activeWidgetSpec.props,
+        config: widgetSpec.props,
       }, studioToolContext)
       setLiveAdjustment(result)
       setIsSuggestionPreview(true)
       return
     }
 
-    setLiveAdjustment(getWidgetAdjustment(activeWidgetSpec, 'preview'))
+    setLiveAdjustment(getWidgetAdjustment(widgetSpec, 'preview'))
     setIsSuggestionPreview(true)
   }
 
-  const applySuggestion = () => {
+  const scheduleSuggestionRemoval = (
+    queueId: string | undefined,
+    signalId: LiveSuggestion['signalId'] | undefined,
+  ) => {
+    if (!queueId || !signalId) return
+
+    dismissedSignalIdsRef.current.add(signalId)
+    setRemovingSuggestionId(queueId)
+    if (removalTimeoutRef.current !== null) {
+      window.clearTimeout(removalTimeoutRef.current)
+    }
+    removalTimeoutRef.current = window.setTimeout(() => {
+      setSuggestionQueue((queue) =>
+        queue.filter((suggestion) => suggestion.queueId !== queueId),
+      )
+      setSelectedSuggestionId((currentId) => currentId === queueId ? null : currentId)
+      setRemovingSuggestionId(null)
+      setApplied(false)
+      setIsSuggestionPreview(false)
+      removalTimeoutRef.current = null
+    }, 320)
+  }
+
+  const applySuggestion = (
+    widgetSpec: WidgetSpec = activeWidgetSpec,
+    suggestion: QueuedSuggestion | null = null,
+  ) => {
     setApplied(true)
-    if (activeWidgetSpec.type === 'camera-effects') {
+    if (widgetSpec.type === 'camera-effects') {
       const result = studioToolRegistry.execute('studio.adjust_camera_effects', {
         mode: 'apply',
         settings: useStudioStore.getState().cameraEffects,
       }, studioToolContext)
       setLiveAdjustment(result)
       setIsSuggestionPreview(false)
+      scheduleSuggestionRemoval(suggestion?.queueId, suggestion?.signalId)
       return
     }
 
-    if (activeWidgetSpec.type === 'visual-adjustment') {
+    if (widgetSpec.type === 'visual-adjustment') {
       const result = studioToolRegistry.execute('studio.adjust_visual', {
         mode: 'apply',
         settings: useStudioStore.getState().visualSettings,
       }, studioToolContext)
       setLiveAdjustment(result)
       setIsSuggestionPreview(false)
+      scheduleSuggestionRemoval(suggestion?.queueId, suggestion?.signalId)
       return
     }
 
-    if (activeWidgetSpec.type === 'audio-adjustment') {
+    if (widgetSpec.type === 'audio-adjustment') {
       const result = studioToolRegistry.execute('studio.adjust_audio', {
         mode: 'apply',
         settings: useStudioStore.getState().audioSettings,
       }, studioToolContext)
       setLiveAdjustment(result)
       setIsSuggestionPreview(false)
+      scheduleSuggestionRemoval(suggestion?.queueId, suggestion?.signalId)
       return
     }
 
-    if (activeWidgetSpec.type === 'audience-poll') {
+    if (widgetSpec.type === 'audience-poll') {
       const result = studioToolRegistry.execute('studio.configure_poll', {
         mode: 'apply',
-        config: activeWidgetSpec.props,
+        config: widgetSpec.props,
       }, studioToolContext)
       setLiveAdjustment(result)
       setIsSuggestionPreview(false)
+      scheduleSuggestionRemoval(suggestion?.queueId, suggestion?.signalId)
       return
     }
 
-    if (activeWidgetSpec.type === 'live-goal') {
+    if (widgetSpec.type === 'live-goal') {
       const result = studioToolRegistry.execute('studio.configure_live_goal', {
         mode: 'apply',
-        config: activeWidgetSpec.props,
+        config: widgetSpec.props,
       }, studioToolContext)
       setLiveAdjustment(result)
       setIsSuggestionPreview(false)
+      scheduleSuggestionRemoval(suggestion?.queueId, suggestion?.signalId)
       return
     }
 
-    setLiveAdjustment(getWidgetAdjustment(activeWidgetSpec, 'apply'))
+    setLiveAdjustment(getWidgetAdjustment(widgetSpec, 'apply'))
     setIsSuggestionPreview(false)
+    scheduleSuggestionRemoval(suggestion?.queueId, suggestion?.signalId)
   }
 
   const completePreliveTask = () => {
-    setApplied(true)
-    setReadyScore((score) => Math.min(score + 14, 100))
-    if (preliveTaskIndex < preliveTasks.length - 1) {
-      setPreliveTaskIndex((index) => index + 1)
-      return
+    const task = preliveTasks[preliveTaskIndex]
+    if (task.id === 'layout') {
+      setPreviewMode(preliveLayout === 'portrait' ? 'mobile' : 'studio')
+    } else if (task.id === 'visual') {
+      studioToolRegistry.execute('studio.adjust_visual', {
+        mode: 'apply',
+        settings: useStudioStore.getState().visualSettings,
+      }, studioToolContext)
+      studioToolRegistry.execute('studio.adjust_audio', {
+        mode: 'apply',
+        settings: useStudioStore.getState().audioSettings,
+      }, studioToolContext)
+    } else if (task.id === 'interaction') {
+      if (prelivePollEnabled) {
+        studioToolRegistry.execute('studio.configure_poll', {
+          mode: 'preview',
+          config: {
+            question: prelivePollQuestion,
+            options: ['甜歌', '炸场'],
+            durationSeconds: 45,
+          },
+        }, studioToolContext)
+      } else {
+        studioToolRegistry.execute('studio.reset_poll_preview', {}, studioToolContext)
+      }
     }
-    setReadyScore(100)
+
+    const completed = new Set(completedPreliveTasks)
+    completed.add(task.id)
+    setCompletedPreliveTasks(Array.from(completed))
+    setApplied(true)
+    setLiveAdjustment({
+      name: `${task.title}已保存`,
+      detail: '配置已同步到本场直播方案。',
+    })
+
+    const nextIndex = preliveTasks.findIndex(
+      (candidate) => !completed.has(candidate.id),
+    )
+    if (nextIndex >= 0) setPreliveTaskIndex(nextIndex)
   }
 
-  const saveConfiguration = () => {
-    setShowGoLive(true)
+  const skipPreliveTask = () => {
+    const nextIndex = Array.from(
+      { length: preliveTasks.length - 1 },
+      (_, offset) => (preliveTaskIndex + offset + 1) % preliveTasks.length,
+    ).find((index) => !completedPreliveTasks.includes(preliveTasks[index].id))
+    if (nextIndex !== undefined) setPreliveTaskIndex(nextIndex)
   }
 
-  const undoSuggestion = () => {
-    if (activeWidgetSpec.type === 'camera-effects') {
+  const startLiveFromPrelive = () => {
+    if (prelivePollEnabled) {
+      studioToolRegistry.execute('studio.configure_poll', {
+        mode: 'apply',
+        config: {
+          question: prelivePollQuestion,
+          options: ['甜歌', '炸场'],
+          durationSeconds: 45,
+        },
+      }, studioToolContext)
+    }
+    setApplied(false)
+    setView('live')
+  }
+
+  const undoSuggestion = (widgetSpec: WidgetSpec = activeWidgetSpec) => {
+    if (widgetSpec.type === 'camera-effects') {
       const result = studioToolRegistry.execute('studio.undo_camera_effects', {}, studioToolContext)
       setLiveAdjustment(result)
-    } else if (activeWidgetSpec.type === 'visual-adjustment') {
+    } else if (widgetSpec.type === 'visual-adjustment') {
       const result = studioToolRegistry.execute('studio.undo_visual', {}, studioToolContext)
       setLiveAdjustment(result)
-    } else if (activeWidgetSpec.type === 'audio-adjustment') {
+    } else if (widgetSpec.type === 'audio-adjustment') {
       const result = studioToolRegistry.execute('studio.undo_audio', {}, studioToolContext)
       setLiveAdjustment(result)
-    } else if (activeWidgetSpec.type === 'audience-poll') {
+    } else if (widgetSpec.type === 'audience-poll') {
       const result = studioToolRegistry.execute('studio.undo_poll', {}, studioToolContext)
       setLiveAdjustment(result)
-    } else if (activeWidgetSpec.type === 'live-goal') {
+    } else if (widgetSpec.type === 'live-goal') {
       const result = studioToolRegistry.execute('studio.undo_live_goal', {}, studioToolContext)
       setLiveAdjustment(result)
     } else {
@@ -615,7 +827,7 @@ function App() {
       })
       if (genieAbortRef.current !== controller) return
       setChatMessages((messages) => [...messages, { role: 'assistant', text: result.text || '已生成可操作方案。' }])
-      if (view === 'live' && result.widget) {
+      if (view !== 'onboarding' && result.widget) {
         setAgentWidgetSpec(result.widget)
         setApplied(false)
         setIsSuggestionPreview(false)
@@ -676,12 +888,6 @@ function App() {
     if (!lastGenieRequestRef.current || genieRequestStatus === 'loading') return
     void runGenieRequest(lastGenieRequestRef.current, false)
   }
-  const audienceSnapshot = mockAudienceEventAdapter.getSnapshot(
-    scene,
-    applied,
-    liveTick,
-  )
-
   if (view === 'onboarding') {
     return (
       <main className="onboarding-shell">
@@ -696,81 +902,70 @@ function App() {
           <span className="eyebrow"><i />LIVE STUDIO GENIE</span>
           <h1>要开启你的直播<span>之旅</span>了吗！<br />先告诉我，你今天想播什么？</h1>
           <p>选一个方向，或者用你自己的话告诉精灵。</p>
-          <div className="stream-options">
-            <StreamOption icon={<MessageCircle />} label="聊天陪伴" active={streamType === 'chat'} onClick={() => setStreamType('chat')} />
-            <StreamOption icon={<Music2 />} label="音乐现场" active={streamType === 'music'} onClick={() => setStreamType('music')} />
-            <StreamOption icon={<Gamepad2 />} label="游戏直播" active={streamType === 'game'} onClick={() => setStreamType('game')} />
-            <StreamOption icon={<Sparkles />} label="其他" active={false} onClick={() => { setStreamType('music'); setStreamTopic('秀场唱歌陪伴') }} />
+          <div className="stream-options" role="list" aria-label="直播问题类别">
+            <StreamOption icon={<MessageCircle />} label="聊天陪伴" active={selectedEntryCategory === 'chat'} onClick={() => chooseEntryCategory('chat', 'chat', '轻松聊天陪伴')} />
+            <StreamOption icon={<Music2 />} label="音乐现场" active={selectedEntryCategory === 'music'} onClick={() => chooseEntryCategory('music', 'music', '晚间音乐现场')} />
+            <StreamOption icon={<Gamepad2 />} label="游戏直播" active={selectedEntryCategory === 'game'} onClick={() => chooseEntryCategory('game', 'game', '今晚游戏挑战')} />
+            <StreamOption icon={<Sparkles />} label="其他" active={selectedEntryCategory === 'other'} onClick={() => chooseEntryCategory('other', 'chat', '我的主题直播')} />
           </div>
-          <label className="theme-input">
+          <form className="theme-input" onSubmit={(event) => { event.preventDefault(); startWorkspace() }}>
             <WandSparkles size={17} />
-            <input value={streamTopic} onChange={(event) => setStreamTopic(event.target.value)} placeholder="用一句话描述今晚的直播…（或从上方选一个方向）" aria-label="本场主题" />
-            <button type="button" aria-label="生成工作台" onClick={startWorkspace}>召唤精灵 <ArrowLeft size={16} className="arrow-forward" /></button>
-          </label>
+            <input value={onboardingInput} onChange={(event) => setOnboardingInput(event.target.value)} placeholder="用一句话描述今晚的直播…（或从上方选一个方向）" aria-label="本场主题" />
+            <button type="submit" aria-label="生成工作台" disabled={!onboardingInput.trim()}>召唤精灵 <ArrowLeft size={16} className="arrow-forward" /></button>
+          </form>
         </section>
-        <button className="professional-mode" type="button" onClick={() => setView('prelive')}><i />我很熟，直接进入专业模式 <ArrowLeft size={15} className="arrow-forward" /></button>
+        <button className="professional-mode" type="button" onClick={() => enterPrelive('music', '晚间唱歌聊天')}><i />我很熟，直接进入专业模式 <ArrowLeft size={15} className="arrow-forward" /></button>
       </main>
     )
   }
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell live-app ${view === 'prelive' ? 'prelive-live-mode' : ''}`}>
       <header className="topbar">
-        <Brand />
-        <nav className="topbar-nav" aria-label="工作台导航">
-          <button className={view === 'prelive' ? 'active' : ''} onClick={() => setView('prelive')} type="button">开播准备</button>
-          <button className={view === 'live' ? 'active' : ''} onClick={() => setView('live')} type="button">直播控制台</button>
-        </nav>
-        <div className="topbar-actions">
-          <button className="icon-button" type="button" aria-label="帮助"><CircleHelp size={18} /></button>
-          <button className="user-avatar" type="button" aria-label="个人中心">L</button>
+        <div className="live-brand">
+          <span className="live-brand-mark"><Music2 size={17} /></span>
+          <strong>TikTok LIVE Studio</strong>
+          <span className="live-brand-divider">/</span>
+          <b>{view === 'prelive' ? '今日开播准备工作台' : '直播中'}</b>
+          <span className="live-session-pill"><i />{view === 'prelive' ? `${streamType === 'music' ? '秀场' : streamType === 'game' ? '游戏' : '聊天'} · ${streamTopic}` : '直播中 · 00:42:18'}</span>
+        </div>
+        <div className="live-status-actions">
+          {view === 'live' && (
+              <button
+                className="prelive-entry-button"
+                type="button"
+                onClick={() => {
+                  setIsPk(false)
+                  setView('prelive')
+                }}
+              >
+                <ArrowLeft size={14} />直播前设置
+              </button>
+          )}
+          <span className={`network-pill ${view === 'prelive' ? 'prelive-network' : ''}`}><i />{view === 'prelive' ? '预览已连接 · 延迟 42ms' : '推流稳定 · 延迟 42ms'}</span>
+          <button className="notification-button" type="button" aria-label="通知">
+            <Bell size={17} />
+            {view === 'live' && <b>9</b>}
+          </button>
         </div>
       </header>
       <section className="workspace">
         <aside className="monitor-panel panel">
-          <PanelHeading icon={<Activity size={17} />} title={view === 'prelive' ? '开播检查' : '直播间状态'} status={view === 'prelive' ? '准备中' : 'LIVE'} />
           {view === 'prelive' ? (
-            <PreliveChecklist score={readyScore} />
+            <PreliveOperationsPanel
+              cameraEnabled={cameraEnabled}
+              isMicMuted={isMicMuted}
+            />
           ) : (
-            <>
-              <div className="monitor-summary">
-                <span>实时诊断</span>
-                <strong>{applied ? '状态已恢复' : scene === 'quality' ? '2 项待处理' : '1 项待处理'}</strong>
-                <small><Signal size={12} />媒体实时采样 · 场景每 3 秒更新</small>
-              </div>
-              <div className="metric-stack">
-                <LiveMetricStack scene={scene} applied={applied} liveTick={liveTick} audience={audienceSnapshot} />
-              </div>
-              <div className="comment-stream">
-                <div className="section-label"><MessageCircle size={15} />实时评论</div>
-                <div className="comment-list" role="log" aria-label="实时评论列表" aria-live="polite" tabIndex={0}>
-                  {audienceSnapshot.comments.map((comment) => <p key={comment.id}><b>{comment.userName}</b> {comment.text}</p>)}
-                </div>
-              </div>
-              <div className="gift-stream">
-                <div className="section-label"><Gift size={15} />礼物动态</div>
-                {audienceSnapshot.gifts.map((gift, index) => (
-                  <p key={gift.id}><span>{gift.icon}</span><b>{gift.userName}</b>送出 {gift.giftName} ×{gift.count} <small>{index === 0 ? '刚刚' : '1 分钟前'}</small></p>
-                ))}
-              </div>
-            </>
+            <LiveOperationsPanel audience={audienceSnapshot} diagnostics={diagnostics} />
           )}
-          <div className="scenario-switcher">
-            <span>演示场景</span>
-            <div className="scenario-options">
-              <button className={scene === 'quality' ? 'selected' : ''} type="button" onClick={() => changeScene('quality')}>画质</button>
-              <button className={scene === 'interaction' ? 'selected' : ''} type="button" onClick={() => changeScene('interaction')}>互动</button>
-              <button className={scene === 'troubleshoot' ? 'selected' : ''} type="button" onClick={() => changeScene('troubleshoot')}>排障</button>
-              <button className={scene === 'pk' ? 'selected' : ''} type="button" onClick={() => changeScene('pk')}>PK</button>
-            </div>
-          </div>
         </aside>
 
         <section className="stage-column">
           <div className="stage-toolbar">
             <div>
               <span className="stage-breadcrumb">{view === 'prelive' ? '今日开播准备' : isPk ? '直播中 · PK 对战' : '直播中'}</span>
-              <h1>{view === 'prelive' ? '晚间唱歌聊天' : '林小满的直播间'}</h1>
+              <h1>{view === 'prelive' ? streamTopic : '林小满的直播间'}</h1>
             </div>
             {view === 'prelive' ? (
               <button className="secondary-button" type="button" onClick={enableCamera}><Camera size={16} />连接设备</button>
@@ -782,7 +977,7 @@ function App() {
             <button type="button" className={previewMode === 'mobile' ? 'selected' : ''} onClick={() => setPreviewMode('mobile')}>移动端预览</button>
             <button type="button" className={previewMode === 'studio' ? 'selected' : ''} onClick={() => setPreviewMode('studio')}>Studio 视图</button>
           </div>
-          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} liveAdjustment={liveAdjustment} previewMode={previewMode} isPreviewing={isSuggestionPreview} audience={audienceSnapshot} />
+          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} liveAdjustment={liveAdjustment} previewMode={previewMode} isPreviewing={isSuggestionPreview} audience={audienceSnapshot} isLive={view === 'live'} preliveTitle={streamTopic} preliveLayout={preliveLayout} />
           {(cameraError || displayError || backgroundMusicError) && <p className="camera-warning">{displayError || cameraError || backgroundMusicError}</p>}
           <div className="stage-controls">
             <button type="button" className="control-button" onClick={enableCamera}><Camera size={18} /><span>{cameraEnabled ? '摄像头已连接' : '开启摄像头'}</span></button>
@@ -796,31 +991,182 @@ function App() {
             <button type="button" className={`pk-launch ${isPk ? 'active' : ''}`} onClick={() => changeScene(isPk ? 'quality' : 'pk')}><Users size={17} />{isPk ? '结束 PK' : '发起 PK'}</button>
           </div>
           {view === 'prelive' && (
-            <div className="prelive-footer">
-              <div><b>准备度 {readyScore} / 100</b><span>{readyScore === 100 ? '所有播前任务已完成' : `再完成 ${preliveTasks.length - preliveTaskIndex} 项即可开播`}</span></div>
+            <div className="prelive-go-live-bar">
+              <div><b>直播准备度 {readyScore}%</b><span>{readyScore === 100 ? '全部设置已就绪' : `${completedPreliveTasks.length} / 4 项已完成，可继续调整后开播`}</span></div>
               <div className="score-track"><i style={{ width: `${readyScore}%` }} /></div>
-              {readyScore === 100
-                ? <Button className="primary-button" color="primary" onClick={saveConfiguration}><Save size={16} />保存配置</Button>
-                : <button className="secondary-button" type="button" disabled>完成任务后保存</button>}
+              <Button className="prelive-go-live-button" color="primary" onClick={startLiveFromPrelive}><Play size={16} fill="currentColor" />GO LIVE</Button>
             </div>
           )}
         </section>
 
         <aside className="genie-panel panel">
-          <PanelHeading icon={<Bot size={17} />} title="Genie" status="AI 在线" />
-          <div className="genie-intro">
-            <div className="mini-orb"><Sparkles size={17} /></div>
-            <div><strong>{view === 'prelive' && activeWidgetSpec.type !== 'camera-effects' ? '为你生成了开播方案' : agentWidgetSpec ? '已生成可操作组件' : '我发现了一个机会点'}</strong><p>{view === 'prelive' && activeWidgetSpec.type !== 'camera-effects' ? '根据音乐聊天主题，已匹配舒适陪伴型场景。' : activeWidgetSpec.detail}</p></div>
-          </div>
-          {view === 'live' && <div className="suggestion-tabs" aria-label="Genie 建议">
-            <button type="button" className={scene === 'quality' ? 'active' : ''} onClick={() => changeScene('quality')}>优化画面亮度</button>
-            <button type="button" className={scene === 'interaction' ? 'active' : ''} onClick={() => changeScene('interaction')}>互动正在转冷</button>
-            <button type="button" className={scene === 'troubleshoot' ? 'active' : ''} onClick={() => changeScene('troubleshoot')}>麦克风偏小</button>
-            <button type="button" onClick={() => setGenieInput('根据当前画面和人脸效果，生成合适的美颜、美妆和道具方案')}>AI 人像效果</button>
-          </div>}
-          {view === 'prelive' && activeWidgetSpec.type !== 'camera-effects'
-            ? <PreliveTaskCard task={preliveTasks[preliveTaskIndex]} completedCount={preliveTaskIndex} onApply={completePreliveTask} />
-            : <WidgetRenderer spec={activeWidgetSpec} applied={applied} isPreviewing={isSuggestionPreview} onPreview={previewSuggestion} onApply={applySuggestion} onUndo={undoSuggestion} onAudioChange={updateAudioPreview} onVisualChange={updateVisualPreview} onCameraEffectsChange={updateCameraEffectsPreview} />}
+          {view === 'live' ? (
+            <>
+              <div className="live-genie-heading">
+                <span><i />GENIE · READY TO ASSIST</span>
+                <div className="live-follow-status">
+                  <b>{suggestionQueue.length} 条待处理</b>
+                  <span className="suggestion-sync-status"><i />每分钟同步</span>
+                </div>
+              </div>
+              <section className="generated-suggestions" aria-label="实时生成建议">
+                <div className="generated-suggestions-title">
+                  <span>改进建议</span>
+                  <small>仅追加新建议，保留历史记录</small>
+                </div>
+                <div className="generated-suggestion-list" role="list">
+                  {suggestionQueue.map((suggestion) => (
+                    <button
+                      aria-label={`${suggestion.metric}，建议：${suggestion.action}`}
+                      aria-pressed={activeSelectedSuggestionId === suggestion.queueId}
+                      className={[
+                        'generated-suggestion',
+                        `tone-${suggestion.tone}`,
+                        activeSelectedSuggestionId === suggestion.queueId ? 'is-selected' : '',
+                        suggestion.isNew ? 'is-new' : '',
+                        removingSuggestionId === suggestion.queueId ? 'is-removing' : '',
+                      ].filter(Boolean).join(' ')}
+                      key={suggestion.queueId}
+                      onClick={() => selectSuggestion(suggestion)}
+                      role="listitem"
+                      type="button"
+                    >
+                      <span className="suggestion-item-heading">
+                        <b>{suggestion.metric}</b>
+                        <em>
+                          {suggestion.isNew
+                            ? '新增'
+                            : activeSelectedSuggestionId === suggestion.queueId
+                              ? '已选中'
+                              : '待处理'}
+                        </em>
+                      </span>
+                      <span className="suggestion-item-description">{suggestion.action}</span>
+                    </button>
+                  ))}
+                  {suggestionQueue.length === 0 && (
+                    <div className="suggestion-empty-state" role="status">
+                      <Check size={15} />
+                      <span>暂无待处理建议</span>
+                    </div>
+                  )}
+                </div>
+              </section>
+              <div className="live-section-divider" />
+              <section className="live-recommendations" aria-label="建议对应组件">
+                <div className="component-recall-heading">
+                  <span><Zap size={13} />对应组件</span>
+                  <b>{agentWidgetSpec?.title ?? selectedSuggestion?.metric ?? '等待选择建议'}</b>
+                  <small>
+                    {agentWidgetSpec
+                      ? '由 Genie 对话生成'
+                      : selectedSuggestion
+                        ? `${selectedSuggestion.widgets.length} 个可操作组件`
+                        : '从上方建议列表中选择'}
+                  </small>
+                </div>
+                <div className="recalled-component-list">
+                  {visibleWidgetSpecs.map((widgetSpec, index) => (
+                    <div
+                      className={`recalled-component-item ${removingSuggestionId === selectedSuggestion?.queueId ? 'is-removing' : ''}`}
+                      key={`${widgetSpec.type}-${widgetSpec.title}-${index}`}
+                    >
+                      <WidgetRenderer
+                        spec={widgetSpec}
+                        applied={applied}
+                        isPreviewing={isSuggestionPreview}
+                        onPreview={() => previewSuggestion(widgetSpec)}
+                        onApply={() => applySuggestion(
+                          widgetSpec,
+                          agentWidgetSpec ? null : selectedSuggestion,
+                        )}
+                        onUndo={() => undoSuggestion(widgetSpec)}
+                        onAudioChange={updateAudioPreview}
+                        onVisualChange={updateVisualPreview}
+                        onCameraEffectsChange={updateCameraEffectsPreview}
+                      />
+                    </div>
+                  ))}
+                  {visibleWidgetSpecs.length === 0 && (
+                    <div className="component-empty-state">
+                      <LayoutTemplate size={18} />
+                      <span>选择建议后将在此显示对应组件</span>
+                    </div>
+                  )}
+                </div>
+              </section>
+            </>
+          ) : (
+            <>
+              <div className="live-genie-heading">
+                <span><i />GENIE · READY TO ASSIST</span>
+                <b>{completedPreliveTasks.length} / 4 已就绪</b>
+              </div>
+              <section className="prelive-control-shell" aria-label="直播前准备任务">
+                <div className="prelive-intent-summary">
+                  <span>已根据直播主题生成准备方案</span>
+                  <b>{streamTopic}</b>
+                </div>
+                <PreliveChecklist
+                  compact
+                  score={readyScore}
+                  currentTask={preliveTasks[preliveTaskIndex].id}
+                  completedTasks={completedPreliveTasks}
+                  onSelect={setPreliveTaskIndex}
+                />
+                <div className="prelive-control-task">
+                  {agentWidgetSpec ? (
+                    <WidgetRenderer
+                      spec={agentWidgetSpec}
+                      applied={applied}
+                      isPreviewing={isSuggestionPreview}
+                      onPreview={() => previewSuggestion(agentWidgetSpec)}
+                      onApply={() => applySuggestion(agentWidgetSpec)}
+                      onUndo={() => undoSuggestion(agentWidgetSpec)}
+                      onAudioChange={updateAudioPreview}
+                      onVisualChange={updateVisualPreview}
+                      onCameraEffectsChange={updateCameraEffectsPreview}
+                    />
+                  ) : (
+                    <PreliveTaskCard
+                      task={preliveTasks[preliveTaskIndex]}
+                      taskIndex={preliveTaskIndex}
+                      completed={completedPreliveTasks.includes(preliveTasks[preliveTaskIndex].id)}
+                      layout={preliveLayout}
+                      title={streamTopic}
+                      script={preliveScript}
+                      announcement={preliveAnnouncement}
+                      hostName={preliveHostName}
+                      hostBio={preliveHostBio}
+                      themeDescription={preliveThemeDescription}
+                      warmupCopy={preliveWarmupCopy}
+                      pollEnabled={prelivePollEnabled}
+                      pollQuestion={prelivePollQuestion}
+                      onLayoutChange={(layout) => {
+                        setPreliveLayout(layout)
+                        setPreviewMode(layout === 'portrait' ? 'mobile' : 'studio')
+                      }}
+                      onTitleChange={setStreamTopic}
+                      onScriptChange={setPreliveScript}
+                      onAnnouncementChange={setPreliveAnnouncement}
+                      onHostNameChange={setPreliveHostName}
+                      onHostBioChange={setPreliveHostBio}
+                      onThemeDescriptionChange={setPreliveThemeDescription}
+                      onWarmupCopyChange={setPreliveWarmupCopy}
+                      coverApplied={preliveCoverApplied}
+                      onCoverAppliedChange={setPreliveCoverApplied}
+                      onPollEnabledChange={setPrelivePollEnabled}
+                      onPollQuestionChange={setPrelivePollQuestion}
+                      onVisualChange={updateVisualPreview}
+                      onAudioChange={updateAudioPreview}
+                      onApply={completePreliveTask}
+                      onSkip={skipPreliveTask}
+                    />
+                  )}
+                </div>
+              </section>
+            </>
+          )}
           {chatMessages.length > 0 && <div className="genie-conversation" aria-live="polite">
             {chatMessages.map((message, index) => (
               <article key={`${message.role}-${index}`} className={`chat-message ${message.role}`}>
@@ -856,107 +1202,116 @@ function App() {
           </form>
         </aside>
       </section>
-      {showGoLive && (
-        <div className="golive-overlay" role="dialog" aria-modal="true" aria-label="播前准备完成">
-          <section className="golive-dialog">
-            <div className="golive-mark"><Check size={26} /></div>
-            <span>配置已保存</span>
-            <h2>播前准备百分百，去开播</h2>
-            <p>标题、画面预览、互动开场和脚本已同步到本场直播。</p>
-            <Button className="primary-button golive-button" color="primary" size="large" onClick={() => { setShowGoLive(false); setView('live') }}>
-              <Play size={17} fill="currentColor" />GO LIVE
-            </Button>
-            <button className="card-text-button" type="button" onClick={() => setShowGoLive(false)}>返回继续调整</button>
-          </section>
-        </div>
-      )}
     </main>
   )
-}
-
-function Brand() {
-  return <div className="brand"><span className="brand-mark"><Sparkles size={16} /></span><strong>LIVE STUDIO</strong><span>GENIE</span></div>
-}
-
-function PanelHeading({ icon, title, status }: { icon: ReactNode; title: string; status: string }) {
-  return <div className="panel-heading"><div>{icon}<strong>{title}</strong></div><span>{status}</span></div>
 }
 
 function StreamOption({ icon, label, active, onClick }: { icon: ReactNode; label: string; active: boolean; onClick: () => void }) {
   return <button type="button" className={`stream-option ${active ? 'active' : ''}`} onClick={onClick}>{icon}<span>{label}</span>{active && <Check size={14} />}</button>
 }
 
-function MetricCard({ metric }: { metric: Metric }) {
-  return <div className="metric-card"><div><span>{metric.label}</span><b>{metric.value}</b></div><div className="metric-track"><i className={metric.tone} style={{ width: `${metric.score}%` }} /></div></div>
+function PreliveOperationsPanel({
+  cameraEnabled,
+  isMicMuted,
+}: {
+  cameraEnabled: boolean
+  isMicMuted: boolean
+}) {
+  return (
+    <div className="live-operations prelive-operations">
+      <section className="indicator-section" aria-label="开播前状态">
+        <h2>Pre-live Status</h2>
+        <span className="monitoring-summary"><i />预览信号已连接</span>
+        <div className="prelive-signal-list">
+          <div><Camera size={14} /><span>摄像头</span><b>{cameraEnabled ? '已连接' : '演示画面'}</b></div>
+          <div><Mic size={14} /><span>麦克风</span><b>{isMicMuted ? '已静音' : '正常'}</b></div>
+          <div><Activity size={14} /><span>网络</span><b>稳定 · 42ms</b></div>
+        </div>
+      </section>
+      <section className="activity-section gift-activity prelive-empty-activity" aria-label="礼物区">
+        <h2>Gift</h2>
+        <div aria-hidden="true" />
+      </section>
+      <section className="activity-section comment-activity prelive-empty-activity" aria-label="评论区">
+        <h2>Comment</h2>
+        <div aria-hidden="true" />
+      </section>
+    </div>
+  )
 }
 
-function LiveMetricStack({ scene, applied, liveTick, audience }: { scene: Scene; applied: boolean; liveTick: number; audience: AudienceSnapshot }) {
-  const mediaMetrics = useStudioStore((state) => state.mediaMetrics)
-  return getLiveMetrics(scene, applied, liveTick, mediaMetrics, audience)
-    .map((metric) => <MetricCard key={metric.label} metric={metric} />)
+function LiveOperationsPanel({ audience, diagnostics }: {
+  audience: AudienceSnapshot
+  diagnostics: LiveDiagnostics
+}) {
+  const gifts = [
+    { icon: '🌹', user: audience.gifts[0]?.userName ?? 'Luna', gift: 'Rose', count: audience.gifts[0]?.count ?? 5, time: '12:41:30' },
+    { icon: '♪', user: 'Alex', gift: 'TikTok', count: 1, time: '12:42:02' },
+    { icon: '♥', user: audience.gifts[1]?.userName ?? 'Mie', gift: 'Heart', count: audience.gifts[1]?.count ?? 10, time: '12:42:10' },
+  ]
+
+  return (
+    <div className="live-operations">
+      <section className="indicator-section" aria-label="实时指标">
+        <h2>Real-time Indicators</h2>
+        <span className="monitoring-summary"><i />实时采样中 · {diagnostics.healthyCount} 项正常</span>
+        <section className="metric-group good-metrics" aria-label="做得好的">
+          <h3><Check size={13} />做得好的</h3>
+          <div className="indicator-list">
+            {diagnostics.goodSignals.map((indicator) => <IndicatorRow key={indicator.id} {...indicator} />)}
+          </div>
+        </section>
+        <section className="metric-group improvement-metrics" aria-label="需要改进的">
+          <h3><Zap size={13} />需要改进的</h3>
+          <div className="indicator-list improvement-list">
+            {diagnostics.improvements.map((indicator) => <IndicatorRow key={indicator.id} {...indicator} />)}
+          </div>
+        </section>
+      </section>
+      <section className="activity-section gift-activity">
+        <h2>Gift</h2>
+        {gifts.map((gift, index) => (
+          <div className={index === 1 ? 'activity-row highlighted' : 'activity-row'} key={`${gift.user}-${gift.gift}`}>
+            <i>{gift.icon}</i>
+            <span><b>{gift.user}</b> 送出 <em>{gift.gift}</em> ×{gift.count}</span>
+            <time>{gift.time}</time>
+          </div>
+        ))}
+      </section>
+      <section className="activity-section comment-activity">
+        <h2>Comment</h2>
+        <div className="prototype-comment-list" role="log" aria-label="实时评论列表" aria-live="polite" tabIndex={0}>
+          {audience.comments.slice(0, 4).map((comment, index) => (
+            <div className="prototype-comment" key={comment.id}>
+              <i className={`avatar avatar-${index + 1}`}>{comment.userName.slice(0, 1)}</i>
+              <span><b>User{index + 1}:</b> {comment.text}</span>
+              <time>12:42:{String(5 + index * 3).padStart(2, '0')}</time>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  )
 }
 
-function getLiveMetrics(
-  scene: Scene,
-  applied: boolean,
-  tick: number,
-  mediaMetrics: Record<'brightness' | 'microphone' | 'framing', MediaMetric>,
-  audience: AudienceSnapshot,
-): Metric[] {
-  const drift = tick % 3
-  let metrics: Metric[]
-
-  if (applied) {
-    metrics = [
-      { label: scene === 'troubleshoot' ? '麦克风峰值' : '画面状态', value: scene === 'troubleshoot' ? '-12 dB' : '已优化', score: 82, tone: 'good' },
-      { label: '评论区密度', value: scene === 'interaction' ? '回升中' : '正常', score: 74, tone: 'good' },
-      { label: '网络稳定性', value: '良好', score: 88, tone: 'good' },
-    ]
-  } else {
-    metrics = sceneMetrics[scene].map((metric, index) => ({
-      ...metric,
-      score: Math.max(8, Math.min(96, metric.score + (index === 0 ? drift * 2 : drift))),
-    }))
-  }
-
-  if (scene === 'quality') {
-    metrics[0] = toLiveMetric('画面亮度', mediaMetrics.brightness)
-    metrics[2] = toLiveMetric('人像占比', mediaMetrics.framing)
-  }
-  if (scene === 'troubleshoot') {
-    metrics[0] = toLiveMetric('麦克风电平', mediaMetrics.microphone)
-    metrics[1] = {
-      label: '评论反馈',
-      value: `${audience.insight.label} × ${audience.insight.count}`,
-      score: Math.max(12, 80 - audience.insight.count * 18),
-      tone: audience.insight.category === 'audio' ? 'bad' : 'warn',
-    }
-  }
-  if (scene === 'interaction') {
-    metrics[0] = {
-      label: '评论密度',
-      value: `${audience.commentsPerMinute} / min`,
-      score: Math.min(100, audience.commentsPerMinute * 2),
-      tone: audience.commentsPerMinute >= 35 ? 'good' : 'warn',
-    }
-    metrics[2] = {
-      label: '新观众进入',
-      value: `+ ${audience.entrantsLastMinute}`,
-      score: Math.min(100, audience.entrantsLastMinute * 2),
-      tone: audience.entrantsLastMinute >= 32 ? 'good' : 'warn',
-    }
-  }
-
-  return metrics
-}
-
-function toLiveMetric(label: string, metric: MediaMetric): Metric {
-  return {
-    label,
-    value: metric.value,
-    score: metric.status === 'ready' ? metric.score : 8,
-    tone: metric.tone,
-  }
+function IndicatorRow({ label, value, score, tone, direction, trendLabel, audio = false }: {
+  label: string
+  value: string
+  score: number
+  tone: string
+  direction: 'up' | 'down'
+  trendLabel: string
+  audio?: boolean
+}) {
+  return (
+    <div className={`indicator-row ${tone}`}>
+      <span className="indicator-label"><i />{label}</span>
+      {audio
+        ? <span className="audio-wave" aria-hidden="true">{Array.from({ length: 17 }, (_, index) => <i key={index} />)}</span>
+        : <span className="indicator-track"><i style={{ width: `${Math.max(8, Math.min(100, score))}%` }} /></span>}
+      <b>{value}<em>{direction === 'up' ? ` ${trendLabel} ↑` : ` ${trendLabel} ↓`}</em></b>
+    </div>
+  )
 }
 
 function getWidgetAdjustment(spec: WidgetSpec, mode: 'preview' | 'apply'): LiveAdjustment {
@@ -987,14 +1342,51 @@ function withSign(value: number): string {
   return `${value >= 0 ? '+' : ''}${value}`
 }
 
-function PreliveChecklist({ score }: { score: number }) {
-  return <div className="checklist">
-    <div className="readiness-card"><span>当前准备度</span><strong>{score}<small>/ 100</small></strong><p>还有 3 步可以开播</p><div className="circle-progress"><i style={{ transform: `rotate(${score * 3.6}deg)` }} /></div></div>
-    {['确认直播标题', '检查画面与音频', '设置互动开场'].map((item, index) => <button className="check-item" type="button" key={item}><span className={index === 0 ? 'done' : ''}>{index === 0 ? <Check size={13} /> : index + 1}</span>{item}<ChevronDown size={14} /></button>)}
+function PreliveChecklist({
+  compact = false,
+  score,
+  currentTask,
+  completedTasks,
+  onSelect,
+}: {
+  compact?: boolean
+  score: number
+  currentTask: PreliveTask
+  completedTasks: PreliveTask[]
+  onSelect: (index: number) => void
+}) {
+  const remaining = preliveTasks.length - completedTasks.length
+
+  return <div className={`checklist ${compact ? 'is-compact' : ''}`}>
+    {!compact && <div className="readiness-card">
+      <span>当前准备度</span>
+      <strong>{score}<small>/ 100</small></strong>
+      <p>{remaining === 0 ? '所有设置已就绪' : `还有 ${remaining} 项待确认`}</p>
+      <div className="circle-progress"><i style={{ transform: `rotate(${score * 3.6}deg)` }} /></div>
+    </div>}
+    <div className="prelive-check-list">
+      {preliveTasks.map((task, index) => {
+        const completed = completedTasks.includes(task.id)
+        return (
+          <button
+            className={`check-item ${currentTask === task.id ? 'active' : ''}`}
+            type="button"
+            key={task.id}
+            onClick={() => onSelect(index)}
+          >
+            <span className={completed ? 'done' : ''}>
+              {completed ? <Check size={13} /> : index + 1}
+            </span>
+            <div><b>{task.title}</b><small>{task.priority} · {completed ? '已完成' : currentTask === task.id ? '正在设置' : '待确认'}</small></div>
+            <ChevronDown size={14} />
+          </button>
+        )
+      })}
+    </div>
   </div>
 }
 
-function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, isPk, applied, scene, liveAdjustment, previewMode, isPreviewing, audience }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; displayStream: MediaStream | null; layoutEditing: boolean; isPk: boolean; applied: boolean; scene: Scene; liveAdjustment: LiveAdjustment | null; previewMode: PreviewMode; isPreviewing: boolean; audience: AudienceSnapshot }) {
+function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, isPk, applied, scene, liveAdjustment, previewMode, isPreviewing, audience, isLive, preliveTitle, preliveLayout }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; displayStream: MediaStream | null; layoutEditing: boolean; isPk: boolean; applied: boolean; scene: Scene; liveAdjustment: LiveAdjustment | null; previewMode: PreviewMode; isPreviewing: boolean; audience: AudienceSnapshot; isLive: boolean; preliveTitle: string; preliveLayout: PreliveLayout }) {
   const displayVideoRef = useRef<HTMLVideoElement>(null)
   const visualSettings = useStudioStore((state) => state.visualSettings)
   const previewStyle = {
@@ -1012,7 +1404,7 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
     }
   }, [displayStream])
 
-  return <div style={previewStyle} className={`live-stage ${applied ? 'applied' : ''} ${isPreviewing ? 'previewing' : ''} ${isPk ? 'pk-stage' : ''} scene-${scene} ${previewMode === 'studio' ? 'studio-preview' : 'mobile-preview'}`}>
+  return <div style={previewStyle} className={`live-stage ${applied ? 'applied' : ''} ${isPreviewing ? 'previewing' : ''} ${isPk ? 'pk-stage' : ''} scene-${scene} ${previewMode === 'studio' ? 'studio-preview' : 'mobile-preview'} ${!isLive ? `prelive-${preliveLayout}` : ''}`}>
     <div className="stage-glow" />
     <div className="scan-lines" />
     <div className={`host-stage ${displayStream ? 'screen-sharing' : ''}`}>
@@ -1028,7 +1420,9 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
             </div>
           : <DemoHost />}
       {previewMode === 'studio' && <div className="studio-guides"><i /><i /><i /></div>}
-      <div className="stage-label"><span />林小满</div>
+      <div className="stage-label"><span />{isLive ? 'LIVE' : '林小满'}</div>
+      {!isPk && isLive && <><div className="viewer-bubble"><Users size={14} />{audience.viewerCount.toLocaleString()}</div><div className="stage-duration">00:42:18</div></>}
+      {!isLive && <div className="prelive-stage-summary"><span>开播预览</span><b>{preliveTitle || '未填写直播标题'}</b><small>{preliveLayout === 'portrait' ? '单人竖屏 · 9:16' : '秀场舞台 · 16:9'}</small></div>}
       {applied && <div className="applied-badge"><Check size={13} />方案已应用</div>}
       {scene === 'quality' && !applied && <div className="stage-hint"><Lightbulb size={14} />环境偏暗</div>}
       {scene === 'troubleshoot' && <div className="audio-meter"><AudioLines size={15} /><span>音频峰值偏低</span><i /><i /><i /><i /></div>}
@@ -1037,10 +1431,9 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
       <LiveGoal />
     </div>
     {isPk && <><div className="pk-versus">VS</div><div className="opponent-stage"><DemoOpponent /><div className="stage-label opponent"><span />陈妍</div></div><div className="pk-scorebar"><div><b>8,740</b><span>林小满</span></div><strong>01:18</strong><div><b>10,000</b><span>陈妍</span></div></div></>}
-    {!isPk && <div className="viewer-bubble"><Users size={14} />{audience.viewerCount.toLocaleString()}</div>}
-    <div className="floating-comments">
+    {isLive && <div className="floating-comments">
       {audience.comments.slice(0, 2).map((comment) => <span key={comment.id}>{comment.text}</span>)}
-    </div>
+    </div>}
   </div>
 }
 
@@ -1052,20 +1445,159 @@ function DemoOpponent() {
   return <div className="demo-opponent"><div className="opponent-hair" /><div className="opponent-face" /><div className="opponent-body" /></div>
 }
 
-function PreliveTaskCard({ task, completedCount, onApply }: { task: typeof preliveTasks[number]; completedCount: number; onApply: () => void }) {
-  const [selectedLayout, setSelectedLayout] = useState<'portrait' | 'stage'>('portrait')
-  const [isScriptExpanded, setIsScriptExpanded] = useState(false)
+function PreliveTaskCard({
+  task,
+  taskIndex,
+  completed,
+  layout,
+  title,
+  script,
+  announcement,
+  hostName,
+  hostBio,
+  themeDescription,
+  warmupCopy,
+  coverApplied,
+  pollEnabled,
+  pollQuestion,
+  onLayoutChange,
+  onTitleChange,
+  onScriptChange,
+  onAnnouncementChange,
+  onHostNameChange,
+  onHostBioChange,
+  onThemeDescriptionChange,
+  onWarmupCopyChange,
+  onCoverAppliedChange,
+  onPollEnabledChange,
+  onPollQuestionChange,
+  onVisualChange,
+  onAudioChange,
+  onApply,
+  onSkip,
+}: {
+  task: typeof preliveTasks[number]
+  taskIndex: number
+  completed: boolean
+  layout: PreliveLayout
+  title: string
+  script: string
+  announcement: string
+  hostName: string
+  hostBio: string
+  themeDescription: string
+  warmupCopy: string
+  coverApplied: boolean
+  pollEnabled: boolean
+  pollQuestion: string
+  onLayoutChange: (layout: PreliveLayout) => void
+  onTitleChange: (title: string) => void
+  onScriptChange: (script: string) => void
+  onAnnouncementChange: (announcement: string) => void
+  onHostNameChange: (name: string) => void
+  onHostBioChange: (bio: string) => void
+  onThemeDescriptionChange: (description: string) => void
+  onWarmupCopyChange: (copy: string) => void
+  onCoverAppliedChange: (applied: boolean) => void
+  onPollEnabledChange: (enabled: boolean) => void
+  onPollQuestionChange: (question: string) => void
+  onVisualChange: (property: keyof VisualSettings, percentage: number) => void
+  onAudioChange: (property: keyof AudioSettings, value: number) => void
+  onApply: () => void
+  onSkip: () => void
+}) {
+  const visualSettings = useStudioStore((state) => state.visualSettings)
+  const audioSettings = useStudioStore((state) => state.audioSettings)
+  const canApply = task.id !== 'content'
+    ? task.id !== 'interaction' || (
+        warmupCopy.trim().length > 0 &&
+        (!pollEnabled || pollQuestion.trim().length > 0)
+      )
+    : [
+        announcement,
+        hostName,
+        hostBio,
+        title,
+        themeDescription,
+        script,
+      ].every((value) => value.trim().length > 0)
+
   return <div className="recommendation-card prelive-task-card">
-    <span className="card-kicker">播前任务 {completedCount + 1} / {preliveTasks.length}</span>
+    <div className="prelive-task-meta">
+      <span className="card-kicker">{task.priority} · 任务 {taskIndex + 1} / {preliveTasks.length}</span>
+      {completed && <em><Check size={11} />已完成</em>}
+    </div>
     <h2>{task.title}</h2>
     <p>{task.detail}</p>
-    {task.id === 'layout' && <div className="task-choice-row"><button type="button" className={`task-choice ${selectedLayout === 'portrait' ? 'selected' : ''}`} onClick={() => setSelectedLayout('portrait')}><Camera size={15} />单人竖屏</button><button type="button" className={`task-choice ${selectedLayout === 'stage' ? 'selected' : ''}`} onClick={() => setSelectedLayout('stage')}><LayoutTemplate size={15} />秀场舞台</button></div>}
-    {task.id === 'visual' && <div className="adjustments"><Adjustment label="暖色" value="+18" /><Adjustment label="磨皮" value="20%" /></div>}
-    {task.id === 'content' && <button className={`script-preview ${isScriptExpanded ? 'expanded' : ''}`} type="button" onClick={() => setIsScriptExpanded((expanded) => !expanded)}><span>首 30 秒口播 {isScriptExpanded ? '收起' : '展开'}</span><p>“刚进来的朋友先选一首歌，今天我们轻松聊聊。”</p>{isScriptExpanded && <p className="script-extra">“评论区打 1 选甜歌，打 2 选炸场，今天由你们来定歌单。”</p>}</button>}
-    {task.id === 'interaction' && <div className="interaction-widget"><div><Gift size={17} /><span>点歌投票</span></div><p>甜歌还是炸场？评论区打 1 或 2</p><small>仅预览，确认后在开播时上屏</small></div>}
-    <Button className="primary-button full-button" color="primary" onClick={onApply}><Check size={16} />{task.action}</Button>
-    <button className="card-text-button" type="button">跳过并稍后处理</button>
+    {task.id === 'layout' && (
+      <div className="task-choice-row">
+        <button type="button" className={`task-choice ${layout === 'portrait' ? 'selected' : ''}`} onClick={() => onLayoutChange('portrait')}><Camera size={15} /><span><b>单人竖屏</b><small>9:16 · 聊天 / 音乐</small></span></button>
+        <button type="button" className={`task-choice ${layout === 'stage' ? 'selected' : ''}`} onClick={() => onLayoutChange('stage')}><LayoutTemplate size={15} /><span><b>秀场舞台</b><small>16:9 · 表演 / 游戏</small></span></button>
+      </div>
+    )}
+    {task.id === 'visual' && (
+      <div className="prelive-adjustment-stack">
+        <div className="prelive-signal-summary">
+          <span><i className={cameraEnabledClass(visualSettings.brightness)} />画面已检测</span>
+          <small>建议保持人脸明亮、声音峰值稳定</small>
+        </div>
+        <div className="adjustments">
+          <Adjustment label="补光" value={`${Math.round((visualSettings.brightness - 1) * 100)}%`} min={-20} max={40} onChange={(value) => onVisualChange('brightness', value)} />
+          <Adjustment label="对比度" value={`${Math.round((visualSettings.contrast - 1) * 100)}%`} min={-20} max={40} onChange={(value) => onVisualChange('contrast', value)} />
+          <Adjustment label="麦克风" value={`${audioSettings.microphoneGainDb} dB`} min={-20} max={20} onChange={(value) => onAudioChange('microphoneGainDb', value)} />
+        </div>
+      </div>
+    )}
+    {task.id === 'content' && (
+      <div className="prelive-form">
+        <div className="prelive-form-section">
+          <b>直播预告信息</b>
+          <label><span>开播时间与预告</span><input value={announcement} maxLength={50} onChange={(event) => onAnnouncementChange(event.target.value)} /></label>
+        </div>
+        <div className="prelive-form-section">
+          <b>主播介绍</b>
+          <label><span>主播名称</span><input value={hostName} maxLength={20} onChange={(event) => onHostNameChange(event.target.value)} /></label>
+          <label><span>简介</span><textarea value={hostBio} maxLength={100} rows={3} onChange={(event) => onHostBioChange(event.target.value)} /></label>
+        </div>
+        <div className="prelive-form-section">
+          <b>直播主题说明</b>
+          <label><span>直播标题</span><input value={title} maxLength={30} onChange={(event) => onTitleChange(event.target.value)} /></label>
+          <label><span>主题说明</span><textarea value={themeDescription} maxLength={120} rows={3} onChange={(event) => onThemeDescriptionChange(event.target.value)} /></label>
+        </div>
+        <div className="prelive-cover-suggestion">
+          <div><Camera size={17} /><span><b>封面建议</b><small>使用当前画面的人像居中帧</small></span></div>
+          <button type="button" className={coverApplied ? 'selected' : ''} onClick={() => onCoverAppliedChange(!coverApplied)}>
+            {coverApplied ? <><Check size={12} />已采用</> : '采用'}
+          </button>
+        </div>
+        <label><span>首 3 分钟内容脚本</span><textarea value={script} maxLength={240} rows={5} onChange={(event) => onScriptChange(event.target.value)} /></label>
+        <small>{title.length} / 30 · {script.length} / 240</small>
+      </div>
+    )}
+    {task.id === 'interaction' && (
+      <div className="prelive-form">
+        <div className="prelive-form-section">
+          <b>互动预热文案</b>
+          <label><span>开播前引导</span><textarea value={warmupCopy} maxLength={100} rows={3} onChange={(event) => onWarmupCopyChange(event.target.value)} /></label>
+        </div>
+        <label className="prelive-toggle-row">
+          <span><Gift size={15} />开播时展示点歌投票</span>
+          <input type="checkbox" checked={pollEnabled} onChange={(event) => onPollEnabledChange(event.target.checked)} />
+        </label>
+        <label className={!pollEnabled ? 'is-disabled' : ''}>
+          <span>投票问题</span>
+          <input value={pollQuestion} maxLength={30} disabled={!pollEnabled} onChange={(event) => onPollQuestionChange(event.target.value)} />
+        </label>
+        <div className="prelive-poll-preview"><b>{pollQuestion || '下一首唱什么？'}</b><span>甜歌</span><span>炸场</span><small>开播后展示 45 秒</small></div>
+      </div>
+    )}
+    <Button className="primary-button full-button" color="primary" disabled={!canApply} onClick={onApply}><Check size={16} />{completed ? '更新当前设置' : task.action}</Button>
+    <button className="card-text-button" type="button" onClick={onSkip}>跳过并稍后处理</button>
   </div>
+}
+
+function cameraEnabledClass(brightness: number) {
+  return brightness >= 0.85 ? 'is-ready' : 'is-warning'
 }
 
 export default App

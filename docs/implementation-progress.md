@@ -2,6 +2,29 @@
 
 ## Completed
 
+### Unified Pre-live and Live Console
+
+- Added a question-first entry page with category shortcuts and free-text submission.
+- Routes every entry choice into a unified three-column console instead of a separate setup page.
+- Reused the live console layout during pre-live preparation to avoid visual and structural jumps.
+- Keeps gift, comment, viewer-count, and entrant data unloaded and empty before the stream starts.
+- Added pre-live camera, microphone, and network status without exposing audience metrics.
+- Added four editable preparation tasks for layout, media quality, stream information, and interaction warm-up.
+- Added a persistent preparation progress bar and direct `GO LIVE` action below the center preview.
+- Switches the existing console in place from pre-live to live state and then loads audience, gift, comment, monitoring, recommendation, and widget data.
+- Added ranked live diagnostics, one-to-one actionable suggestions, a one-minute append-only suggestion queue, and matching widget recall.
+- Preserved camera effects, screen sharing, audio controls, polls, LIVE Goal, PK, Genie chat, preview, apply, and undo behavior.
+- Verified category and text entry paths, empty pre-live audience regions, and the complete `GO LIVE` state transition in Chrome.
+
+Validation:
+
+```bash
+npm run test   # 56 passed
+npm run build
+npm run lint
+git diff --check
+```
+
 ### React 18 and Creator UI
 
 - Downgraded React and React DOM to `18.3.1`.

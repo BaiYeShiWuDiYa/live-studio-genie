@@ -5,9 +5,9 @@ const sceneWidgets: Record<StudioScene, WidgetSpec> = {
   quality: {
     version: '1.0',
     type: 'visual-adjustment',
-    title: '画面偏暗，氛围可以更有记忆点',
-    detail: '检测到亮度低于建议区间，背景层次不足。',
-    actionLabel: '应用柔光方案',
+    title: '曝光与背景',
+    detail: '人脸亮度低于背景 32% · 持续 10 秒',
+    actionLabel: '确认应用',
     props: {
       settings: {
         brightness: 1.32,
@@ -19,9 +19,9 @@ const sceneWidgets: Record<StudioScene, WidgetSpec> = {
   interaction: {
     version: '1.0',
     type: 'audience-poll',
-    title: '互动节奏正在放缓',
-    detail: '评论密度连续 57 秒低于平均值，建议发起轻互动。',
-    actionLabel: '发布互动挂件',
+    title: '发起观众心愿',
+    detail: '评论密度持续走低，建议发起轻互动。',
+    actionLabel: '发布心愿',
     props: {
       question: '下一首唱什么？',
       options: ['甜歌', '炸场'],
@@ -31,9 +31,9 @@ const sceneWidgets: Record<StudioScene, WidgetSpec> = {
   troubleshoot: {
     version: '1.0',
     type: 'audio-adjustment',
-    title: '“声音小”反馈正在增加',
-    detail: '6 条评论提到音量问题，麦克风峰值低于建议区间。',
-    actionLabel: '确认音频调整',
+    title: '麦克风增益',
+    detail: '声音偏小，滋滋声正常',
+    actionLabel: '应用',
     props: {
       microphoneGain: 8,
       backgroundMusicGain: -5,
