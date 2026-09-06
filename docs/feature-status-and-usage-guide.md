@@ -129,6 +129,8 @@ http://localhost:5173
 
 除正常模式外，开播后的前 `15` 秒仍统一生成自然问候评论，避免刚开播就出现过于针对性的反馈；预热结束后才切换到所选策略。预热时长由 `studioRuntimeConfig.audience.strategyWarmupDurationMs` 控制。
 
+接纳与当前策略匹配的 AI 建议后，评论会展示 `10` 秒针对调整结果的认可反馈，随后恢复正常评论。详细状态流和各策略映射见 [评论区演示策略说明](./audience-comment-strategy.md)。
+
 ## 6. 直播控制台操作
 
 ### 6.1 监控指标

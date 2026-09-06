@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { StudioScene } from '../../agent/widgets/widgetSpec'
 import {
   audienceCommentsByStrategy,
+  audienceRecoveryCommentsByStrategy,
   audienceUserNames,
   getAudienceStrategy,
   type AudienceStrategyId,
@@ -33,6 +34,7 @@ export const audienceEventSchema = z.discriminatedUnion('type', [
 export type AudienceEvent = z.infer<typeof audienceEventSchema>
 export type AudienceComment = Extract<AudienceEvent, { type: 'comment' }>
 export type AudienceGift = Extract<AudienceEvent, { type: 'gift' }>
+export type AudienceCommentPhase = 'issue' | 'recovery'
 
 export interface CommentInsight {
   category: 'audio' | 'visual' | 'network' | 'request' | 'positive' | 'none'
@@ -55,11 +57,14 @@ export interface AudienceEventAdapter {
     scene: StudioScene,
     applied: boolean,
     tick: number,
+    startedAt?: number,
   ) => AudienceSnapshot
   getStrategySnapshot: (
     strategy: AudienceStrategyId,
     applied: boolean,
     tick: number,
+    phase?: AudienceCommentPhase,
+    startedAt?: number,
   ) => AudienceSnapshot
 }
 
@@ -79,7 +84,23 @@ const keywordGroups: Array<{
   { category: 'visual', label: '画面反馈', words: ['画面', '背景', '亮', '暗'] },
   { category: 'network', label: '卡顿反馈', words: ['卡', '延迟', '掉线'] },
   { category: 'request', label: '内容点播', words: ['唱', '歌', '点播', '想听'] },
-  { category: 'positive', label: '正向反馈', words: ['好看', '舒服', '喜欢', '加油'] },
+  {
+    category: 'positive',
+    label: '正向反馈',
+    words: [
+      '好看',
+      '舒服',
+      '喜欢',
+      '加油',
+      '好了',
+      '好多了',
+      '刚刚好',
+      '清楚',
+      '正常',
+      '流畅',
+      '可以了',
+    ],
+  },
 ]
 
 export function analyzeCommentKeywords(
@@ -113,22 +134,37 @@ function buildSnapshot(
   strategyId: AudienceStrategyId,
   applied: boolean,
   tick: number,
+  phase: AudienceCommentPhase = 'issue',
+  startedAt = 0,
 ): AudienceSnapshot {
   const config = studioRuntimeConfig.audience
   const strategy = getAudienceStrategy(strategyId)
-  const sourceComments = audienceCommentsByStrategy[strategyId]
+  const metricsStrategy = phase === 'recovery'
+    ? getAudienceStrategy('normal')
+    : strategy
+  const sourceComments = phase === 'recovery'
+    ? audienceRecoveryCommentsByStrategy[strategyId] ?? audienceCommentsByStrategy.normal
+    : audienceCommentsByStrategy[strategyId]
+  const currentEventTime = startedAt + tick * config.refreshIntervalMs
   const comments = Array.from({ length: config.visibleCommentCount }, (_, index): AudienceComment => {
-    const sourceIndex = (tick + index) % sourceComments.length
+    const eventTick = tick - (config.visibleCommentCount - 1 - index)
+    const sourceIndex = (
+      (eventTick % sourceComments.length) + sourceComments.length
+    ) % sourceComments.length
+    const userIndex = (
+      (eventTick % audienceUserNames.length) + audienceUserNames.length
+    ) % audienceUserNames.length
     return {
-      id: `comment-${strategyId}-${tick}-${index}`,
+      id: `comment-${strategyId}-${phase}-${eventTick}`,
       type: 'comment',
-      userName: audienceUserNames[(tick + index) % audienceUserNames.length],
-      text: applied && strategyId === 'cold-interaction' && index === 0
+      userName: audienceUserNames[userIndex],
+      text: phase === 'issue' && applied && strategyId === 'cold-interaction' && index === config.visibleCommentCount - 1
         ? '选 2，来首炸场的'
         : sourceComments[sourceIndex],
       occurredAt: Math.max(
         0,
-        tick * config.refreshIntervalMs - index * config.commentHistorySpacingMs,
+        currentEventTime -
+          (config.visibleCommentCount - 1 - index) * config.refreshIntervalMs,
       ),
     }
   })
@@ -143,7 +179,7 @@ function buildSnapshot(
         config.recentGiftBaseCount +
         tick % config.recentGiftVariationRange,
       icon: '🌹',
-      occurredAt: tick * config.refreshIntervalMs,
+      occurredAt: currentEventTime,
     },
     {
       id: `gift-heart-${tick}`,
@@ -154,7 +190,7 @@ function buildSnapshot(
       icon: '💗',
       occurredAt: Math.max(
         0,
-        tick * config.refreshIntervalMs - config.previousGiftOffsetMs,
+        currentEventTime - config.previousGiftOffsetMs,
       ),
     },
   ]
@@ -163,16 +199,18 @@ function buildSnapshot(
     comments,
     gifts,
     viewerCount: config.initialViewerCount + tick * config.viewerGrowthPerTick,
-    entrantsLastMinute: strategy.audienceMetrics.entrantsLastMinute,
-    commentsPerMinute: strategy.audienceMetrics.commentsPerMinute,
-    newViewerRetention: strategy.audienceMetrics.newViewerRetention,
-    insight: analyzeCommentKeywords(comments),
+    entrantsLastMinute: metricsStrategy.audienceMetrics.entrantsLastMinute,
+    commentsPerMinute: metricsStrategy.audienceMetrics.commentsPerMinute,
+    newViewerRetention: metricsStrategy.audienceMetrics.newViewerRetention,
+    insight: phase === 'recovery'
+      ? { category: 'positive', label: '正向反馈', count: comments.length }
+      : analyzeCommentKeywords(comments),
   }
 }
 
 export const mockAudienceEventAdapter: AudienceEventAdapter = {
-  getSnapshot(scene, applied, tick) {
-    return buildSnapshot(strategyByScene[scene], applied, tick)
+  getSnapshot(scene, applied, tick, startedAt) {
+    return buildSnapshot(strategyByScene[scene], applied, tick, 'issue', startedAt)
   },
   getStrategySnapshot: buildSnapshot,
 }

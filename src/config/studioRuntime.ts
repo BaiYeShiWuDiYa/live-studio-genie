@@ -1,13 +1,13 @@
 export const studioRuntimeConfig = {
   audience: {
     /** 直播间 Mock 数据刷新周期，单位为毫秒。 */
-    refreshIntervalMs: 3_500,
+    refreshIntervalMs: 1000,
     /** 开播后保持正常评论的预热时长，单位为毫秒。 */
     strategyWarmupDurationMs: 15_000,
+    /** 接纳策略建议后展示正向反馈评论的时长，单位为毫秒。 */
+    strategyRecoveryDurationMs: 10_000,
     /** 左侧实时评论区每次保留的评论数量。 */
     visibleCommentCount: 7,
-    /** 相邻历史评论的模拟时间间隔，单位为毫秒。 */
-    commentHistorySpacingMs: 8_000,
     /** 第二条礼物记录相对当前时刻的时间偏移，单位为毫秒。 */
     previousGiftOffsetMs: 60_000,
     /** 最新一条玫瑰礼物的基础数量。 */

@@ -477,9 +477,13 @@ Result: 13 test files and 57 tests passed. Production build completed with the e
 - Added normal, dim-light, low-audio, cold-interaction, network-lag, and PK-push Demo strategies.
 - Applied strategy-specific visual and audio settings before going live for deterministic demonstrations.
 - Added a configurable 15-second normal-comment warmup before strategy-specific feedback appears.
+- Added a configurable 10-second recovery phase after accepting the matching AI suggestion, followed by normal comments.
 - Moved expanded strategy comments and user names to `src/config/audienceComments.ts`.
+- Rendered comments as a bottom-appended sliding window with rotating user names and live timestamps in an independently scrollable panel.
+- Rebalanced metric label, progress, and value columns to prevent narrow-panel overflow.
 - Replaced automatic tick-based scenario rotation with explicit strategy-driven comments, metrics, and diagnostics.
 - Cleared pre-live suggestions on GO LIVE and recalled matching suggestions after the warmup.
+- Added `docs/audience-comment-strategy.md` as the Chinese strategy and demonstration guide.
 
 Validation:
 
@@ -490,7 +494,7 @@ npm run lint
 git diff --check
 ```
 
-Result: 13 test files and 60 tests passed. Browser regression verified the dim-light pre-live effect, normal warmup comments, delayed strategy comments, and matching exposure suggestions.
+Result: 13 test files and 63 tests passed. Browser regression verified bottom-appended comments, rotating user names and timestamps, 10-second recovery comments, and final return to normal comments.
 
 ## Next
 

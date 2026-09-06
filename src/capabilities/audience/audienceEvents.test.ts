@@ -5,7 +5,11 @@ import {
   mockAudienceEventAdapter,
   resolveAudienceStrategy,
 } from './audienceEvents'
-import { audienceCommentsByStrategy } from '../../config/audienceComments'
+import {
+  audienceCommentsByStrategy,
+  audienceRecoveryCommentsByStrategy,
+  doesSuggestionResolveStrategy,
+} from '../../config/audienceComments'
 import { studioRuntimeConfig } from '../../config/studioRuntime'
 
 describe('audience events', () => {
@@ -41,15 +45,42 @@ describe('audience events', () => {
       studioRuntimeConfig.audience.previousGiftOffsetMs /
       studioRuntimeConfig.audience.refreshIntervalMs,
     ) + 2
-    const snapshot = mockAudienceEventAdapter.getSnapshot('quality', false, tick)
-    const now = tick * studioRuntimeConfig.audience.refreshIntervalMs
+    const startedAt = 1_700_000_000_000
+    const snapshot = mockAudienceEventAdapter.getSnapshot(
+      'quality',
+      false,
+      tick,
+      startedAt,
+    )
+    const now = startedAt + tick * studioRuntimeConfig.audience.refreshIntervalMs
+    const latestCommentIndex = snapshot.comments.length - 1
 
-    expect(snapshot.comments[0].occurredAt).toBe(now)
-    expect(snapshot.comments[1].occurredAt).toBe(
-      now - studioRuntimeConfig.audience.commentHistorySpacingMs,
+    expect(snapshot.comments[latestCommentIndex].occurredAt).toBe(now)
+    expect(snapshot.comments[latestCommentIndex - 1].occurredAt).toBe(
+      now - studioRuntimeConfig.audience.refreshIntervalMs,
     )
     expect(snapshot.gifts[1].occurredAt).toBe(
       now - studioRuntimeConfig.audience.previousGiftOffsetMs,
+    )
+  })
+
+  it('keeps existing comments and appends the newest comment at the bottom', () => {
+    const before = mockAudienceEventAdapter.getStrategySnapshot(
+      'dim-light',
+      false,
+      20,
+    )
+    const after = mockAudienceEventAdapter.getStrategySnapshot(
+      'dim-light',
+      false,
+      21,
+    )
+
+    expect(after.comments.slice(0, -1).map(({ id }) => id)).toEqual(
+      before.comments.slice(1).map(({ id }) => id),
+    )
+    expect(after.comments.at(-1)!.occurredAt).toBeGreaterThan(
+      before.comments.at(-1)!.occurredAt,
     )
   })
 
@@ -78,5 +109,26 @@ describe('audience events', () => {
       snapshot.comments[0].text,
     )
     expect(audienceCommentsByStrategy.normal.length).toBeGreaterThan(10)
+  })
+
+  it('switches to positive recovery comments after a strategy suggestion is accepted', () => {
+    const snapshot = mockAudienceEventAdapter.getStrategySnapshot(
+      'dim-light',
+      true,
+      20,
+      'recovery',
+    )
+
+    expect(snapshot.comments.every((comment) =>
+      audienceRecoveryCommentsByStrategy['dim-light']?.includes(comment.text),
+    )).toBe(true)
+    expect(snapshot.insight.category).toBe('positive')
+    expect(snapshot.commentsPerMinute).toBe(42)
+  })
+
+  it('matches AI suggestion signals to their owning strategy', () => {
+    expect(doesSuggestionResolveStrategy('dim-light', 'exposure')).toBe(true)
+    expect(doesSuggestionResolveStrategy('low-audio', 'microphone')).toBe(true)
+    expect(doesSuggestionResolveStrategy('network-lag', 'retention')).toBe(false)
   })
 })

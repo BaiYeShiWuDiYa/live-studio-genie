@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { ButtonV4 as Button } from '@byted/creator-ui'
 import {
   Activity,
@@ -68,6 +68,7 @@ import { LiveGoal } from './components/studio/LiveGoal'
 import { LivePoll } from './components/studio/LivePoll'
 import {
   audienceStrategies,
+  doesSuggestionResolveStrategy,
   getAudienceStrategy,
   type AudienceStrategyId,
 } from './config/audienceComments'
@@ -82,6 +83,14 @@ type PreliveTask = 'layout' | 'visual' | 'content' | 'interaction'
 type PreliveLayout = 'portrait' | 'stage'
 type PreviewMode = 'mobile' | 'studio'
 type GenieRequestStatus = 'idle' | 'loading' | 'cancelled' | 'timeout' | 'error'
+type StrategyCommentState = 'issue' | 'recovery' | 'normal'
+
+const audienceTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
+})
 
 type ChatMessage = {
   role: 'user' | 'assistant'
@@ -186,7 +195,10 @@ function App() {
   const [genieError, setGenieError] = useState('')
   const [genieRequestStatus, setGenieRequestStatus] = useState<GenieRequestStatus>('idle')
   const [liveTick, setLiveTick] = useState(0)
+  const [liveStartedAt, setLiveStartedAt] = useState(0)
   const [strategyWarmupComplete, setStrategyWarmupComplete] = useState(false)
+  const [strategyCommentState, setStrategyCommentState] =
+    useState<StrategyCommentState>('issue')
   const [liveAdjustment, setLiveAdjustment] = useState<LiveAdjustment | null>(null)
   const [isSuggestionPreview, setIsSuggestionPreview] = useState(false)
   const [isMicMuted, setIsMicMuted] = useState(false)
@@ -203,6 +215,7 @@ function App() {
   const backgroundMusicRef = useRef<BackgroundMusicPlayer | null>(null)
   const cameraAttemptedRef = useRef(false)
   const strategySelectorRef = useRef<HTMLDivElement>(null)
+  const strategyRecoveryTimeoutRef = useRef<number | null>(null)
   const genieAbortRef = useRef<AbortController | null>(null)
   const lastGenieRequestRef = useRef<{ question: string; prompt: string } | null>(null)
   const resetCameraLayerLayout = useStudioStore((state) => state.resetCameraLayerLayout)
@@ -256,7 +269,7 @@ function App() {
     undoCameraEffects,
   }
   const strategyWarmupActive = view === 'live' && !strategyWarmupComplete
-  const activeAudienceStrategy = view === 'live'
+  const activeAudienceStrategy = view === 'live' && strategyCommentState !== 'normal'
     ? resolveAudienceStrategy(
         demoStrategy,
         strategyWarmupComplete
@@ -264,28 +277,39 @@ function App() {
           : 0,
       )
     : demoStrategy
+  const commentStrategy = strategyCommentState === 'normal'
+    ? 'normal'
+    : activeAudienceStrategy
+  const commentPhase = strategyCommentState === 'recovery'
+    ? 'recovery'
+    : 'issue'
+  const diagnosticStrategy = strategyCommentState === 'issue'
+    ? activeAudienceStrategy
+    : 'normal'
   const selectedStrategy = getAudienceStrategy(demoStrategy)
   const audienceSnapshot = useMemo(
     () => view === 'live'
       ? mockAudienceEventAdapter.getStrategySnapshot(
-          activeAudienceStrategy,
+          commentStrategy,
           applied,
           liveTick,
+          commentPhase,
+          liveStartedAt,
         )
       : emptyAudienceSnapshot,
-    [activeAudienceStrategy, applied, liveTick, view],
+    [applied, commentPhase, commentStrategy, liveStartedAt, liveTick, view],
   )
   const diagnostics = useMemo(() => buildLiveDiagnostics({
     mediaMetrics,
     audience: audienceSnapshot,
-    strategy: activeAudienceStrategy,
+    strategy: diagnosticStrategy,
     resolvedScene: applied ? scene : null,
     brightnessCompensation: (committedBrightness - 1) * 100,
     microphoneGainDb: committedMicrophoneGainDb,
   }), [
     applied,
     audienceSnapshot,
-    activeAudienceStrategy,
+    diagnosticStrategy,
     committedBrightness,
     committedMicrophoneGainDb,
     mediaMetrics,
@@ -396,6 +420,9 @@ function App() {
       }
       if (removalTimeoutRef.current !== null) {
         window.clearTimeout(removalTimeoutRef.current)
+      }
+      if (strategyRecoveryTimeoutRef.current !== null) {
+        window.clearTimeout(strategyRecoveryTimeoutRef.current)
       }
     }
   }, [])
@@ -519,7 +546,12 @@ function App() {
 
   const selectDemoStrategy = (strategyId: AudienceStrategyId) => {
     const strategy = getAudienceStrategy(strategyId)
+    if (strategyRecoveryTimeoutRef.current !== null) {
+      window.clearTimeout(strategyRecoveryTimeoutRef.current)
+      strategyRecoveryTimeoutRef.current = null
+    }
     setDemoStrategy(strategyId)
+    setStrategyCommentState('issue')
     setStrategyMenuOpen(false)
     setScene(strategy.scene)
     setIsPk(view === 'live' && strategy.scene === 'pk')
@@ -634,6 +666,7 @@ function App() {
   const scheduleSuggestionRemoval = (
     queueId: string | undefined,
     signalId: LiveSuggestion['signalId'] | undefined,
+    clearQueue = false,
   ) => {
     if (!queueId || !signalId) return
 
@@ -643,10 +676,12 @@ function App() {
       window.clearTimeout(removalTimeoutRef.current)
     }
     removalTimeoutRef.current = window.setTimeout(() => {
-      setSuggestionQueue((queue) =>
-        queue.filter((suggestion) => suggestion.queueId !== queueId),
+      setSuggestionQueue((queue) => clearQueue
+        ? []
+        : queue.filter((suggestion) => suggestion.queueId !== queueId))
+      setSelectedSuggestionId((currentId) =>
+        clearQueue || currentId === queueId ? null : currentId,
       )
-      setSelectedSuggestionId((currentId) => currentId === queueId ? null : currentId)
       setRemovingSuggestionId(null)
       setApplied(false)
       setIsSuggestionPreview(false)
@@ -654,10 +689,36 @@ function App() {
     }, 320)
   }
 
+  const beginStrategyRecovery = (
+    suggestion: QueuedSuggestion | null,
+  ): boolean => {
+    if (
+      view !== 'live' ||
+      strategyWarmupActive ||
+      strategyCommentState !== 'issue' ||
+      demoStrategy === 'normal' ||
+      !suggestion ||
+      !doesSuggestionResolveStrategy(demoStrategy, suggestion.signalId)
+    ) {
+      return false
+    }
+
+    if (strategyRecoveryTimeoutRef.current !== null) {
+      window.clearTimeout(strategyRecoveryTimeoutRef.current)
+    }
+    setStrategyCommentState('recovery')
+    strategyRecoveryTimeoutRef.current = window.setTimeout(() => {
+      setStrategyCommentState('normal')
+      strategyRecoveryTimeoutRef.current = null
+    }, studioRuntimeConfig.audience.strategyRecoveryDurationMs)
+    return true
+  }
+
   const applySuggestion = (
     widgetSpec: WidgetSpec = activeWidgetSpec,
     suggestion: QueuedSuggestion | null = null,
   ) => {
+    const resolvesStrategy = beginStrategyRecovery(suggestion)
     setApplied(true)
     if (widgetSpec.type === 'camera-effects') {
       const result = studioToolRegistry.execute('studio.adjust_camera_effects', {
@@ -666,7 +727,11 @@ function App() {
       }, studioToolContext)
       setLiveAdjustment(result)
       setIsSuggestionPreview(false)
-      scheduleSuggestionRemoval(suggestion?.queueId, suggestion?.signalId)
+      scheduleSuggestionRemoval(
+        suggestion?.queueId,
+        suggestion?.signalId,
+        resolvesStrategy,
+      )
       return
     }
 
@@ -677,7 +742,11 @@ function App() {
       }, studioToolContext)
       setLiveAdjustment(result)
       setIsSuggestionPreview(false)
-      scheduleSuggestionRemoval(suggestion?.queueId, suggestion?.signalId)
+      scheduleSuggestionRemoval(
+        suggestion?.queueId,
+        suggestion?.signalId,
+        resolvesStrategy,
+      )
       return
     }
 
@@ -688,7 +757,11 @@ function App() {
       }, studioToolContext)
       setLiveAdjustment(result)
       setIsSuggestionPreview(false)
-      scheduleSuggestionRemoval(suggestion?.queueId, suggestion?.signalId)
+      scheduleSuggestionRemoval(
+        suggestion?.queueId,
+        suggestion?.signalId,
+        resolvesStrategy,
+      )
       return
     }
 
@@ -699,7 +772,11 @@ function App() {
       }, studioToolContext)
       setLiveAdjustment(result)
       setIsSuggestionPreview(false)
-      scheduleSuggestionRemoval(suggestion?.queueId, suggestion?.signalId)
+      scheduleSuggestionRemoval(
+        suggestion?.queueId,
+        suggestion?.signalId,
+        resolvesStrategy,
+      )
       return
     }
 
@@ -710,13 +787,21 @@ function App() {
       }, studioToolContext)
       setLiveAdjustment(result)
       setIsSuggestionPreview(false)
-      scheduleSuggestionRemoval(suggestion?.queueId, suggestion?.signalId)
+      scheduleSuggestionRemoval(
+        suggestion?.queueId,
+        suggestion?.signalId,
+        resolvesStrategy,
+      )
       return
     }
 
     setLiveAdjustment(getWidgetAdjustment(widgetSpec, 'apply'))
     setIsSuggestionPreview(false)
-    scheduleSuggestionRemoval(suggestion?.queueId, suggestion?.signalId)
+    scheduleSuggestionRemoval(
+      suggestion?.queueId,
+      suggestion?.signalId,
+      resolvesStrategy,
+    )
   }
 
   const completePreliveTask = () => {
@@ -770,7 +855,7 @@ function App() {
     if (nextIndex !== undefined) setPreliveTaskIndex(nextIndex)
   }
 
-  const startLiveFromPrelive = () => {
+  const startLiveFromPrelive = (event: ReactMouseEvent<HTMLButtonElement>) => {
     if (prelivePollEnabled) {
       studioToolRegistry.execute('studio.configure_poll', {
         mode: 'apply',
@@ -782,7 +867,13 @@ function App() {
       }, studioToolContext)
     }
     setLiveTick(0)
+    setLiveStartedAt(Math.round(performance.timeOrigin + event.timeStamp))
     setStrategyWarmupComplete(false)
+    setStrategyCommentState('issue')
+    if (strategyRecoveryTimeoutRef.current !== null) {
+      window.clearTimeout(strategyRecoveryTimeoutRef.current)
+      strategyRecoveryTimeoutRef.current = null
+    }
     setScene(selectedStrategy.scene)
     setIsPk(selectedStrategy.scene === 'pk')
     setSuggestionQueue([])
@@ -1105,7 +1196,7 @@ function App() {
             <button type="button" className={previewMode === 'mobile' ? 'selected' : ''} onClick={() => setPreviewMode('mobile')}>移动端预览</button>
             <button type="button" className={previewMode === 'studio' ? 'selected' : ''} onClick={() => setPreviewMode('studio')}>Studio 视图</button>
           </div>
-          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} strategy={demoStrategy} liveAdjustment={liveAdjustment} previewMode={previewMode} isPreviewing={isSuggestionPreview} audience={audienceSnapshot} isLive={view === 'live'} preliveTitle={streamTopic} preliveLayout={preliveLayout} />
+          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} strategy={strategyCommentState === 'issue' ? demoStrategy : 'normal'} liveAdjustment={liveAdjustment} previewMode={previewMode} isPreviewing={isSuggestionPreview} audience={audienceSnapshot} isLive={view === 'live'} preliveTitle={streamTopic} preliveLayout={preliveLayout} />
           {(cameraError || displayError || backgroundMusicError) && <p className="camera-warning">{displayError || cameraError || backgroundMusicError}</p>}
           <div className="stage-controls">
             <button type="button" className="control-button" onClick={enableCamera}><Camera size={18} /><span>{cameraEnabled ? '摄像头已连接' : '开启摄像头'}</span></button>
@@ -1381,11 +1472,20 @@ function LiveOperationsPanel({ audience, diagnostics }: {
   audience: AudienceSnapshot
   diagnostics: LiveDiagnostics
 }) {
+  const commentListRef = useRef<HTMLDivElement>(null)
+  const newestCommentId = audience.comments.at(-1)?.id
   const gifts = [
     { icon: '🌹', user: audience.gifts[0]?.userName ?? 'Luna', gift: 'Rose', count: audience.gifts[0]?.count ?? 5, time: '12:41:30' },
     { icon: '♪', user: 'Alex', gift: 'TikTok', count: 1, time: '12:42:02' },
     { icon: '♥', user: audience.gifts[1]?.userName ?? 'Mie', gift: 'Heart', count: audience.gifts[1]?.count ?? 10, time: '12:42:10' },
   ]
+
+  useEffect(() => {
+    const commentList = commentListRef.current
+    if (commentList) {
+      commentList.scrollTop = commentList.scrollHeight
+    }
+  }, [newestCommentId])
 
   return (
     <div className="live-operations">
@@ -1417,12 +1517,14 @@ function LiveOperationsPanel({ audience, diagnostics }: {
       </section>
       <section className="activity-section comment-activity">
         <h2>Comment</h2>
-        <div className="prototype-comment-list" role="log" aria-label="实时评论列表" aria-live="polite" tabIndex={0}>
-          {audience.comments.slice(0, 4).map((comment, index) => (
+        <div className="prototype-comment-list" ref={commentListRef} role="log" aria-label="实时评论列表" aria-live="polite" tabIndex={0}>
+          {audience.comments.map((comment, index) => (
             <div className="prototype-comment" key={comment.id}>
-              <i className={`avatar avatar-${index + 1}`}>{comment.userName.slice(0, 1)}</i>
-              <span><b>User{index + 1}:</b> {comment.text}</span>
-              <time>12:42:{String(5 + index * 3).padStart(2, '0')}</time>
+              <i className={`avatar avatar-${index % 4 + 1}`}>{comment.userName.slice(0, 1)}</i>
+              <span><b>{comment.userName}:</b> {comment.text}</span>
+              <time dateTime={new Date(comment.occurredAt).toISOString()}>
+                {audienceTimeFormatter.format(comment.occurredAt)}
+              </time>
             </div>
           ))}
         </div>
@@ -1440,13 +1542,17 @@ function IndicatorRow({ label, value, score, tone, direction, trendLabel, audio 
   trendLabel: string
   audio?: boolean
 }) {
+  const displayValue = label === '人脸构图'
+    ? value.replace('人脸 ', '')
+    : value
+
   return (
     <div className={`indicator-row ${tone}`}>
       <span className="indicator-label"><i />{label}</span>
       {audio
         ? <span className="audio-wave" aria-hidden="true">{Array.from({ length: 17 }, (_, index) => <i key={index} />)}</span>
         : <span className="indicator-track"><i style={{ width: `${Math.max(8, Math.min(100, score))}%` }} /></span>}
-      <b>{value}<em>{direction === 'up' ? ` ${trendLabel} ↑` : ` ${trendLabel} ↓`}</em></b>
+      <b>{displayValue}<em>{direction === 'up' ? ` ${trendLabel} ↑` : ` ${trendLabel} ↓`}</em></b>
     </div>
   )
 }

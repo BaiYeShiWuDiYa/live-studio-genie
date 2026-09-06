@@ -1,5 +1,6 @@
 import type { StudioScene } from '../agent/widgets/widgetSpec'
 import type { AudioSettings } from '../capabilities/audio/types'
+import type { LiveSignalId } from '../capabilities/monitoring/liveDiagnostics'
 import type { VisualSettings } from '../capabilities/visual/types'
 
 export type AudienceStrategyId =
@@ -22,6 +23,7 @@ export interface AudienceStrategyDefinition {
     microphoneCeiling?: number
     fps?: number
   }
+  resolutionSignals: readonly LiveSignalId[]
   audienceMetrics: {
     commentsPerMinute: number
     entrantsLastMinute: number
@@ -39,6 +41,7 @@ export const audienceStrategies: readonly AudienceStrategyDefinition[] = [
     visualSettings: { brightness: 1, contrast: 1, warmth: 0 },
     audioSettings: { microphoneGainDb: 0, backgroundMusicGainDb: 0 },
     diagnostics: {},
+    resolutionSignals: [],
     audienceMetrics: {
       commentsPerMinute: 42,
       entrantsLastMinute: 38,
@@ -53,6 +56,7 @@ export const audienceStrategies: readonly AudienceStrategyDefinition[] = [
     visualSettings: { brightness: 0.68, contrast: 0.9, warmth: 0 },
     audioSettings: { microphoneGainDb: 0, backgroundMusicGainDb: 0 },
     diagnostics: { brightnessCeiling: 32 },
+    resolutionSignals: ['exposure', 'contrast', 'framing'],
     audienceMetrics: {
       commentsPerMinute: 36,
       entrantsLastMinute: 34,
@@ -67,6 +71,7 @@ export const audienceStrategies: readonly AudienceStrategyDefinition[] = [
     visualSettings: { brightness: 1, contrast: 1, warmth: 0 },
     audioSettings: { microphoneGainDb: -12, backgroundMusicGainDb: 0 },
     diagnostics: { microphoneCeiling: 22 },
+    resolutionSignals: ['microphone'],
     audienceMetrics: {
       commentsPerMinute: 34,
       entrantsLastMinute: 31,
@@ -81,6 +86,7 @@ export const audienceStrategies: readonly AudienceStrategyDefinition[] = [
     visualSettings: { brightness: 1, contrast: 1, warmth: 0 },
     audioSettings: { microphoneGainDb: 0, backgroundMusicGainDb: 0 },
     diagnostics: {},
+    resolutionSignals: ['comments', 'entrants', 'retention'],
     audienceMetrics: {
       commentsPerMinute: 14,
       entrantsLastMinute: 19,
@@ -95,6 +101,7 @@ export const audienceStrategies: readonly AudienceStrategyDefinition[] = [
     visualSettings: { brightness: 1, contrast: 1, warmth: 0 },
     audioSettings: { microphoneGainDb: 0, backgroundMusicGainDb: 0 },
     diagnostics: { fps: 18 },
+    resolutionSignals: ['fps'],
     audienceMetrics: {
       commentsPerMinute: 31,
       entrantsLastMinute: 31,
@@ -109,6 +116,7 @@ export const audienceStrategies: readonly AudienceStrategyDefinition[] = [
     visualSettings: { brightness: 1, contrast: 1, warmth: 0 },
     audioSettings: { microphoneGainDb: 0, backgroundMusicGainDb: 0 },
     diagnostics: {},
+    resolutionSignals: ['gifts'],
     audienceMetrics: {
       commentsPerMinute: 46,
       entrantsLastMinute: 41,
@@ -233,8 +241,81 @@ export const audienceCommentsByStrategy: Readonly<Record<AudienceStrategyId, rea
   ],
 }
 
+/** 用户接纳 AI 建议后短暂展示的正向反馈评论池。 */
+export const audienceRecoveryCommentsByStrategy: Readonly<
+  Partial<Record<AudienceStrategyId, readonly string[]>>
+> = {
+  'dim-light': [
+    '现在画面亮度可以了',
+    '现在挺好的了',
+    '这下看得很清楚',
+    '补光之后自然多了',
+    '现在人物和背景都能看清',
+    '这个亮度刚刚好',
+    '画面调整后舒服多了',
+    '现在曝光正常了',
+    '这样就很好看了',
+    '灯光效果可以了',
+  ],
+  'low-audio': [
+    '现在声音清楚了',
+    '这个音量刚刚好',
+    '现在能听清主播说话了',
+    '人声比刚才清晰多了',
+    '麦克风现在正常了',
+    '这样听起来很舒服',
+    '声音调整后好多了',
+    '现在唱歌很清楚',
+    '音量可以了',
+    '这下不用开最大音量了',
+  ],
+  'cold-interaction': [
+    '这个投票挺有意思',
+    '我选甜歌',
+    '已投票，等主播揭晓',
+    '新来的也能马上参与',
+    '互动起来就热闹多了',
+    '主播终于看到评论啦',
+    '这个问题很好选',
+    '大家都开始投票了',
+    '选项很清楚',
+    '现在直播间气氛好多了',
+  ],
+  'network-lag': [
+    '现在画面流畅了',
+    '这次不卡了',
+    '声音和画面对上了',
+    '现在延迟正常了',
+    '重新调整后清楚多了',
+    '画面已经恢复正常',
+    '我这里现在很流畅',
+    '刚才的卡顿没有了',
+    '现在观看体验挺好的',
+    '网络状态可以了',
+  ],
+  'pk-push': [
+    '目标组件看到了',
+    '进度显示很清楚',
+    '这样大家知道还差多少了',
+    '已经帮主播助力',
+    '目标快达成了',
+    '冲刺提示很醒目',
+    '大家一起完成目标',
+    '现在 PK 氛围起来了',
+    '进度条更新很及时',
+    '最后一点一起冲',
+  ],
+}
+
 export function getAudienceStrategy(
   strategyId: AudienceStrategyId,
 ): AudienceStrategyDefinition {
   return audienceStrategies.find(({ id }) => id === strategyId) ?? audienceStrategies[0]
+}
+
+export function doesSuggestionResolveStrategy(
+  strategyId: AudienceStrategyId,
+  signalId: LiveSignalId,
+): boolean {
+  return getAudienceStrategy(strategyId).resolutionSignals.includes(signalId)
 }

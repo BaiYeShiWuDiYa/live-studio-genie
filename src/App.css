@@ -1956,7 +1956,7 @@
 .professional-mode {
   position: absolute;
   z-index: 2;
-  top: calc(29% + 354px);
+  top: calc(29% + 390px);
   left: 50%;
   display: inline-flex;
   align-items: center;
@@ -2478,11 +2478,14 @@
   width: 100%;
   min-width: 0;
   height: clamp(24px, 2.25vw, 46px);
-  padding: 0 clamp(9px, 0.95vw, 19px);
+  padding: 0 clamp(7px, 0.7vw, 14px);
   display: grid;
-  grid-template-columns: clamp(75px, 6.5vw, 133px) minmax(32px, 1fr) clamp(72px, 5.3vw, 108px);
+  grid-template-columns:
+    clamp(68px, 4.7vw, 96px)
+    minmax(36px, 0.7fr)
+    minmax(102px, 1.2fr);
   align-items: center;
-  gap: clamp(7px, 0.7vw, 14px);
+  gap: clamp(5px, 0.45vw, 9px);
   border: 1px solid rgba(123, 112, 122, 0.26);
   border-radius: clamp(8px, 0.65vw, 13px);
   background: linear-gradient(90deg, rgba(61, 57, 64, 0.52), rgba(47, 43, 50, 0.35));
@@ -2549,8 +2552,9 @@
 }
 
 .indicator-row > b {
+  min-width: 0;
   color: #f6eff5;
-  font-size: clamp(10px, 0.75vw, 15px);
+  font-size: clamp(9px, 0.68vw, 14px);
   font-weight: 500;
   text-align: right;
   white-space: nowrap;
@@ -2630,21 +2634,44 @@
 }
 
 .comment-activity {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
   padding-top: 9px;
 }
 
 .prototype-comment-list {
-  height: calc(100% - 22px);
+  min-height: 0;
+  flex: 1;
   margin-top: 6px;
+  padding-right: 4px;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: rgba(118, 223, 192, 0.55) transparent;
+}
+
+.prototype-comment-list::-webkit-scrollbar {
+  width: 5px;
+}
+
+.prototype-comment-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.prototype-comment-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(118, 223, 192, 0.55);
 }
 
 .prototype-comment {
   min-height: clamp(30px, 3vw, 61px);
   display: grid;
-  grid-template-columns: clamp(20px, 2vw, 40px) minmax(0, 1fr) auto;
+  grid-template-columns:
+    clamp(20px, 2vw, 40px)
+    minmax(0, 1fr)
+    clamp(50px, 3.9vw, 80px);
   align-items: center;
   gap: 6px;
   color: #e5dee3;
@@ -2671,7 +2698,15 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.prototype-comment b { font-weight: 500; }
+.prototype-comment b {
+  margin-right: 3px;
+  color: #f7f0f5;
+  font-weight: 500;
+}
+
+.prototype-comment time {
+  text-align: right;
+}
 
 .live-app .stage-column {
   position: relative;
