@@ -51,7 +51,6 @@ import {
 import {
   appendNewSuggestions,
   markSuggestionSeen,
-  RIGHT_PANEL_SYNC_INTERVAL_MS,
   type QueuedSuggestion,
 } from './capabilities/monitoring/suggestionQueue'
 import type { VisualSettings } from './capabilities/visual/types'
@@ -65,6 +64,7 @@ import { CameraEffectsCanvas } from './components/studio/CameraEffectsCanvas'
 import { EditableCameraLayer } from './components/studio/EditableCameraLayer'
 import { LiveGoal } from './components/studio/LiveGoal'
 import { LivePoll } from './components/studio/LivePoll'
+import { studioRuntimeConfig } from './config/studioRuntime'
 import { askGenie, GenieRequestError } from './services/genie'
 import { useStudioStore } from './store/studioStore'
 
@@ -296,7 +296,7 @@ function App() {
   useEffect(() => {
     if (view !== 'live') return
 
-    let nextSyncAt = Date.now() + RIGHT_PANEL_SYNC_INTERVAL_MS
+    let nextSyncAt = Date.now() + studioRuntimeConfig.suggestion.syncIntervalMs
     let timeoutId = 0
     const synchronizeSuggestions = () => {
       const incoming = latestDiagnosticsRef.current.suggestions
@@ -311,7 +311,7 @@ function App() {
       )
 
       do {
-        nextSyncAt += RIGHT_PANEL_SYNC_INTERVAL_MS
+        nextSyncAt += studioRuntimeConfig.suggestion.syncIntervalMs
       } while (nextSyncAt <= Date.now())
       timeoutId = window.setTimeout(
         synchronizeSuggestions,
@@ -437,7 +437,10 @@ function App() {
 
   useEffect(() => {
     if (view !== 'live') return
-    const interval = window.setInterval(() => setLiveTick((tick) => tick + 1), 3500)
+    const interval = window.setInterval(
+      () => setLiveTick((tick) => tick + 1),
+      studioRuntimeConfig.audience.refreshIntervalMs,
+    )
     return () => window.clearInterval(interval)
   }, [view])
 

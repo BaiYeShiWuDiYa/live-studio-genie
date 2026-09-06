@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { studioRuntimeConfig } from '../../config/studioRuntime'
 import { useStudioStore } from '../../store/studioStore'
 
 export function LivePoll() {
@@ -17,7 +18,7 @@ export function LivePoll() {
         return
       }
       setNow(timestamp)
-    }, 1000)
+    }, studioRuntimeConfig.poll.countdownIntervalMs)
     return () => window.clearInterval(interval)
   }, [hidePoll, pollState.config, pollState.startedAt, pollState.status])
 

@@ -1,8 +1,6 @@
 import type { WidgetSpec } from '../../agent/widgets/widgetSpec'
 import type { LiveSuggestion } from './liveDiagnostics'
 
-export const RIGHT_PANEL_SYNC_INTERVAL_MS = 60_000
-
 export interface QueuedSuggestion extends LiveSuggestion {
   queueId: string
   addedAt: number

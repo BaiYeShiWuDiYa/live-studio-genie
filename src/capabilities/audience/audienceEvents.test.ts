@@ -4,6 +4,7 @@ import {
   audienceEventSchema,
   mockAudienceEventAdapter,
 } from './audienceEvents'
+import { studioRuntimeConfig } from '../../config/studioRuntime'
 
 describe('audience events', () => {
   it('classifies the dominant keyword group in a comment window', () => {
@@ -23,12 +24,28 @@ describe('audience events', () => {
     const second = mockAudienceEventAdapter.getSnapshot('interaction', false, 3)
 
     expect(first).toEqual(second)
-    expect(first.comments).toHaveLength(7)
+    expect(first.comments).toHaveLength(
+      studioRuntimeConfig.audience.visibleCommentCount,
+    )
     expect(first.gifts).toHaveLength(2)
     expect(first.comments.every((event) => audienceEventSchema.safeParse(event).success))
       .toBe(true)
     expect(first.gifts.every((event) => audienceEventSchema.safeParse(event).success))
       .toBe(true)
+  })
+
+  it('uses the shared timing configuration for generated events', () => {
+    const tick = 20
+    const snapshot = mockAudienceEventAdapter.getSnapshot('quality', false, tick)
+    const now = tick * studioRuntimeConfig.audience.refreshIntervalMs
+
+    expect(snapshot.comments[0].occurredAt).toBe(now)
+    expect(snapshot.comments[1].occurredAt).toBe(
+      now - studioRuntimeConfig.audience.commentHistorySpacingMs,
+    )
+    expect(snapshot.gifts[1].occurredAt).toBe(
+      now - studioRuntimeConfig.audience.previousGiftOffsetMs,
+    )
   })
 
   it('changes live counters over time', () => {

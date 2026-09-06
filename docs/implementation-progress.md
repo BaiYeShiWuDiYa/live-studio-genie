@@ -452,6 +452,25 @@ git check-ignore -v
 git diff --check
 ```
 
+### Centralized Runtime Configuration
+
+- Added `src/config/studioRuntime.ts` as the single source for adjustable runtime and Demo values.
+- Centralized audience refresh timing, comment history spacing, viewer counters, retention values, and scene phase duration.
+- Centralized suggestion synchronization, media sampling, MediaPipe throttling, poll countdown, LIVE Goal, and BGM timing.
+- Added a concise Chinese comment to every configuration field.
+- Added coverage proving generated audience event timestamps follow the shared configuration.
+
+Validation:
+
+```bash
+npm run test
+npm run build
+npm run lint
+git diff --check
+```
+
+Result: 13 test files and 57 tests passed. Production build completed with the existing large-chunk warning.
+
 ## Next
 
 1. Add eyebrow controls and face-shape deformation.

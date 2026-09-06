@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { StudioScene } from '../../agent/widgets/widgetSpec'
+import { studioRuntimeConfig } from '../../config/studioRuntime'
 
 const audienceEventBaseSchema = z.object({
   id: z.string().min(1),
@@ -84,7 +85,6 @@ const commentsByScene: Record<StudioScene, string[]> = {
 }
 
 const userNames = ['甜甜圈', '小满同学', '阿福', '星河入梦', '柚子茶']
-const visibleCommentCount = 7
 
 const keywordGroups: Array<{
   category: CommentInsight['category']
@@ -117,8 +117,9 @@ export function analyzeCommentKeywords(
 }
 
 function buildSnapshot(scene: StudioScene, applied: boolean, tick: number): AudienceSnapshot {
+  const config = studioRuntimeConfig.audience
   const sourceComments = commentsByScene[scene]
-  const comments = Array.from({ length: visibleCommentCount }, (_, index): AudienceComment => {
+  const comments = Array.from({ length: config.visibleCommentCount }, (_, index): AudienceComment => {
     const sourceIndex = (tick + index) % sourceComments.length
     return {
       id: `comment-${scene}-${tick}-${index}`,
@@ -127,7 +128,10 @@ function buildSnapshot(scene: StudioScene, applied: boolean, tick: number): Audi
       text: applied && scene === 'interaction' && index === 0
         ? '选 2，来首炸场的'
         : sourceComments[sourceIndex],
-      occurredAt: Math.max(0, tick * 3500 - index * 8000),
+      occurredAt: Math.max(
+        0,
+        tick * config.refreshIntervalMs - index * config.commentHistorySpacingMs,
+      ),
     }
   })
 
@@ -139,7 +143,7 @@ function buildSnapshot(scene: StudioScene, applied: boolean, tick: number): Audi
       giftName: 'Rose',
       count: 5 + tick % 3,
       icon: '🌹',
-      occurredAt: tick * 3500,
+      occurredAt: tick * config.refreshIntervalMs,
     },
     {
       id: `gift-heart-${tick}`,
@@ -148,17 +152,26 @@ function buildSnapshot(scene: StudioScene, applied: boolean, tick: number): Audi
       giftName: 'Heart',
       count: 10,
       icon: '💗',
-      occurredAt: Math.max(0, tick * 3500 - 60000),
+      occurredAt: Math.max(
+        0,
+        tick * config.refreshIntervalMs - config.previousGiftOffsetMs,
+      ),
     },
   ]
 
   return {
     comments,
     gifts,
-    viewerCount: 1286 + tick * 3,
-    entrantsLastMinute: 24 + (tick * 7) % 23,
-    commentsPerMinute: 18 + (tick * 5) % 31,
-    newViewerRetention: 36 + (tick * 6) % 29,
+    viewerCount: config.initialViewerCount + tick * config.viewerGrowthPerTick,
+    entrantsLastMinute:
+      config.entrantCountBase +
+      (tick * config.entrantCountStep) % config.entrantCountRange,
+    commentsPerMinute:
+      config.commentRateBase +
+      (tick * config.commentRateStep) % config.commentRateRange,
+    newViewerRetention:
+      config.retentionBase +
+      (tick * config.retentionStep) % config.retentionRange,
     insight: analyzeCommentKeywords(comments),
   }
 }
@@ -166,7 +179,9 @@ function buildSnapshot(scene: StudioScene, applied: boolean, tick: number): Audi
 export const mockAudienceEventAdapter: AudienceEventAdapter = {
   getSnapshot: buildSnapshot,
   getRealtimeSnapshot(applied, tick) {
-    const phase = Math.floor(tick / 2) % 3
+    const phase = Math.floor(
+      tick / studioRuntimeConfig.audience.realtimePhaseDurationTicks,
+    ) % 3
     const scene: StudioScene = ['quality', 'interaction', 'troubleshoot'][phase] as StudioScene
     const snapshot = buildSnapshot(scene, applied, tick)
     const phaseMetrics = [

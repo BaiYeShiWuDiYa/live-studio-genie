@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import { studioRuntimeConfig } from '../../config/studioRuntime'
 import type { LiveSuggestion } from './liveDiagnostics'
 import {
   appendNewSuggestions,
   markSuggestionSeen,
-  RIGHT_PANEL_SYNC_INTERVAL_MS,
 } from './suggestionQueue'
 
 const suggestion = (
@@ -32,7 +32,7 @@ const suggestion = (
 
 describe('suggestion queue', () => {
   it('uses an exact one-minute synchronization interval', () => {
-    expect(RIGHT_PANEL_SYNC_INTERVAL_MS).toBe(60_000)
+    expect(studioRuntimeConfig.suggestion.syncIntervalMs).toBe(60_000)
   })
 
   it('only appends unseen declining suggestions and preserves history', () => {

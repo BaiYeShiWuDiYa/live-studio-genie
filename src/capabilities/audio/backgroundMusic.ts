@@ -1,7 +1,5 @@
 import { dbToLinearGain } from './audioProcessor'
-
-const BASE_OUTPUT_GAIN = 0.08
-const CHORD_DURATION_MS = 1800
+import { studioRuntimeConfig } from '../../config/studioRuntime'
 const chordSequence = [
   [261.63, 329.63, 392],
   [220, 261.63, 329.63],
@@ -15,7 +13,7 @@ export interface BackgroundMusicPlayer {
 }
 
 export function dbToBackgroundMusicGain(gainDb: number): number {
-  return BASE_OUTPUT_GAIN * dbToLinearGain(gainDb)
+  return studioRuntimeConfig.backgroundMusic.baseOutputGain * dbToLinearGain(gainDb)
 }
 
 export function createBackgroundMusicPlayer(gainDb = 0): BackgroundMusicPlayer {
@@ -52,7 +50,7 @@ export function createBackgroundMusicPlayer(gainDb = 0): BackgroundMusicPlayer {
         0.08,
       )
     })
-  }, CHORD_DURATION_MS)
+  }, studioRuntimeConfig.backgroundMusic.chordDurationMs)
 
   return {
     setGainDb: (nextGainDb) => {

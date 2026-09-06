@@ -16,14 +16,12 @@ import {
 import { createGlassesGeometry } from '../../capabilities/video/faceEffectGeometry'
 import { createFramingMetric } from '../../capabilities/monitoring/mediaAnalysis'
 import type { MediaMetric } from '../../capabilities/monitoring/types'
+import { studioRuntimeConfig } from '../../config/studioRuntime'
 import { useStudioStore } from '../../store/studioStore'
 
 const WASM_ROOT = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
 const MODEL_PATH = '/mediapipe/models/selfie_segmenter_landscape.tflite'
 const FACE_MODEL_PATH = '/mediapipe/models/face_landmarker.task'
-const SEGMENT_INTERVAL_MS = 90
-const FACE_INTERVAL_MS = 120
-const FRAMING_INTERVAL_MS = 600
 
 const framingMeasuringMetric: MediaMetric = {
   score: 0,
@@ -135,7 +133,7 @@ export function CameraEffectsCanvas({ videoRef }: CameraEffectsCanvasProps) {
       if (
         faceLandmarker &&
         video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
-        timestamp - lastFaceAt >= FACE_INTERVAL_MS
+        timestamp - lastFaceAt >= studioRuntimeConfig.cameraEffects.faceLandmarkIntervalMs
       ) {
         try {
           const result = faceLandmarker.detectForVideo(video, timestamp)
@@ -145,7 +143,10 @@ export function CameraEffectsCanvas({ videoRef }: CameraEffectsCanvasProps) {
           faceLandmarksRef.current = null
         }
         lastFaceAt = timestamp
-        if (timestamp - lastMetricAt >= FRAMING_INTERVAL_MS) {
+        if (
+          timestamp - lastMetricAt >=
+          studioRuntimeConfig.cameraEffects.framingMetricIntervalMs
+        ) {
           updateMetric('framing', createFramingMetric(faceLandmarksRef.current))
           lastMetricAt = timestamp
         }
@@ -215,7 +216,8 @@ export function CameraEffectsCanvas({ videoRef }: CameraEffectsCanvasProps) {
       if (
         settings.backgroundMode !== 'none' &&
         segmenter &&
-        timestamp - lastSegmentAt >= SEGMENT_INTERVAL_MS
+        timestamp - lastSegmentAt >=
+          studioRuntimeConfig.cameraEffects.segmentationIntervalMs
       ) {
         latestMask?.close()
         const result = segmenter.segmentForVideo(video, timestamp)

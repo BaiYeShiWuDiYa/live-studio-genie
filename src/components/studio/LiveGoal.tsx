@@ -1,5 +1,6 @@
 import { Gift, Trophy } from 'lucide-react'
 import { useEffect } from 'react'
+import { studioRuntimeConfig } from '../../config/studioRuntime'
 import { useStudioStore } from '../../store/studioStore'
 
 export function LiveGoal() {
@@ -9,7 +10,10 @@ export function LiveGoal() {
   useEffect(() => {
     if (goalState.status !== 'active' || !goalState.config) return
     if (goalState.config.current >= goalState.config.target) return
-    const interval = window.setInterval(() => advanceGoal(120), 3000)
+    const interval = window.setInterval(
+      () => advanceGoal(studioRuntimeConfig.liveGoal.autoAdvanceAmount),
+      studioRuntimeConfig.liveGoal.autoAdvanceIntervalMs,
+    )
     return () => window.clearInterval(interval)
   }, [advanceGoal, goalState.config, goalState.status])
 
@@ -31,8 +35,15 @@ export function LiveGoal() {
         <strong>{complete ? '目标达成' : `${config.current.toLocaleString()} / ${config.target.toLocaleString()}`}</strong>
         <span>{config.supporters} 人助力</span>
       </div>
-      <button type="button" disabled={goalState.status !== 'active' || complete} onClick={() => advanceGoal(250)}>
-        <Gift size={13} />{complete ? '已达成' : '模拟礼物 +250'}
+      <button
+        type="button"
+        disabled={goalState.status !== 'active' || complete}
+        onClick={() => advanceGoal(studioRuntimeConfig.liveGoal.manualGiftAmount)}
+      >
+        <Gift size={13} />
+        {complete
+          ? '已达成'
+          : `模拟礼物 +${studioRuntimeConfig.liveGoal.manualGiftAmount}`}
       </button>
     </div>
   )

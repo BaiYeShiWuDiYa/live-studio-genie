@@ -1,4 +1,5 @@
 import { useEffect, type RefObject } from 'react'
+import { studioRuntimeConfig } from '../../config/studioRuntime'
 import { useStudioStore } from '../../store/studioStore'
 import {
   calculateAudioDecibels,
@@ -89,7 +90,10 @@ export function useMediaMonitoring({
     }
 
     measure()
-    const interval = window.setInterval(measure, 900)
+    const interval = window.setInterval(
+      measure,
+      studioRuntimeConfig.mediaMonitoring.brightnessSampleIntervalMs,
+    )
     return () => window.clearInterval(interval)
   }, [cameraEnabled, resetMetric, updateMetric, videoRef])
 
@@ -125,7 +129,10 @@ export function useMediaMonitoring({
     }
 
     measure()
-    const interval = window.setInterval(measure, 250)
+    const interval = window.setInterval(
+      measure,
+      studioRuntimeConfig.mediaMonitoring.microphoneSampleIntervalMs,
+    )
     return () => {
       window.clearInterval(interval)
       source.disconnect()
