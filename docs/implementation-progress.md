@@ -484,6 +484,7 @@ Result: 13 test files and 57 tests passed. Production build completed with the e
 - Replaced automatic tick-based scenario rotation with explicit strategy-driven comments, metrics, and diagnostics.
 - Cleared pre-live suggestions on GO LIVE and recalled matching suggestions after the warmup.
 - Added `docs/audience-comment-strategy.md` as the Chinese strategy and demonstration guide.
+- 扩充评论策略指南，逐项记录六种策略的播前处理、问题评论、Genie 建议、采纳动作、恢复评论及 Demo 能力边界。
 
 Validation:
 
