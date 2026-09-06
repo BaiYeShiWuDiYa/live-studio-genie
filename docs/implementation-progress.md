@@ -438,6 +438,20 @@ npm run lint
 git diff --check
 ```
 
+### Local Artifact Ignore Rules
+
+- Ignored generated PRD document extraction caches under `doc-fetch-resources/`.
+- Ignored unreferenced local PRD screenshots under `prd-assets/`.
+- Ignored the superseded foundation-capabilities research draft while keeping maintained project documentation tracked.
+- Removed duplicate UTF-8 BOM bytes from the `App.css` working copy by restoring the tracked file.
+
+Validation:
+
+```bash
+git check-ignore -v
+git diff --check
+```
+
 ## Next
 
 1. Add eyebrow controls and face-shape deformation.
