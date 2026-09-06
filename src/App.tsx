@@ -43,13 +43,13 @@ import type { AudioSettings } from './capabilities/audio/types'
 import {
   mockAudienceEventAdapter,
   resolveAudienceStrategy,
+  type AudienceComment,
   type AudienceSnapshot,
 } from './capabilities/audience/audienceEvents'
 import { requestCameraStream, requestDisplayStream, stopMediaStream } from './capabilities/media/browserMedia'
 import { useMediaMonitoring } from './capabilities/monitoring/useMediaMonitoring'
 import {
   buildLiveDiagnostics,
-  type LiveDiagnostics,
   type LiveSuggestion,
 } from './capabilities/monitoring/liveDiagnostics'
 import {
@@ -69,6 +69,7 @@ import { EditableCameraLayer } from './components/studio/EditableCameraLayer'
 import { LiveGoal } from './components/studio/LiveGoal'
 import { LivePoll } from './components/studio/LivePoll'
 import { CanvasGoalRing, CanvasTextSource, type WidgetOffset } from './components/studio/PreliveCanvasWidgets'
+import { LiveChatPanel } from './components/studio/LiveChatPanel'
 import {
   audienceStrategies,
   doesSuggestionResolveStrategy,
@@ -87,13 +88,6 @@ type PreliveLayout = 'portrait' | 'stage'
 type PreviewMode = 'mobile' | 'studio'
 type GenieRequestStatus = 'idle' | 'loading' | 'cancelled' | 'timeout' | 'error'
 type StrategyCommentState = 'issue' | 'recovery' | 'normal'
-
-const audienceTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
-  hour: '2-digit',
-  minute: '2-digit',
-  second: '2-digit',
-  hourCycle: 'h23',
-})
 
 type ChatMessage = {
   role: 'user' | 'assistant'
@@ -205,6 +199,7 @@ function App() {
   const [selectedCanvasWidget, setSelectedCanvasWidget] = useState<CanvasWidgetKind | null>(null)
   const [chatTextOffset, setChatTextOffset] = useState<WidgetOffset>({ x: 0, y: 0 })
   const [chatGoalOffset, setChatGoalOffset] = useState<WidgetOffset>({ x: 0, y: 0 })
+  const [hostComments, setHostComments] = useState<AudienceComment[]>([])
   const readyScore = 20 + completedPreliveTasks.length * 20
   const [genieInput, setGenieInput] = useState('')
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
@@ -879,6 +874,19 @@ function App() {
     if (nextIndex !== undefined) setPreliveTaskIndex(nextIndex)
   }
 
+  const sendHostComment = (text: string) => {
+    setHostComments((prev) => [
+      ...prev,
+      {
+        id: `host-comment-${Date.now()}-${prev.length}`,
+        type: 'comment',
+        userName: 'You',
+        text,
+        occurredAt: Date.now(),
+      },
+    ])
+  }
+
   const startLiveFromPrelive = (event: ReactMouseEvent<HTMLButtonElement>) => {
     if (prelivePollEnabled) {
       studioToolRegistry.execute('studio.configure_poll', {
@@ -1194,14 +1202,14 @@ function App() {
       </header>
       <section className="workspace">
         <aside className="monitor-panel panel">
-          {view === 'prelive' ? (
-            <PreliveOperationsPanel
-              cameraEnabled={cameraEnabled}
-              isMicMuted={isMicMuted}
-            />
-          ) : (
-            <LiveOperationsPanel audience={audienceSnapshot} diagnostics={diagnostics} />
-          )}
+          <LiveChatPanel
+            isLive={view === 'live'}
+            cameraEnabled={cameraEnabled}
+            isMicMuted={isMicMuted}
+            audience={audienceSnapshot}
+            hostComments={hostComments}
+            onSendComment={sendHostComment}
+          />
         </aside>
 
         <section className="stage-column">
@@ -1480,125 +1488,6 @@ function StrategyIcon({ strategyId }: { strategyId: AudienceStrategyId }) {
   return <Activity size={15} />
 }
 
-function PreliveOperationsPanel({
-  cameraEnabled,
-  isMicMuted,
-}: {
-  cameraEnabled: boolean
-  isMicMuted: boolean
-}) {
-  return (
-    <div className="live-operations prelive-operations">
-      <section className="indicator-section" aria-label="开播前状态">
-        <h2>Pre-live Status</h2>
-        <span className="monitoring-summary"><i />预览信号已连接</span>
-        <div className="prelive-signal-list">
-          <div><Camera size={14} /><span>摄像头</span><b>{cameraEnabled ? '已连接' : '演示画面'}</b></div>
-          <div><Mic size={14} /><span>麦克风</span><b>{isMicMuted ? '已静音' : '正常'}</b></div>
-          <div><Activity size={14} /><span>网络</span><b>稳定 · 42ms</b></div>
-        </div>
-      </section>
-      <section className="activity-section gift-activity prelive-empty-activity" aria-label="礼物区">
-        <h2>Gift</h2>
-        <div aria-hidden="true" />
-      </section>
-      <section className="activity-section comment-activity prelive-empty-activity" aria-label="评论区">
-        <h2>Comment</h2>
-        <div aria-hidden="true" />
-      </section>
-    </div>
-  )
-}
-
-function LiveOperationsPanel({ audience, diagnostics }: {
-  audience: AudienceSnapshot
-  diagnostics: LiveDiagnostics
-}) {
-  const commentListRef = useRef<HTMLDivElement>(null)
-  const newestCommentId = audience.comments.at(-1)?.id
-  const gifts = [
-    { icon: '🌹', user: audience.gifts[0]?.userName ?? 'Luna', gift: 'Rose', count: audience.gifts[0]?.count ?? 5, time: '12:41:30' },
-    { icon: '♪', user: 'Alex', gift: 'TikTok', count: 1, time: '12:42:02' },
-    { icon: '♥', user: audience.gifts[1]?.userName ?? 'Mie', gift: 'Heart', count: audience.gifts[1]?.count ?? 10, time: '12:42:10' },
-  ]
-
-  useEffect(() => {
-    const commentList = commentListRef.current
-    if (commentList) {
-      commentList.scrollTop = commentList.scrollHeight
-    }
-  }, [newestCommentId])
-
-  return (
-    <div className="live-operations">
-      <section className="indicator-section" aria-label="实时指标">
-        <h2>Real-time Indicators</h2>
-        <span className="monitoring-summary"><i />实时采样中 · {diagnostics.healthyCount} 项正常</span>
-        <section className="metric-group good-metrics" aria-label="做得好的">
-          <h3><Check size={13} />做得好的</h3>
-          <div className="indicator-list">
-            {diagnostics.goodSignals.map((indicator) => <IndicatorRow key={indicator.id} {...indicator} />)}
-          </div>
-        </section>
-        <section className="metric-group improvement-metrics" aria-label="需要改进的">
-          <h3><Zap size={13} />需要改进的</h3>
-          <div className="indicator-list improvement-list">
-            {diagnostics.improvements.map((indicator) => <IndicatorRow key={indicator.id} {...indicator} />)}
-          </div>
-        </section>
-      </section>
-      <section className="activity-section gift-activity">
-        <h2>Gift</h2>
-        {gifts.map((gift, index) => (
-          <div className={index === 1 ? 'activity-row highlighted' : 'activity-row'} key={`${gift.user}-${gift.gift}`}>
-            <i>{gift.icon}</i>
-            <span><b>{gift.user}</b> 送出 <em>{gift.gift}</em> ×{gift.count}</span>
-            <time>{gift.time}</time>
-          </div>
-        ))}
-      </section>
-      <section className="activity-section comment-activity">
-        <h2>Comment</h2>
-        <div className="prototype-comment-list" ref={commentListRef} role="log" aria-label="实时评论列表" aria-live="polite" tabIndex={0}>
-          {audience.comments.map((comment, index) => (
-            <div className="prototype-comment" key={comment.id}>
-              <i className={`avatar avatar-${index % 4 + 1}`}>{comment.userName.slice(0, 1)}</i>
-              <span><b>{comment.userName}:</b> {comment.text}</span>
-              <time dateTime={new Date(comment.occurredAt).toISOString()}>
-                {audienceTimeFormatter.format(comment.occurredAt)}
-              </time>
-            </div>
-          ))}
-        </div>
-      </section>
-    </div>
-  )
-}
-
-function IndicatorRow({ label, value, score, tone, direction, trendLabel, audio = false }: {
-  label: string
-  value: string
-  score: number
-  tone: string
-  direction: 'up' | 'down'
-  trendLabel: string
-  audio?: boolean
-}) {
-  const displayValue = label === '人脸构图'
-    ? value.replace('人脸 ', '')
-    : value
-
-  return (
-    <div className={`indicator-row ${tone}`}>
-      <span className="indicator-label"><i />{label}</span>
-      {audio
-        ? <span className="audio-wave" aria-hidden="true">{Array.from({ length: 17 }, (_, index) => <i key={index} />)}</span>
-        : <span className="indicator-track"><i style={{ width: `${Math.max(8, Math.min(100, score))}%` }} /></span>}
-      <b>{displayValue}<em>{direction === 'up' ? ` ${trendLabel} ↑` : ` ${trendLabel} ↓`}</em></b>
-    </div>
-  )
-}
-
 function getWidgetAdjustment(spec: WidgetSpec, mode: 'preview' | 'apply'): LiveAdjustment {
   if (spec.type === 'audience-poll') {
     return mode === 'preview'
@@ -1652,6 +1541,8 @@ function PreliveChecklist({
     <div className="prelive-check-list">
       {preliveTasks.map((task, index) => {
         const completed = completedTasks.includes(task.id)
+        const unlocked = index === 0 || completedTasks.includes(preliveTasks[index - 1].id)
+        if (!unlocked) return null
         return (
           <button
             className={`check-item ${currentTask === task.id ? 'active' : ''}`}
