@@ -3,7 +3,9 @@ import {
   analyzeCommentKeywords,
   audienceEventSchema,
   mockAudienceEventAdapter,
+  resolveAudienceStrategy,
 } from './audienceEvents'
+import { audienceCommentsByStrategy } from '../../config/audienceComments'
 import { studioRuntimeConfig } from '../../config/studioRuntime'
 
 describe('audience events', () => {
@@ -35,7 +37,10 @@ describe('audience events', () => {
   })
 
   it('uses the shared timing configuration for generated events', () => {
-    const tick = 20
+    const tick = Math.ceil(
+      studioRuntimeConfig.audience.previousGiftOffsetMs /
+      studioRuntimeConfig.audience.refreshIntervalMs,
+    ) + 2
     const snapshot = mockAudienceEventAdapter.getSnapshot('quality', false, tick)
     const now = tick * studioRuntimeConfig.audience.refreshIntervalMs
 
@@ -48,11 +53,30 @@ describe('audience events', () => {
     )
   })
 
-  it('changes live counters over time', () => {
+  it('changes the viewer count over time', () => {
     const before = mockAudienceEventAdapter.getSnapshot('quality', false, 1)
     const after = mockAudienceEventAdapter.getSnapshot('quality', false, 2)
 
     expect(after.viewerCount).toBeGreaterThan(before.viewerCount)
-    expect(after.entrantsLastMinute).not.toBe(before.entrantsLastMinute)
+  })
+
+  it('keeps normal comments during warmup and then activates the selected strategy', () => {
+    const warmupDuration = studioRuntimeConfig.audience.strategyWarmupDurationMs
+
+    expect(resolveAudienceStrategy('dim-light', warmupDuration - 1)).toBe('normal')
+    expect(resolveAudienceStrategy('dim-light', warmupDuration)).toBe('dim-light')
+  })
+
+  it('uses the configured comment pool for each explicit strategy', () => {
+    const snapshot = mockAudienceEventAdapter.getStrategySnapshot(
+      'network-lag',
+      false,
+      2,
+    )
+
+    expect(audienceCommentsByStrategy['network-lag']).toContain(
+      snapshot.comments[0].text,
+    )
+    expect(audienceCommentsByStrategy.normal.length).toBeGreaterThan(10)
   })
 })

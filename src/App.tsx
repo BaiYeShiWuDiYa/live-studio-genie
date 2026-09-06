@@ -24,6 +24,7 @@ import {
   Sparkles,
   Users,
   WandSparkles,
+  WifiOff,
   Zap,
 } from 'lucide-react'
 import './App.css'
@@ -39,6 +40,7 @@ import {
 import type { AudioSettings } from './capabilities/audio/types'
 import {
   mockAudienceEventAdapter,
+  resolveAudienceStrategy,
   type AudienceSnapshot,
 } from './capabilities/audience/audienceEvents'
 import { requestCameraStream, requestDisplayStream, stopMediaStream } from './capabilities/media/browserMedia'
@@ -64,6 +66,11 @@ import { CameraEffectsCanvas } from './components/studio/CameraEffectsCanvas'
 import { EditableCameraLayer } from './components/studio/EditableCameraLayer'
 import { LiveGoal } from './components/studio/LiveGoal'
 import { LivePoll } from './components/studio/LivePoll'
+import {
+  audienceStrategies,
+  getAudienceStrategy,
+  type AudienceStrategyId,
+} from './config/audienceComments'
 import { studioRuntimeConfig } from './config/studioRuntime'
 import { askGenie, GenieRequestError } from './services/genie'
 import { useStudioStore } from './store/studioStore'
@@ -148,6 +155,8 @@ function App() {
   const [onboardingInput, setOnboardingInput] = useState('')
   const [selectedEntryCategory, setSelectedEntryCategory] = useState<StreamKind | 'other' | null>(null)
   const [scene, setScene] = useState<Scene>('quality')
+  const [demoStrategy, setDemoStrategy] = useState<AudienceStrategyId>('normal')
+  const [strategyMenuOpen, setStrategyMenuOpen] = useState(false)
   const [isPk, setIsPk] = useState(false)
   const [applied, setApplied] = useState(false)
   const [cameraEnabled, setCameraEnabled] = useState(false)
@@ -177,6 +186,7 @@ function App() {
   const [genieError, setGenieError] = useState('')
   const [genieRequestStatus, setGenieRequestStatus] = useState<GenieRequestStatus>('idle')
   const [liveTick, setLiveTick] = useState(0)
+  const [strategyWarmupComplete, setStrategyWarmupComplete] = useState(false)
   const [liveAdjustment, setLiveAdjustment] = useState<LiveAdjustment | null>(null)
   const [isSuggestionPreview, setIsSuggestionPreview] = useState(false)
   const [isMicMuted, setIsMicMuted] = useState(false)
@@ -192,6 +202,7 @@ function App() {
   const audioProcessorRef = useRef<AudioProcessor | null>(null)
   const backgroundMusicRef = useRef<BackgroundMusicPlayer | null>(null)
   const cameraAttemptedRef = useRef(false)
+  const strategySelectorRef = useRef<HTMLDivElement>(null)
   const genieAbortRef = useRef<AbortController | null>(null)
   const lastGenieRequestRef = useRef<{ question: string; prompt: string } | null>(null)
   const resetCameraLayerLayout = useStudioStore((state) => state.resetCameraLayerLayout)
@@ -244,36 +255,47 @@ function App() {
     resetCameraEffectsPreview,
     undoCameraEffects,
   }
+  const strategyWarmupActive = view === 'live' && !strategyWarmupComplete
+  const activeAudienceStrategy = view === 'live'
+    ? resolveAudienceStrategy(
+        demoStrategy,
+        strategyWarmupComplete
+          ? studioRuntimeConfig.audience.strategyWarmupDurationMs
+          : 0,
+      )
+    : demoStrategy
+  const selectedStrategy = getAudienceStrategy(demoStrategy)
   const audienceSnapshot = useMemo(
     () => view === 'live'
-      ? mockAudienceEventAdapter.getRealtimeSnapshot(applied, liveTick)
+      ? mockAudienceEventAdapter.getStrategySnapshot(
+          activeAudienceStrategy,
+          applied,
+          liveTick,
+        )
       : emptyAudienceSnapshot,
-    [applied, liveTick, view],
+    [activeAudienceStrategy, applied, liveTick, view],
   )
   const diagnostics = useMemo(() => buildLiveDiagnostics({
     mediaMetrics,
     audience: audienceSnapshot,
-    tick: liveTick,
+    strategy: activeAudienceStrategy,
     resolvedScene: applied ? scene : null,
     brightnessCompensation: (committedBrightness - 1) * 100,
     microphoneGainDb: committedMicrophoneGainDb,
   }), [
     applied,
     audienceSnapshot,
+    activeAudienceStrategy,
     committedBrightness,
     committedMicrophoneGainDb,
-    liveTick,
     mediaMetrics,
     scene,
   ])
-  const [suggestionQueue, setSuggestionQueue] = useState<QueuedSuggestion[]>(() =>
-    appendNewSuggestions([], diagnostics.suggestions, new Set(), Date.now()),
-  )
-  const [selectedSuggestionId, setSelectedSuggestionId] = useState<string | null>(
-    suggestionQueue[0]?.queueId ?? null,
-  )
+  const [suggestionQueue, setSuggestionQueue] = useState<QueuedSuggestion[]>([])
+  const [selectedSuggestionId, setSelectedSuggestionId] = useState<string | null>(null)
   const [removingSuggestionId, setRemovingSuggestionId] = useState<string | null>(null)
   const latestDiagnosticsRef = useRef(diagnostics)
+  const strategyActivatedRef = useRef(false)
   const dismissedSignalIdsRef = useRef(new Set<LiveSuggestion['signalId']>())
   const removalTimeoutRef = useRef<number | null>(null)
   const selectedSuggestion = suggestionQueue.find(
@@ -292,6 +314,34 @@ function App() {
   useEffect(() => {
     latestDiagnosticsRef.current = diagnostics
   }, [diagnostics])
+
+  useEffect(() => {
+    if (!strategyMenuOpen) return
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!strategySelectorRef.current?.contains(event.target as Node)) {
+        setStrategyMenuOpen(false)
+      }
+    }
+    document.addEventListener('pointerdown', closeOnOutsideClick)
+    return () => document.removeEventListener('pointerdown', closeOnOutsideClick)
+  }, [strategyMenuOpen])
+
+  useEffect(() => {
+    if (view !== 'live') {
+      strategyActivatedRef.current = false
+      return
+    }
+    if (strategyWarmupActive || strategyActivatedRef.current) return
+
+    const nextQueue = appendNewSuggestions(
+      [],
+      latestDiagnosticsRef.current.suggestions,
+      dismissedSignalIdsRef.current,
+    )
+    setSuggestionQueue(nextQueue)
+    setSelectedSuggestionId(nextQueue[0]?.queueId ?? null)
+    strategyActivatedRef.current = true
+  }, [activeAudienceStrategy, strategyWarmupActive, view])
 
   useEffect(() => {
     if (view !== 'live') return
@@ -437,6 +487,15 @@ function App() {
 
   useEffect(() => {
     if (view !== 'live') return
+    const timeout = window.setTimeout(
+      () => setStrategyWarmupComplete(true),
+      studioRuntimeConfig.audience.strategyWarmupDurationMs,
+    )
+    return () => window.clearTimeout(timeout)
+  }, [view])
+
+  useEffect(() => {
+    if (view !== 'live') return
     const interval = window.setInterval(
       () => setLiveTick((tick) => tick + 1),
       studioRuntimeConfig.audience.refreshIntervalMs,
@@ -456,6 +515,26 @@ function App() {
     setIsSuggestionPreview(false)
     setLiveAdjustment(null)
     setIsPk(nextScene === 'pk')
+  }
+
+  const selectDemoStrategy = (strategyId: AudienceStrategyId) => {
+    const strategy = getAudienceStrategy(strategyId)
+    setDemoStrategy(strategyId)
+    setStrategyMenuOpen(false)
+    setScene(strategy.scene)
+    setIsPk(view === 'live' && strategy.scene === 'pk')
+    setApplied(false)
+    setAgentWidgetSpec(null)
+    setSuggestionQueue([])
+    setSelectedSuggestionId(null)
+    dismissedSignalIdsRef.current.clear()
+    strategyActivatedRef.current = false
+    applyVisualSettings(strategy.visualSettings)
+    applyAudioSettings(strategy.audioSettings)
+    setLiveAdjustment({
+      name: `已切换为${strategy.label}`,
+      detail: strategy.description,
+    })
   }
 
   const selectSuggestion = (suggestion: QueuedSuggestion) => {
@@ -702,6 +781,14 @@ function App() {
         },
       }, studioToolContext)
     }
+    setLiveTick(0)
+    setStrategyWarmupComplete(false)
+    setScene(selectedStrategy.scene)
+    setIsPk(selectedStrategy.scene === 'pk')
+    setSuggestionQueue([])
+    setSelectedSuggestionId(null)
+    dismissedSignalIdsRef.current.clear()
+    strategyActivatedRef.current = false
     setApplied(false)
     setView('live')
   }
@@ -926,7 +1013,45 @@ function App() {
     <main className={`app-shell live-app ${view === 'prelive' ? 'prelive-live-mode' : ''}`}>
       <header className="topbar">
         <div className="live-brand">
-          <span className="live-brand-mark"><Music2 size={17} /></span>
+          <div className="strategy-selector" ref={strategySelectorRef}>
+            <button
+              className={`live-brand-mark strategy-trigger ${strategyMenuOpen ? 'active' : ''}`}
+              type="button"
+              aria-label={`演示策略：${selectedStrategy.label}`}
+              aria-expanded={strategyMenuOpen}
+              aria-haspopup="menu"
+              title={`演示策略：${selectedStrategy.label}`}
+              onClick={() => setStrategyMenuOpen((open) => !open)}
+            >
+              <Music2 size={17} />
+              <i />
+            </button>
+            {strategyMenuOpen && (
+              <div className="strategy-menu" role="menu" aria-label="选择演示策略">
+                <div className="strategy-menu-heading">
+                  <span>演示策略</span>
+                  <small>开播后前 {studioRuntimeConfig.audience.strategyWarmupDurationMs / 1000} 秒使用正常评论</small>
+                </div>
+                {audienceStrategies.map((strategy) => (
+                  <button
+                    className={demoStrategy === strategy.id ? 'selected' : ''}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={demoStrategy === strategy.id}
+                    key={strategy.id}
+                    onClick={() => selectDemoStrategy(strategy.id)}
+                  >
+                    <StrategyIcon strategyId={strategy.id} />
+                    <span>
+                      <b>{strategy.label}</b>
+                      <small>{strategy.description}</small>
+                    </span>
+                    {demoStrategy === strategy.id && <Check size={14} />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <strong>TikTok LIVE Studio</strong>
           <span className="live-brand-divider">/</span>
           <b>{view === 'prelive' ? '今日开播准备工作台' : '直播中'}</b>
@@ -980,7 +1105,7 @@ function App() {
             <button type="button" className={previewMode === 'mobile' ? 'selected' : ''} onClick={() => setPreviewMode('mobile')}>移动端预览</button>
             <button type="button" className={previewMode === 'studio' ? 'selected' : ''} onClick={() => setPreviewMode('studio')}>Studio 视图</button>
           </div>
-          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} liveAdjustment={liveAdjustment} previewMode={previewMode} isPreviewing={isSuggestionPreview} audience={audienceSnapshot} isLive={view === 'live'} preliveTitle={streamTopic} preliveLayout={preliveLayout} />
+          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} strategy={demoStrategy} liveAdjustment={liveAdjustment} previewMode={previewMode} isPreviewing={isSuggestionPreview} audience={audienceSnapshot} isLive={view === 'live'} preliveTitle={streamTopic} preliveLayout={preliveLayout} />
           {(cameraError || displayError || backgroundMusicError) && <p className="camera-warning">{displayError || cameraError || backgroundMusicError}</p>}
           <div className="stage-controls">
             <button type="button" className="control-button" onClick={enableCamera}><Camera size={18} /><span>{cameraEnabled ? '摄像头已连接' : '开启摄像头'}</span></button>
@@ -1213,6 +1338,15 @@ function StreamOption({ icon, label, active, onClick }: { icon: ReactNode; label
   return <button type="button" className={`stream-option ${active ? 'active' : ''}`} onClick={onClick}>{icon}<span>{label}</span>{active && <Check size={14} />}</button>
 }
 
+function StrategyIcon({ strategyId }: { strategyId: AudienceStrategyId }) {
+  if (strategyId === 'dim-light') return <Lightbulb size={15} />
+  if (strategyId === 'low-audio') return <Mic size={15} />
+  if (strategyId === 'cold-interaction') return <MessageCircle size={15} />
+  if (strategyId === 'network-lag') return <WifiOff size={15} />
+  if (strategyId === 'pk-push') return <Users size={15} />
+  return <Activity size={15} />
+}
+
 function PreliveOperationsPanel({
   cameraEnabled,
   isMicMuted,
@@ -1389,7 +1523,7 @@ function PreliveChecklist({
   </div>
 }
 
-function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, isPk, applied, scene, liveAdjustment, previewMode, isPreviewing, audience, isLive, preliveTitle, preliveLayout }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; displayStream: MediaStream | null; layoutEditing: boolean; isPk: boolean; applied: boolean; scene: Scene; liveAdjustment: LiveAdjustment | null; previewMode: PreviewMode; isPreviewing: boolean; audience: AudienceSnapshot; isLive: boolean; preliveTitle: string; preliveLayout: PreliveLayout }) {
+function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, isPk, applied, scene, strategy, liveAdjustment, previewMode, isPreviewing, audience, isLive, preliveTitle, preliveLayout }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; displayStream: MediaStream | null; layoutEditing: boolean; isPk: boolean; applied: boolean; scene: Scene; strategy: AudienceStrategyId; liveAdjustment: LiveAdjustment | null; previewMode: PreviewMode; isPreviewing: boolean; audience: AudienceSnapshot; isLive: boolean; preliveTitle: string; preliveLayout: PreliveLayout }) {
   const displayVideoRef = useRef<HTMLVideoElement>(null)
   const visualSettings = useStudioStore((state) => state.visualSettings)
   const previewStyle = {
@@ -1427,8 +1561,9 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
       {!isPk && isLive && <><div className="viewer-bubble"><Users size={14} />{audience.viewerCount.toLocaleString()}</div><div className="stage-duration">00:42:18</div></>}
       {!isLive && <div className="prelive-stage-summary"><span>开播预览</span><b>{preliveTitle || '未填写直播标题'}</b><small>{preliveLayout === 'portrait' ? '单人竖屏 · 9:16' : '秀场舞台 · 16:9'}</small></div>}
       {applied && <div className="applied-badge"><Check size={13} />方案已应用</div>}
-      {scene === 'quality' && !applied && <div className="stage-hint"><Lightbulb size={14} />环境偏暗</div>}
-      {scene === 'troubleshoot' && <div className="audio-meter"><AudioLines size={15} /><span>音频峰值偏低</span><i /><i /><i /><i /></div>}
+      {strategy === 'dim-light' && <div className="stage-hint"><Lightbulb size={14} />环境偏暗</div>}
+      {strategy === 'network-lag' && <div className="stage-hint"><WifiOff size={14} />网络波动</div>}
+      {strategy === 'low-audio' && <div className="audio-meter"><AudioLines size={15} /><span>音频峰值偏低</span><i /><i /><i /><i /></div>}
       {liveAdjustment && <div className="adjustment-toast"><Zap size={14} /><div><b>{liveAdjustment.name}</b><span>{liveAdjustment.detail}</span></div></div>}
       <LivePoll />
       <LiveGoal />

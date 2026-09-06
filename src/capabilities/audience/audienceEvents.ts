@@ -1,5 +1,11 @@
 import { z } from 'zod'
 import type { StudioScene } from '../../agent/widgets/widgetSpec'
+import {
+  audienceCommentsByStrategy,
+  audienceUserNames,
+  getAudienceStrategy,
+  type AudienceStrategyId,
+} from '../../config/audienceComments'
 import { studioRuntimeConfig } from '../../config/studioRuntime'
 
 const audienceEventBaseSchema = z.object({
@@ -50,41 +56,19 @@ export interface AudienceEventAdapter {
     applied: boolean,
     tick: number,
   ) => AudienceSnapshot
-  getRealtimeSnapshot: (applied: boolean, tick: number) => AudienceSnapshot
+  getStrategySnapshot: (
+    strategy: AudienceStrategyId,
+    applied: boolean,
+    tick: number,
+  ) => AudienceSnapshot
 }
 
-const commentsByScene: Record<StudioScene, string[]> = {
-  quality: [
-    '背景有点暗诶',
-    '今天的氛围好舒服',
-    '主播好，刚进来',
-    '画面亮一点会更好',
-    '求一首歌单',
-  ],
-  interaction: [
-    '今天唱哪首歌？',
-    '新来的报到',
-    '好想听甜歌',
-    '可以开个投票吗',
-    '主播看看评论',
-  ],
-  troubleshoot: [
-    '声音有点小',
-    '听不清诶',
-    '现在卡不卡？',
-    '音量再大一点',
-    '画面正常了',
-  ],
-  pk: [
-    '加油马上追上了',
-    '目标还差一点',
-    '送礼物冲一冲',
-    '今天唱哪首歌？',
-    '新来的报到',
-  ],
+const strategyByScene: Record<StudioScene, AudienceStrategyId> = {
+  quality: 'dim-light',
+  interaction: 'cold-interaction',
+  troubleshoot: 'low-audio',
+  pk: 'pk-push',
 }
-
-const userNames = ['甜甜圈', '小满同学', '阿福', '星河入梦', '柚子茶']
 
 const keywordGroups: Array<{
   category: CommentInsight['category']
@@ -116,16 +100,30 @@ export function analyzeCommentKeywords(
     : { category: 'none', label: '暂无集中反馈', count: 0 }
 }
 
-function buildSnapshot(scene: StudioScene, applied: boolean, tick: number): AudienceSnapshot {
+export function resolveAudienceStrategy(
+  selectedStrategy: AudienceStrategyId,
+  liveElapsedMs: number,
+): AudienceStrategyId {
+  return liveElapsedMs < studioRuntimeConfig.audience.strategyWarmupDurationMs
+    ? 'normal'
+    : selectedStrategy
+}
+
+function buildSnapshot(
+  strategyId: AudienceStrategyId,
+  applied: boolean,
+  tick: number,
+): AudienceSnapshot {
   const config = studioRuntimeConfig.audience
-  const sourceComments = commentsByScene[scene]
+  const strategy = getAudienceStrategy(strategyId)
+  const sourceComments = audienceCommentsByStrategy[strategyId]
   const comments = Array.from({ length: config.visibleCommentCount }, (_, index): AudienceComment => {
     const sourceIndex = (tick + index) % sourceComments.length
     return {
-      id: `comment-${scene}-${tick}-${index}`,
+      id: `comment-${strategyId}-${tick}-${index}`,
       type: 'comment',
-      userName: userNames[(tick + index) % userNames.length],
-      text: applied && scene === 'interaction' && index === 0
+      userName: audienceUserNames[(tick + index) % audienceUserNames.length],
+      text: applied && strategyId === 'cold-interaction' && index === 0
         ? '选 2，来首炸场的'
         : sourceComments[sourceIndex],
       occurredAt: Math.max(
@@ -141,7 +139,9 @@ function buildSnapshot(scene: StudioScene, applied: boolean, tick: number): Audi
       type: 'gift',
       userName: 'Luna',
       giftName: 'Rose',
-      count: 5 + tick % 3,
+      count:
+        config.recentGiftBaseCount +
+        tick % config.recentGiftVariationRange,
       icon: '🌹',
       occurredAt: tick * config.refreshIntervalMs,
     },
@@ -150,7 +150,7 @@ function buildSnapshot(scene: StudioScene, applied: boolean, tick: number): Audi
       type: 'gift',
       userName: 'Mie',
       giftName: 'Heart',
-      count: 10,
+      count: config.previousGiftCount,
       icon: '💗',
       occurredAt: Math.max(
         0,
@@ -163,36 +163,16 @@ function buildSnapshot(scene: StudioScene, applied: boolean, tick: number): Audi
     comments,
     gifts,
     viewerCount: config.initialViewerCount + tick * config.viewerGrowthPerTick,
-    entrantsLastMinute:
-      config.entrantCountBase +
-      (tick * config.entrantCountStep) % config.entrantCountRange,
-    commentsPerMinute:
-      config.commentRateBase +
-      (tick * config.commentRateStep) % config.commentRateRange,
-    newViewerRetention:
-      config.retentionBase +
-      (tick * config.retentionStep) % config.retentionRange,
+    entrantsLastMinute: strategy.audienceMetrics.entrantsLastMinute,
+    commentsPerMinute: strategy.audienceMetrics.commentsPerMinute,
+    newViewerRetention: strategy.audienceMetrics.newViewerRetention,
     insight: analyzeCommentKeywords(comments),
   }
 }
 
 export const mockAudienceEventAdapter: AudienceEventAdapter = {
-  getSnapshot: buildSnapshot,
-  getRealtimeSnapshot(applied, tick) {
-    const phase = Math.floor(
-      tick / studioRuntimeConfig.audience.realtimePhaseDurationTicks,
-    ) % 3
-    const scene: StudioScene = ['quality', 'interaction', 'troubleshoot'][phase] as StudioScene
-    const snapshot = buildSnapshot(scene, applied, tick)
-    const phaseMetrics = [
-      { commentsPerMinute: 42, entrantsLastMinute: 38, newViewerRetention: 48 },
-      { commentsPerMinute: 16, entrantsLastMinute: 19, newViewerRetention: 22 },
-      { commentsPerMinute: 31, entrantsLastMinute: 29, newViewerRetention: 43 },
-    ][phase]
-
-    return {
-      ...snapshot,
-      ...phaseMetrics,
-    }
+  getSnapshot(scene, applied, tick) {
+    return buildSnapshot(strategyByScene[scene], applied, tick)
   },
+  getStrategySnapshot: buildSnapshot,
 }

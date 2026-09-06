@@ -471,6 +471,27 @@ git diff --check
 
 Result: 13 test files and 57 tests passed. Production build completed with the existing large-chunk warning.
 
+### Configurable Audience Strategies
+
+- Added a strategy selector to the TikTok icon in the shared pre-live/live top bar.
+- Added normal, dim-light, low-audio, cold-interaction, network-lag, and PK-push Demo strategies.
+- Applied strategy-specific visual and audio settings before going live for deterministic demonstrations.
+- Added a configurable 15-second normal-comment warmup before strategy-specific feedback appears.
+- Moved expanded strategy comments and user names to `src/config/audienceComments.ts`.
+- Replaced automatic tick-based scenario rotation with explicit strategy-driven comments, metrics, and diagnostics.
+- Cleared pre-live suggestions on GO LIVE and recalled matching suggestions after the warmup.
+
+Validation:
+
+```bash
+npm run test
+npm run build
+npm run lint
+git diff --check
+```
+
+Result: 13 test files and 60 tests passed. Browser regression verified the dim-light pre-live effect, normal warmup comments, delayed strategy comments, and matching exposure suggestions.
+
 ## Next
 
 1. Add eyebrow controls and face-shape deformation.

@@ -2121,6 +2121,128 @@
   background: #151117;
 }
 
+.strategy-selector {
+  position: relative;
+  flex: none;
+}
+
+.strategy-trigger {
+  position: relative;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.strategy-trigger:hover,
+.strategy-trigger.active {
+  border-color: rgba(112, 239, 197, 0.68);
+  background: #211923;
+  box-shadow: 0 0 18px rgba(112, 239, 197, 0.14);
+}
+
+.strategy-trigger > i {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 8px;
+  height: 8px;
+  border: 2px solid #151117;
+  border-radius: 50%;
+  background: #70efc5;
+  box-shadow: 0 0 8px rgba(112, 239, 197, 0.72);
+}
+
+.strategy-menu {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 12px);
+  left: 0;
+  width: min(320px, calc(100vw - 28px));
+  padding: 10px;
+  border: 1px solid rgba(112, 239, 197, 0.28);
+  border-radius: 8px;
+  background: rgba(19, 18, 23, 0.98);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.48);
+}
+
+.strategy-menu-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 4px 6px 10px;
+  border-bottom: 1px solid rgba(126, 117, 132, 0.2);
+}
+
+.strategy-menu-heading span {
+  color: #f6f1f5;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.strategy-menu-heading small {
+  max-width: 176px;
+  color: #8f8791;
+  font-size: 9px;
+  line-height: 1.45;
+  text-align: right;
+}
+
+.strategy-menu > button {
+  width: 100%;
+  min-height: 49px;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 9px;
+  margin-top: 4px;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #bdb5bd;
+  text-align: left;
+  cursor: pointer;
+}
+
+.strategy-menu > button:hover {
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.strategy-menu > button.selected {
+  border-color: rgba(112, 239, 197, 0.25);
+  background: rgba(62, 116, 101, 0.2);
+  color: #dffff5;
+}
+
+.strategy-menu > button > svg:first-child {
+  color: #73ddc0;
+}
+
+.strategy-menu > button > span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.strategy-menu > button b {
+  font-size: 11px;
+}
+
+.strategy-menu > button small {
+  overflow: hidden;
+  color: #857e88;
+  font-size: 9px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.strategy-menu > button.selected small {
+  color: #9ebdb4;
+}
+
 .live-brand strong {
   font-size: clamp(12px, 0.85vw, 17px);
 }

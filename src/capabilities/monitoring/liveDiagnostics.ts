@@ -1,4 +1,8 @@
 import type { StudioScene, WidgetSpec } from '../../agent/widgets/widgetSpec'
+import {
+  getAudienceStrategy,
+  type AudienceStrategyId,
+} from '../../config/audienceComments'
 import type { AudienceSnapshot } from '../audience/audienceEvents'
 import type { MediaMetric, MediaMetricKind } from './types'
 
@@ -49,7 +53,7 @@ export interface LiveDiagnostics {
 interface BuildLiveDiagnosticsOptions {
   mediaMetrics: Record<MediaMetricKind, MediaMetric>
   audience: AudienceSnapshot
-  tick: number
+  strategy?: AudienceStrategyId
   resolvedScene?: DiagnosticScene | null
   brightnessCompensation?: number
   microphoneGainDb?: number
@@ -67,28 +71,30 @@ const signed = (value: number, suffix = '%') =>
 export function buildLiveDiagnostics({
   mediaMetrics,
   audience,
-  tick,
+  strategy = 'normal',
   resolvedScene = null,
   brightnessCompensation = 0,
   microphoneGainDb = 0,
 }: BuildLiveDiagnosticsOptions): LiveDiagnostics {
-  const phase = Math.floor(tick / 2) % 3
-  const sampledBrightness = mediaMetrics.brightness.status === 'ready'
+  const strategyConfig = getAudienceStrategy(strategy)
+  const rawBrightness = mediaMetrics.brightness.status === 'ready'
     ? mediaMetrics.brightness.score
-    : [38, 68, 62][phase]
-  const brightness = clamp(sampledBrightness + brightnessCompensation)
+    : 72
+  const brightness = strategyConfig.diagnostics.brightnessCeiling
+    ?? clamp(rawBrightness + brightnessCompensation)
   const framing = mediaMetrics.framing.status === 'ready'
     ? mediaMetrics.framing.score
-    : [72, 58, 76][phase]
-  const sampledMicrophoneScore = mediaMetrics.microphone.status === 'ready'
+    : 78
+  const rawMicrophoneScore = mediaMetrics.microphone.status === 'ready'
     ? mediaMetrics.microphone.score
-    : [58, 52, 24][phase]
-  const microphoneScore = clamp(sampledMicrophoneScore + microphoneGainDb * 2)
+    : 58
+  const microphoneScore = strategyConfig.diagnostics.microphoneCeiling
+    ?? clamp(rawMicrophoneScore + microphoneGainDb * 2)
   const microphoneValue = mediaMetrics.microphone.status === 'ready'
     ? mediaMetrics.microphone.value
-    : ['-12 dB', '-16 dB', '-32 dB'][phase]
+    : strategy === 'low-audio' ? '-32 dB' : '-12 dB'
   const contrast = clamp(72 + brightness * 0.3)
-  const fps = 28 + tick % 3
+  const fps = strategyConfig.diagnostics.fps ?? 30
   const giftCount = audience.gifts.reduce((total, gift) => total + gift.count, 0)
   const audioFeedback = audience.insight.category === 'audio' ? audience.insight.count : 0
   const microphoneTrend = microphoneScore - 40 - audioFeedback * 10

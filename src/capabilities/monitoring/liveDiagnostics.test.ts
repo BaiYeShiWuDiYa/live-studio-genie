@@ -44,7 +44,6 @@ describe('live diagnostics', () => {
     const result = buildLiveDiagnostics({
       mediaMetrics: { ...mediaMetrics, brightness: metric(28, '28 / 100') },
       audience: audience({ insight: { category: 'visual', label: '画面反馈', count: 3 } }),
-      tick: 1,
     })
 
     expect(result.primaryScene).toBe('quality')
@@ -62,7 +61,6 @@ describe('live diagnostics', () => {
         entrantsLastMinute: 18,
         newViewerRetention: 19,
       }),
-      tick: 3,
     })
 
     expect(result.primaryScene).toBe('interaction')
@@ -78,12 +76,10 @@ describe('live diagnostics', () => {
     const before = buildLiveDiagnostics({
       mediaMetrics,
       audience: noisyAudience,
-      tick: 5,
     })
     const after = buildLiveDiagnostics({
       mediaMetrics,
       audience: noisyAudience,
-      tick: 5,
       resolvedScene: 'troubleshoot',
     })
 
@@ -100,7 +96,6 @@ describe('live diagnostics', () => {
         entrantsLastMinute: 35,
         newViewerRetention: 44,
       }),
-      tick: 2,
     })
     const commentSuggestion = result.suggestions.find(
       (suggestion) => suggestion.signalId === 'comments',
@@ -118,7 +113,6 @@ describe('live diagnostics', () => {
         entrantsLastMinute: 18,
         newViewerRetention: 20,
       }),
-      tick: 3,
     })
 
     expect(result.goodSignals).toHaveLength(2)
@@ -136,7 +130,6 @@ describe('live diagnostics', () => {
     const result = buildLiveDiagnostics({
       mediaMetrics,
       audience: audience({ gifts: [] }),
-      tick: 1,
     })
 
     expect(result.suggestions[0].signalId).toBe('gifts')
@@ -150,12 +143,35 @@ describe('live diagnostics', () => {
       microphone: idleMediaMetric,
       framing: idleMediaMetric,
     }
-    const scenes = [0, 2, 4].map((tick) => buildLiveDiagnostics({
+    const scenes = ([
+      'dim-light',
+      'cold-interaction',
+      'low-audio',
+    ] as const).map((strategy) => buildLiveDiagnostics({
       mediaMetrics: disconnectedMedia,
-      audience: mockAudienceEventAdapter.getRealtimeSnapshot(false, tick),
-      tick,
+      audience: mockAudienceEventAdapter.getStrategySnapshot(
+        strategy,
+        false,
+        20,
+      ),
+      strategy,
     }).primaryScene)
 
     expect(scenes).toEqual(['quality', 'interaction', 'troubleshoot'])
+  })
+
+  it('turns the network strategy into a frame-rate diagnosis', () => {
+    const result = buildLiveDiagnostics({
+      mediaMetrics,
+      audience: mockAudienceEventAdapter.getStrategySnapshot(
+        'network-lag',
+        false,
+        20,
+      ),
+      strategy: 'network-lag',
+    })
+
+    expect(result.improvements[0].id).toBe('fps')
+    expect(result.suggestions[0].action).toContain('30 fps')
   })
 })
