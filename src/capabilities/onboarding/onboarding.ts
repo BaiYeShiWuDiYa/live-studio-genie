@@ -1,6 +1,8 @@
 export type StreamThemeId = 'chat' | 'music' | 'game'
 
-export type StreamLayout = 'portrait' | 'stage'
+export type StreamLayout = 'portrait' | 'three-quarter' | 'stage'
+
+export type StreamGoalKind = 'like' | 'follower' | 'gift'
 
 export type StreamTheme = {
   id: StreamThemeId
@@ -53,6 +55,9 @@ export type SavedLiveConfig = {
   chatTextEnabled: boolean
   chatTextValue: string
   chatGoalEnabled: boolean
+  chatGoalKind?: StreamGoalKind
+  chatGoalTitle?: string
+  musicBackgroundId?: string
   completedTaskIds: string[]
 }
 
@@ -97,10 +102,25 @@ function normalizeConfig(raw: unknown): LastLiveConfig | null {
     savedConfig: {
       topic: savedRecord.topic,
       isChatCompanion: savedRecord.isChatCompanion === true,
-      layout: savedRecord.layout === 'stage' ? 'stage' : 'portrait',
+      layout: savedRecord.layout === 'stage'
+        ? 'stage'
+        : savedRecord.layout === 'three-quarter'
+          ? 'three-quarter'
+          : 'portrait',
       chatTextEnabled: savedRecord.chatTextEnabled === true,
       chatTextValue: typeof savedRecord.chatTextValue === 'string' ? savedRecord.chatTextValue : '',
       chatGoalEnabled: savedRecord.chatGoalEnabled === true,
+      chatGoalKind: savedRecord.chatGoalKind === 'like'
+        || savedRecord.chatGoalKind === 'follower'
+        || savedRecord.chatGoalKind === 'gift'
+        ? savedRecord.chatGoalKind
+        : undefined,
+      chatGoalTitle: typeof savedRecord.chatGoalTitle === 'string'
+        ? savedRecord.chatGoalTitle
+        : undefined,
+      musicBackgroundId: typeof savedRecord.musicBackgroundId === 'string'
+        ? savedRecord.musicBackgroundId
+        : undefined,
       completedTaskIds: Array.isArray(savedRecord.completedTaskIds)
         ? savedRecord.completedTaskIds.filter((id): id is string => typeof id === 'string')
         : [],

@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 450 800" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="neonBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#160a2e"/>
+      <stop offset="55%" stop-color="#12082a"/>
+      <stop offset="100%" stop-color="#06030f"/>
+    </linearGradient>
+    <radialGradient id="neonGlow" cx="50%" cy="10%" r="90%">
+      <stop offset="0%" stop-color="#7a3cff" stop-opacity="0.6"/>
+      <stop offset="45%" stop-color="#3a1d8f" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#3a1d8f" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="neonBeamPink" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ff5cc8" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#ff5cc8" stop-opacity="0.02"/>
+    </linearGradient>
+    <linearGradient id="neonBeamCyan" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#4de8ff" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#4de8ff" stop-opacity="0.02"/>
+    </linearGradient>
+    <linearGradient id="neonGrid" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ff4fb8" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#ff4fb8" stop-opacity="0.55"/>
+    </linearGradient>
+  </defs>
+  <rect width="450" height="800" fill="url(#neonBg)"/>
+  <rect width="450" height="800" fill="url(#neonGlow)"/>
+  <polygon points="120,0 210,0 300,560 60,560" fill="url(#neonBeamPink)"/>
+  <polygon points="240,0 330,0 390,560 150,560" fill="url(#neonBeamCyan)"/>
+  <g stroke="#ff5cc8" stroke-width="2" opacity="0.5">
+    <line x1="0" y1="640" x2="450" y2="640"/>
+    <line x1="0" y1="680" x2="450" y2="680" opacity="0.7"/>
+    <line x1="0" y1="730" x2="450" y2="730" opacity="0.85"/>
+    <line x1="60" y1="800" x2="180" y2="640"/>
+    <line x1="150" y1="800" x2="210" y2="640"/>
+    <line x1="225" y1="800" x2="225" y2="640"/>
+    <line x1="300" y1="800" x2="240" y2="640"/>
+    <line x1="390" y1="800" x2="270" y2="640"/>
+  </g>
+  <rect x="0" y="630" width="450" height="170" fill="url(#neonGrid)" opacity="0.25"/>
+  <g fill="#8ff0ff">
+    <circle cx="80" cy="120" r="5" opacity="0.6"/>
+    <circle cx="360" cy="150" r="6" opacity="0.55"/>
+    <circle cx="150" cy="300" r="4" opacity="0.5"/>
+    <circle cx="330" cy="350" r="5" opacity="0.6"/>
+    <circle cx="230" cy="80" r="4" opacity="0.7"/>
+  </g>
+  <g fill="#ff9ee0">
+    <circle cx="110" cy="220" r="6" opacity="0.5"/>
+    <circle cx="390" cy="260" r="5" opacity="0.5"/>
+    <circle cx="260" cy="420" r="4" opacity="0.55"/>
+    <circle cx="70" cy="480" r="5" opacity="0.45"/>
+  </g>
+  <g fill="#0a0418" opacity="0.85">
+    <rect x="218" y="480" width="14" height="140" rx="6"/>
+    <circle cx="225" cy="470" r="16"/>
+  </g>
+</svg>

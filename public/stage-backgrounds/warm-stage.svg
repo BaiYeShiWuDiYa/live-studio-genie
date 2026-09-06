@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 450 800" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="warmBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2b1608"/>
+      <stop offset="45%" stop-color="#3a1e0a"/>
+      <stop offset="100%" stop-color="#120a06"/>
+    </linearGradient>
+    <radialGradient id="warmSpot1" cx="50%" cy="0%" r="85%">
+      <stop offset="0%" stop-color="#ffd9a0" stop-opacity="0.9"/>
+      <stop offset="35%" stop-color="#f7a85c" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#f7a85c" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="warmSpot2" cx="12%" cy="8%" r="60%">
+      <stop offset="0%" stop-color="#ffe9c4" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#ffe9c4" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="warmBeam" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffdca8" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#ffdca8" stop-opacity="0.02"/>
+    </linearGradient>
+    <linearGradient id="warmFloor" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8a4f22" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#2a1608" stop-opacity="0.9"/>
+    </linearGradient>
+  </defs>
+  <rect width="450" height="800" fill="url(#warmBg)"/>
+  <polygon points="150,0 300,0 380,560 70,560" fill="url(#warmBeam)"/>
+  <polygon points="30,0 120,0 150,520 40,520" fill="url(#warmBeam)" opacity="0.55"/>
+  <polygon points="330,0 420,0 410,520 300,520" fill="url(#warmBeam)" opacity="0.55"/>
+  <rect width="450" height="800" fill="url(#warmSpot1)"/>
+  <rect width="450" height="320" fill="url(#warmSpot2)"/>
+  <g fill="#ffdf9e">
+    <circle cx="70" cy="140" r="7" opacity="0.5"/>
+    <circle cx="120" cy="250" r="4" opacity="0.6"/>
+    <circle cx="380" cy="180" r="8" opacity="0.45"/>
+    <circle cx="330" cy="320" r="5" opacity="0.55"/>
+    <circle cx="200" cy="90" r="4" opacity="0.7"/>
+    <circle cx="260" cy="200" r="6" opacity="0.4"/>
+    <circle cx="90" cy="400" r="5" opacity="0.35"/>
+    <circle cx="400" cy="420" r="6" opacity="0.35"/>
+    <circle cx="160" cy="470" r="4" opacity="0.4"/>
+    <circle cx="300" cy="480" r="5" opacity="0.35"/>
+  </g>
+  <ellipse cx="225" cy="640" rx="240" ry="60" fill="url(#warmFloor)"/>
+  <g fill="#0c0703" opacity="0.9">
+    <rect x="219" y="470" width="12" height="150" rx="5"/>
+    <path d="M212 470 q13 -26 26 0 l0 16 l-26 0 z"/>
+    <ellipse cx="225" cy="630" rx="60" ry="10"/>
+  </g>
+  <ellipse cx="225" cy="620" rx="120" ry="16" fill="#f6b26b" opacity="0.18"/>
+</svg>

@@ -88,15 +88,16 @@ export function WidgetRenderer(props: WidgetRendererProps) {
   )
 }
 
-function CameraEffectsWidget({
+type CameraEffectsSection = 'bundle' | 'beauty' | 'makeup' | 'props' | 'background'
+
+export function CameraEffectsWidget({
   spec,
   applied,
   isPreviewing,
   onCameraEffectsChange,
-}: WidgetBodyProps) {
-  const [activeSection, setActiveSection] = useState<
-    'bundle' | 'beauty' | 'makeup' | 'props' | 'background'
-  >('bundle')
+  defaultSection = 'bundle',
+}: WidgetBodyProps & { defaultSection?: CameraEffectsSection }) {
+  const [activeSection, setActiveSection] = useState<CameraEffectsSection>(defaultSection)
   const cameraEffects = useStudioStore((state) => state.cameraEffects)
   if (spec.type !== 'camera-effects') return null
   const settings = applied || isPreviewing
@@ -185,7 +186,9 @@ function CameraEffectsWidget({
         <>
           {activeSection === 'bundle' && <p className="effect-section-label">美颜微调</p>}
           <div className="adjustments">
-            <Adjustment label="柔肤" max={100} value={`${settings.smoothness}%`} onChange={(value) => update({ smoothness: value })} />
+            <Adjustment label="瘦脸" max={100} value={`${settings.slimFace}%`} onChange={(value) => update({ slimFace: value })} />
+            <Adjustment label="磨皮" max={100} value={`${settings.smoothness}%`} onChange={(value) => update({ smoothness: value })} />
+            <Adjustment label="大眼" max={100} value={`${settings.bigEyes}%`} onChange={(value) => update({ bigEyes: value })} />
             <Adjustment label="提亮" min={-20} max={30} value={`${withSign(settings.exposure)}%`} onChange={(value) => update({ exposure: value })} />
             <Adjustment label="暖肤" max={40} value={`${settings.warmth}%`} onChange={(value) => update({ warmth: value })} />
             <Adjustment label="对比度" min={-20} max={40} value={`${withSign(settings.contrast)}%`} onChange={(value) => update({ contrast: value })} />

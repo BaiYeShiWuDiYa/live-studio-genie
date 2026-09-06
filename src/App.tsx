@@ -25,6 +25,7 @@ import {
   Sparkles,
   Target,
   Type,
+  Upload,
   Users,
   WandSparkles,
   WifiOff,
@@ -60,6 +61,7 @@ import {
 } from './capabilities/monitoring/suggestionQueue'
 import type { VisualSettings } from './capabilities/visual/types'
 import {
+  applyCameraEffectPreset,
   recommendCameraEffects,
   type CameraEffects,
 } from './capabilities/video/cameraEffects'
@@ -71,10 +73,10 @@ import {
   recognizeStreamTheme,
   saveLastLiveConfig,
   type LastLiveConfig,
+  type StreamGoalKind,
   type StreamThemeId,
 } from './capabilities/onboarding/onboarding'
-import { Adjustment } from './components/genie/Adjustment'
-import { WidgetRenderer } from './components/genie/WidgetRenderer'
+import { CameraEffectsWidget, WidgetRenderer } from './components/genie/WidgetRenderer'
 import { CameraEffectsCanvas } from './components/studio/CameraEffectsCanvas'
 import { EditableCameraLayer } from './components/studio/EditableCameraLayer'
 import { LiveGoal } from './components/studio/LiveGoal'
@@ -95,7 +97,22 @@ type AppView = 'onboarding' | 'prelive' | 'live'
 type Scene = StudioScene
 type StreamKind = 'music' | 'chat' | 'game'
 type PreliveTask = 'layout' | 'visual' | 'content' | 'interaction'
-type PreliveLayout = 'portrait' | 'stage'
+type PreliveLayout = 'portrait' | 'three-quarter' | 'stage'
+type GoalKind = StreamGoalKind
+
+const stageBackgrounds = [
+  { id: 'warm-stage', name: '暖光舞台', url: '/stage-backgrounds/warm-stage.svg' },
+  { id: 'neon-live', name: '霓虹现场', url: '/stage-backgrounds/neon-live.svg' },
+  { id: 'retro-vinyl', name: '复古唱片', url: '/stage-backgrounds/retro-vinyl.svg' },
+  { id: 'dream-stars', name: '梦幻星光', url: '/stage-backgrounds/dream-stars.svg' },
+] as const
+
+const goalKindOptions: ReadonlyArray<{ id: GoalKind; label: string; defaultTitle: string; target: number }> = [
+  { id: 'like', label: '点赞', defaultTitle: 'like goal', target: 50000 },
+  { id: 'follower', label: '粉丝', defaultTitle: 'follower goal', target: 60000 },
+  { id: 'gift', label: '礼物', defaultTitle: 'gift goal', target: 2000 },
+]
+
 type PreviewMode = 'mobile' | 'studio'
 type GenieRequestStatus = 'idle' | 'loading' | 'cancelled' | 'timeout' | 'error'
 type StrategyCommentState = 'issue' | 'recovery' | 'normal'
@@ -134,16 +151,17 @@ const sceneCopy: Record<Scene, { title: string; detail: string; action: string }
 }
 
 const preliveTasks: Array<{ id: PreliveTask; title: string; detail: string; action: string; priority: string }> = [
-  { id: 'layout', title: '选择场景与画布', detail: '根据直播类型确认竖屏构图或秀场舞台，并检查画面源。', action: '确认画布方案', priority: '必须完成' },
-  { id: 'visual', title: '检查画面与音频', detail: '预览补光、对比度和人声参数，确保开播时状态稳定。', action: '应用设备方案', priority: '必须完成' },
+  { id: 'layout', title: '选择直播布局', detail: '根据直播类型确认画面布局，并检查画面源。', action: '确认画布方案', priority: '必须完成' },
+  { id: 'visual', title: '人像美化', detail: '默认应用「清透日常」预设，可在美颜、美妆分类中微调，所有处理均在本地完成。', action: '应用美化方案', priority: '必须完成' },
   { id: 'content', title: '直播信息与内容', detail: '完善直播预告、主播介绍、主题说明和首 3 分钟内容脚本。', action: '保存内容方案', priority: '建议优化' },
   { id: 'interaction', title: '互动预热与开场', detail: '配置预热文案和首屏点歌投票，降低新观众的互动门槛。', action: '保存互动方案', priority: '可选增强' },
 ]
 
-const chatLayoutTaskTitle = '完成直播布局调整'
-const chatLayoutTaskDetail = '已根据你的直播内容推荐全屏摄像头布局，可选择画布小组件，可在画布中调整位置'
+const chatLayoutTaskTitle = '选择直播布局'
+const chatLayoutTaskDetail = '已为你默认全屏摄像头画布（单人竖屏 · 9:16），可勾选画布小组件并在画布中拖动位置'
+const musicLayoutTaskDetail = '根据你的表演形式，选择适合的画面布局'
 const defaultChatText = 'Good things will happen today ❤️'
-const defaultChatGoal = { label: 'Good things happen today ❤️', current: 0, target: 60000 }
+const defaultGoalTitle = 'follower goal'
 type CanvasWidgetKind = 'text' | 'goal'
 
 const emptyAudienceSnapshot: AudienceSnapshot = {
@@ -211,7 +229,12 @@ function App() {
   const [chatTextEnabled, setChatTextEnabled] = useState(true)
   const [chatTextDraft, setChatTextDraft] = useState(defaultChatText)
   const [chatTextValue, setChatTextValue] = useState(defaultChatText)
-  const [chatGoalEnabled, setChatGoalEnabled] = useState(false)
+  const [chatGoalEnabled, setChatGoalEnabled] = useState(true)
+  const [chatGoalKind, setChatGoalKind] = useState<GoalKind>('follower')
+  const [chatGoalTitle, setChatGoalTitle] = useState(defaultGoalTitle)
+  const [musicBackgroundId, setMusicBackgroundId] = useState<string>(stageBackgrounds[0].id)
+  const [customStageBackground, setCustomStageBackground] = useState<string | null>(null)
+  const [stageBackgroundUploadError, setStageBackgroundUploadError] = useState('')
   const [selectedCanvasWidget, setSelectedCanvasWidget] = useState<CanvasWidgetKind | null>(null)
   const [chatTextOffset, setChatTextOffset] = useState<WidgetOffset>({ x: 0, y: 0 })
   const [chatGoalOffset, setChatGoalOffset] = useState<WidgetOffset>({ x: 0, y: 0 })
@@ -618,10 +641,23 @@ function App() {
     setPreliveAnnouncement(`今晚 20:00 · ${finalTopic}`)
     const chatCompanion = theme === 'chat'
     setIsChatCompanion(chatCompanion)
-    if (chatCompanion) {
-      setPreliveLayout('portrait')
-      setPreviewMode('mobile')
-    }
+    setPreliveLayout('portrait')
+    setPreviewMode('mobile')
+    setCompletedPreliveTasks([])
+    setPreliveTaskIndex(0)
+    setChatTextEnabled(true)
+    setChatTextDraft(defaultChatText)
+    setChatTextValue(defaultChatText)
+    setChatGoalEnabled(true)
+    setChatGoalKind('follower')
+    setChatGoalTitle(defaultGoalTitle)
+    setMusicBackgroundId(stageBackgrounds[0].id)
+    setCustomStageBackground(null)
+    setStageBackgroundUploadError('')
+    setSelectedCanvasWidget(null)
+    setChatTextOffset({ x: 0, y: 0 })
+    setChatGoalOffset({ x: 0, y: 0 })
+    applyCameraEffects(applyCameraEffectPreset('natural'))
     setView('prelive')
   }
 
@@ -650,16 +686,51 @@ function App() {
     setPreliveAnnouncement(`今晚 20:00 · ${savedConfig.topic}`)
     setIsChatCompanion(savedConfig.isChatCompanion)
     setPreliveLayout(savedConfig.layout)
-    setPreviewMode(savedConfig.layout === 'portrait' ? 'mobile' : 'studio')
+    setPreviewMode(savedConfig.layout === 'stage' ? 'studio' : 'mobile')
     setChatTextEnabled(savedConfig.chatTextEnabled)
     setChatTextValue(savedConfig.chatTextValue || defaultChatText)
     setChatTextDraft(savedConfig.chatTextValue || defaultChatText)
     setChatGoalEnabled(savedConfig.chatGoalEnabled)
+    setChatGoalKind(savedConfig.chatGoalKind ?? 'follower')
+    setChatGoalTitle(savedConfig.chatGoalTitle || defaultGoalTitle)
+    setCustomStageBackground(null)
+    setMusicBackgroundId(savedConfig.musicBackgroundId || stageBackgrounds[0].id)
+    setStageBackgroundUploadError('')
+    applyCameraEffects(applyCameraEffectPreset('natural'))
     setCompletedPreliveTasks(preliveTasks.map((task) => task.id))
     setPreliveTaskIndex(0)
     setSelectedEntryCategory(theme)
     setView('prelive')
   }
+
+  const selectChatGoalKind = (kind: GoalKind) => {
+    const option = goalKindOptions.find((item) => item.id === kind)
+    setChatGoalKind(kind)
+    if (option) setChatGoalTitle(option.defaultTitle)
+  }
+
+  const selectStageBackground = (backgroundId: string) => {
+    setMusicBackgroundId(backgroundId)
+    setCustomStageBackground(null)
+    setStageBackgroundUploadError('')
+  }
+
+  const uploadStageBackground = (file: File | undefined) => {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setStageBackgroundUploadError('仅支持图片文件，请重新选择')
+      return
+    }
+    setCustomStageBackground(URL.createObjectURL(file))
+    setStageBackgroundUploadError('')
+  }
+
+  const stageBackgroundUrl = customStageBackground
+    ?? stageBackgrounds.find((background) => background.id === musicBackgroundId)?.url
+    ?? null
+  const showCanvasWidgets = isChatCompanion
+    || (streamType === 'music' && preliveLayout === 'portrait')
+  const chatGoalTarget = goalKindOptions.find((item) => item.id === chatGoalKind)?.target ?? 60000
 
   const previewSuggestion = (widgetSpec: WidgetSpec = activeWidgetSpec) => {
     if (widgetSpec.type === 'camera-effects') {
@@ -863,7 +934,7 @@ function App() {
   const completePreliveTask = () => {
     const task = preliveTasks[preliveTaskIndex]
     if (task.id === 'layout') {
-      setPreviewMode(preliveLayout === 'portrait' ? 'mobile' : 'studio')
+      setPreviewMode(preliveLayout === 'stage' ? 'studio' : 'mobile')
     } else if (task.id === 'visual') {
       studioToolRegistry.execute('studio.adjust_visual', {
         mode: 'apply',
@@ -936,6 +1007,9 @@ function App() {
         chatTextEnabled,
         chatTextValue: chatTextValue,
         chatGoalEnabled,
+        chatGoalKind,
+        chatGoalTitle,
+        musicBackgroundId,
         completedTaskIds: completedPreliveTasks,
       },
     }
@@ -1319,10 +1393,10 @@ function App() {
             <button type="button" className={previewMode === 'mobile' ? 'selected' : ''} onClick={() => setPreviewMode('mobile')}>移动端预览</button>
             <button type="button" className={previewMode === 'studio' ? 'selected' : ''} onClick={() => setPreviewMode('studio')}>Studio 视图</button>
           </div>
-          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} strategy={strategyCommentState === 'issue' ? demoStrategy : 'normal'} liveAdjustment={liveAdjustment} previewMode={previewMode} isPreviewing={isSuggestionPreview} audience={audienceSnapshot} isLive={view === 'live'} preliveTitle={streamTopic} preliveLayout={preliveLayout} chatWidgets={isChatCompanion ? {
+          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} strategy={strategyCommentState === 'issue' ? demoStrategy : 'normal'} liveAdjustment={liveAdjustment} previewMode={previewMode} isPreviewing={isSuggestionPreview} audience={audienceSnapshot} isLive={view === 'live'} preliveTitle={streamTopic} preliveLayout={preliveLayout} stageBackgroundUrl={stageBackgroundUrl} chatWidgets={showCanvasWidgets ? {
             text: chatTextEnabled ? chatTextValue : '',
             goalVisible: chatGoalEnabled,
-            goal: defaultChatGoal,
+            goal: { label: chatGoalTitle, current: 0, target: chatGoalTarget },
             selectedWidget: selectedCanvasWidget,
             onSelectWidget: setSelectedCanvasWidget,
             textOffset: chatTextOffset,
@@ -1485,6 +1559,7 @@ function App() {
                       taskIndex={preliveTaskIndex}
                       completed={completedPreliveTasks.includes(preliveTasks[preliveTaskIndex].id)}
                       layout={preliveLayout}
+                      streamType={streamType}
                       title={streamTopic}
                       script={preliveScript}
                       announcement={preliveAnnouncement}
@@ -1498,14 +1573,24 @@ function App() {
                       chatTextEnabled={chatTextEnabled}
                       chatTextDraft={chatTextDraft}
                       chatGoalEnabled={chatGoalEnabled}
+                      chatGoalKind={chatGoalKind}
+                      chatGoalTitle={chatGoalTitle}
+                      musicBackgroundId={musicBackgroundId}
+                      customStageBackgroundUrl={customStageBackground}
+                      stageBackgroundUploadError={stageBackgroundUploadError}
                       onChatTextEnabledChange={setChatTextEnabled}
                       onChatTextDraftChange={setChatTextDraft}
                       onChatTextApply={() => setChatTextValue(chatTextDraft)}
                       onChatGoalEnabledChange={setChatGoalEnabled}
+                      onChatGoalKindChange={selectChatGoalKind}
+                      onChatGoalTitleChange={setChatGoalTitle}
+                      onSelectStageBackground={selectStageBackground}
+                      onUploadStageBackground={uploadStageBackground}
                       onLayoutChange={(layout) => {
                         setPreliveLayout(layout)
-                        setPreviewMode(layout === 'portrait' ? 'mobile' : 'studio')
+                        setPreviewMode(layout === 'stage' ? 'studio' : 'mobile')
                       }}
+                      onCameraEffectsChange={applyCameraEffects}
                       onTitleChange={setStreamTopic}
                       onScriptChange={setPreliveScript}
                       onAnnouncementChange={setPreliveAnnouncement}
@@ -1671,7 +1756,7 @@ type ChatCanvasWidgets = {
   onGoalOffsetChange: (offset: WidgetOffset) => void
 }
 
-function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, isPk, applied, scene, strategy, liveAdjustment, previewMode, isPreviewing, audience, isLive, preliveTitle, preliveLayout, chatWidgets }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; displayStream: MediaStream | null; layoutEditing: boolean; isPk: boolean; applied: boolean; scene: Scene; strategy: AudienceStrategyId; liveAdjustment: LiveAdjustment | null; previewMode: PreviewMode; isPreviewing: boolean; audience: AudienceSnapshot; isLive: boolean; preliveTitle: string; preliveLayout: PreliveLayout; chatWidgets: ChatCanvasWidgets | null }) {
+function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, isPk, applied, scene, strategy, liveAdjustment, previewMode, isPreviewing, audience, isLive, preliveTitle, preliveLayout, stageBackgroundUrl, chatWidgets }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; displayStream: MediaStream | null; layoutEditing: boolean; isPk: boolean; applied: boolean; scene: Scene; strategy: AudienceStrategyId; liveAdjustment: LiveAdjustment | null; previewMode: PreviewMode; isPreviewing: boolean; audience: AudienceSnapshot; isLive: boolean; preliveTitle: string; preliveLayout: PreliveLayout; stageBackgroundUrl: string | null; chatWidgets: ChatCanvasWidgets | null }) {
   const displayVideoRef = useRef<HTMLVideoElement>(null)
   const visualSettings = useStudioStore((state) => state.visualSettings)
   const previewStyle = {
@@ -1696,6 +1781,13 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
       className={`host-stage ${displayStream ? 'screen-sharing' : ''}`}
       onPointerDown={() => chatWidgets?.onSelectWidget(null)}
     >
+      {!isLive && preliveLayout === 'three-quarter' && stageBackgroundUrl && (
+        <div
+          className="stage-background-layer"
+          style={{ backgroundImage: `url("${stageBackgroundUrl}")` }}
+          aria-hidden="true"
+        />
+      )}
       {displayStream
         ? <>
             <video ref={displayVideoRef} autoPlay muted playsInline className="screen-feed" />
@@ -1710,7 +1802,7 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
       {previewMode === 'studio' && <div className="studio-guides"><i /><i /><i /></div>}
       <div className="stage-label"><span />{isLive ? 'LIVE' : '林小满'}</div>
       {!isPk && isLive && <><div className="viewer-bubble"><Users size={14} />{audience.viewerCount.toLocaleString()}</div><div className="stage-duration">00:42:18</div></>}
-      {!isLive && <div className="prelive-stage-summary"><span>开播预览</span><b>{preliveTitle || '未填写直播标题'}</b><small>{preliveLayout === 'portrait' ? '单人竖屏 · 9:16' : '秀场舞台 · 16:9'}</small></div>}
+      {!isLive && <div className="prelive-stage-summary"><span>开播预览</span><b>{preliveTitle || '未填写直播标题'}</b><small>{preliveLayout === 'portrait' ? '全屏摄像头 · 单人竖屏 9:16' : preliveLayout === 'three-quarter' ? '3/4 摄像头 · 舞台背景' : '秀场舞台 · 16:9'}</small></div>}
       {applied && <div className="applied-badge"><Check size={13} />方案已应用</div>}
       {strategy === 'dim-light' && <div className="stage-hint"><Lightbulb size={14} />环境偏暗</div>}
       {strategy === 'network-lag' && <div className="stage-hint"><WifiOff size={14} />网络波动</div>}
@@ -1761,6 +1853,7 @@ function PreliveTaskCard({
   taskIndex,
   completed,
   layout,
+  streamType,
   title,
   script,
   announcement,
@@ -1775,11 +1868,21 @@ function PreliveTaskCard({
   chatTextEnabled,
   chatTextDraft,
   chatGoalEnabled,
+  chatGoalKind,
+  chatGoalTitle,
+  musicBackgroundId,
+  customStageBackgroundUrl,
+  stageBackgroundUploadError,
   onChatTextEnabledChange,
   onChatTextDraftChange,
   onChatTextApply,
   onChatGoalEnabledChange,
+  onChatGoalKindChange,
+  onChatGoalTitleChange,
+  onSelectStageBackground,
+  onUploadStageBackground,
   onLayoutChange,
+  onCameraEffectsChange,
   onTitleChange,
   onScriptChange,
   onAnnouncementChange,
@@ -1799,6 +1902,7 @@ function PreliveTaskCard({
   taskIndex: number
   completed: boolean
   layout: PreliveLayout
+  streamType: StreamKind
   title: string
   script: string
   announcement: string
@@ -1813,11 +1917,21 @@ function PreliveTaskCard({
   chatTextEnabled: boolean
   chatTextDraft: string
   chatGoalEnabled: boolean
+  chatGoalKind: GoalKind
+  chatGoalTitle: string
+  musicBackgroundId: string
+  customStageBackgroundUrl: string | null
+  stageBackgroundUploadError: string
   onChatTextEnabledChange: (enabled: boolean) => void
   onChatTextDraftChange: (draft: string) => void
   onChatTextApply: () => void
   onChatGoalEnabledChange: (enabled: boolean) => void
+  onChatGoalKindChange: (kind: GoalKind) => void
+  onChatGoalTitleChange: (title: string) => void
+  onSelectStageBackground: (backgroundId: string) => void
+  onUploadStageBackground: (file: File | undefined) => void
   onLayoutChange: (layout: PreliveLayout) => void
+  onCameraEffectsChange: (settings: CameraEffects) => void
   onTitleChange: (title: string) => void
   onScriptChange: (script: string) => void
   onAnnouncementChange: (announcement: string) => void
@@ -1833,11 +1947,10 @@ function PreliveTaskCard({
   onApply: () => void
   onSkip: () => void
 }) {
-  const visualSettings = useStudioStore((state) => state.visualSettings)
-  const audioSettings = useStudioStore((state) => state.audioSettings)
   const isChatLayout = isChatCompanion && task.id === 'layout'
+  const isMusicLayout = streamType === 'music' && task.id === 'layout'
   const cardTitle = isChatLayout ? chatLayoutTaskTitle : task.title
-  const cardDetail = isChatLayout ? chatLayoutTaskDetail : task.detail
+  const cardDetail = isChatLayout ? chatLayoutTaskDetail : isMusicLayout ? musicLayoutTaskDetail : task.detail
   const canApply = task.id !== 'content'
     ? task.id !== 'interaction' || (
         warmupCopy.trim().length > 0 &&
@@ -1887,7 +2000,77 @@ function PreliveTaskCard({
             <span><Target size={15} />目标源</span>
             <input type="checkbox" checked={chatGoalEnabled} onChange={(event) => onChatGoalEnabledChange(event.target.checked)} />
           </label>
-          {chatGoalEnabled && <small className="chat-widget-tip">已在画布中添加环形目标，可在画布中拖动调整位置</small>}
+          {chatGoalEnabled && (
+            <div className="chat-goal-config">
+              <div className="goal-kind-select" role="group" aria-label="目标类型">
+                {goalKindOptions.map((option) => (
+                  <button
+                    type="button"
+                    key={option.id}
+                    className={chatGoalKind === option.id ? 'selected' : ''}
+                    aria-pressed={chatGoalKind === option.id}
+                    onClick={() => onChatGoalKindChange(option.id)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <input
+                value={chatGoalTitle}
+                maxLength={30}
+                placeholder="输入目标标题，如 follower goal"
+                aria-label="目标标题"
+                onChange={(event) => onChatGoalTitleChange(event.target.value)}
+              />
+              <small className="chat-widget-tip">已在画布中添加目标卡片，可在画布中拖动调整位置</small>
+            </div>
+          )}
+        </div>
+      ) : isMusicLayout ? (
+        <div className="music-layout-picker">
+          <div className="task-choice-row">
+            <button type="button" className={`task-choice ${layout === 'portrait' ? 'selected' : ''}`} onClick={() => onLayoutChange('portrait')}><Camera size={15} /><span><b>全屏摄像头布局</b></span></button>
+            <button type="button" className={`task-choice ${layout === 'three-quarter' ? 'selected' : ''}`} onClick={() => onLayoutChange('three-quarter')}><LayoutTemplate size={15} /><span><b>3/4 摄像头布局</b><small>保留主体画面，同时增加舞台氛围背景</small></span></button>
+          </div>
+          {layout === 'three-quarter' && (
+            <div className="stage-background-picker">
+              <b className="stage-background-title">选择舞台背景</b>
+              <small className="stage-background-detail">为底部画面选择适合音乐现场的氛围背景</small>
+              <div className="stage-background-grid" role="group" aria-label="舞台背景">
+                {stageBackgrounds.map((background) => (
+                  <button
+                    type="button"
+                    key={background.id}
+                    className={`stage-background-option ${!customStageBackgroundUrl && musicBackgroundId === background.id ? 'selected' : ''}`}
+                    aria-pressed={!customStageBackgroundUrl && musicBackgroundId === background.id}
+                    onClick={() => onSelectStageBackground(background.id)}
+                  >
+                    <img src={background.url} alt={background.name} />
+                    <span>{background.name}</span>
+                  </button>
+                ))}
+                {customStageBackgroundUrl && (
+                  <button type="button" className="stage-background-option selected" aria-pressed="true">
+                    <img src={customStageBackgroundUrl} alt="自定义背景" />
+                    <span>自定义背景</span>
+                  </button>
+                )}
+              </div>
+              <label className="stage-background-upload">
+                <Upload size={14} />上传背景图
+                <input
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  onChange={(event) => {
+                    onUploadStageBackground(event.target.files?.[0])
+                    event.target.value = ''
+                  }}
+                />
+              </label>
+              {stageBackgroundUploadError && <small className="stage-background-error" role="alert">{stageBackgroundUploadError}</small>}
+            </div>
+          )}
         </div>
       ) : (
         <div className="task-choice-row">
@@ -1897,16 +2080,16 @@ function PreliveTaskCard({
       )
     )}
     {task.id === 'visual' && (
-      <div className="prelive-adjustment-stack">
-        <div className="prelive-signal-summary">
-          <span><i className={cameraEnabledClass(visualSettings.brightness)} />画面已检测</span>
-          <small>建议保持人脸明亮、声音峰值稳定</small>
-        </div>
-        <div className="adjustments">
-          <Adjustment label="补光" value={`${Math.round((visualSettings.brightness - 1) * 100)}%`} min={-20} max={40} onChange={(value) => onVisualChange('brightness', value)} />
-          <Adjustment label="对比度" value={`${Math.round((visualSettings.contrast - 1) * 100)}%`} min={-20} max={40} onChange={(value) => onVisualChange('contrast', value)} />
-          <Adjustment label="麦克风" value={`${audioSettings.microphoneGainDb} dB`} min={-20} max={20} onChange={(value) => onAudioChange('microphoneGainDb', value)} />
-        </div>
+      <div className="prelive-beauty-panel">
+        <CameraEffectsWidget
+          spec={getCameraEffectsWidgetSpec()}
+          applied
+          isPreviewing={false}
+          onCameraEffectsChange={onCameraEffectsChange}
+          onAudioChange={onAudioChange}
+          onVisualChange={onVisualChange}
+          defaultSection="beauty"
+        />
       </div>
     )}
     {task.id === 'content' && (
@@ -1955,10 +2138,6 @@ function PreliveTaskCard({
     <Button className="primary-button full-button" color="primary" disabled={!canApply} onClick={onApply}><Check size={16} />{completed ? '更新当前设置' : task.action}</Button>
     <button className="card-text-button" type="button" onClick={onSkip}>跳过并稍后处理</button>
   </div>
-}
-
-function cameraEnabledClass(brightness: number) {
-  return brightness >= 0.85 ? 'is-ready' : 'is-warning'
 }
 
 export default App

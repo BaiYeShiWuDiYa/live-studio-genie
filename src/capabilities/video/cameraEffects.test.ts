@@ -86,7 +86,9 @@ describe('camera effects', () => {
     expect(recommendation).toMatchObject({
       faceEffect: 'glasses',
       backgroundMode: 'blur',
-      smoothness: 18,
+      smoothness: 22,
+      slimFace: 18,
+      bigEyes: 22,
       exposure: 15,
       lipstickColor: '#a64ab3',
       eyeshadowIntensity: 55,

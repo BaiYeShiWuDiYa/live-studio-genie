@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 450 800" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="dreamBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1b1246"/>
+      <stop offset="50%" stop-color="#241558"/>
+      <stop offset="100%" stop-color="#0a0726"/>
+    </linearGradient>
+    <radialGradient id="dreamNebula1" cx="28%" cy="22%" r="55%">
+      <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="dreamNebula2" cx="75%" cy="12%" r="50%">
+      <stop offset="0%" stop-color="#4ea8ff" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#4ea8ff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="dreamBeam" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#c9b8ff" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#c9b8ff" stop-opacity="0.02"/>
+    </linearGradient>
+    <radialGradient id="dreamMoon" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#f4efff"/>
+      <stop offset="70%" stop-color="#cfc3f5"/>
+      <stop offset="100%" stop-color="#a896e0"/>
+    </radialGradient>
+  </defs>
+  <rect width="450" height="800" fill="url(#dreamBg)"/>
+  <rect width="450" height="800" fill="url(#dreamNebula1)"/>
+  <rect width="450" height="800" fill="url(#dreamNebula2)"/>
+  <circle cx="345" cy="120" r="42" fill="url(#dreamMoon)" opacity="0.9"/>
+  <polygon points="225,0 300,0 360,560 165,560" fill="url(#dreamBeam)"/>
+  <g fill="#e9e3ff">
+    <circle cx="60" cy="90" r="3.5" opacity="0.85"/>
+    <circle cx="120" cy="180" r="2.5" opacity="0.7"/>
+    <circle cx="200" cy="70" r="3" opacity="0.9"/>
+    <circle cx="280" cy="220" r="2.5" opacity="0.75"/>
+    <circle cx="400" cy="250" r="3.5" opacity="0.8"/>
+    <circle cx="90" cy="320" r="2.5" opacity="0.6"/>
+    <circle cx="180" cy="380" r="3" opacity="0.7"/>
+    <circle cx="330" cy="360" r="2.5" opacity="0.65"/>
+    <circle cx="70" cy="470" r="3" opacity="0.55"/>
+    <circle cx="260" cy="480" r="2.5" opacity="0.6"/>
+    <circle cx="400" cy="470" r="3" opacity="0.55"/>
+    <circle cx="150" cy="560" r="2.5" opacity="0.5"/>
+    <circle cx="350" cy="580" r="3" opacity="0.5"/>
+  </g>
+  <g fill="#b79cff">
+    <path d="M100 150 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3 z" opacity="0.8"/>
+    <path d="M370 320 l2.5 6 6 2.5 -6 2.5 -2.5 6 -2.5 -6 -6 -2.5 6 -2.5 z" opacity="0.7"/>
+    <path d="M230 140 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2 z" opacity="0.75"/>
+  </g>
+  <ellipse cx="225" cy="660" rx="250" ry="50" fill="#120b38" opacity="0.85"/>
+  <g fill="#0b0626" opacity="0.9">
+    <circle cx="225" cy="560" r="20"/>
+    <rect x="215" y="575" width="20" height="80" rx="9"/>
+  </g>
+</svg>

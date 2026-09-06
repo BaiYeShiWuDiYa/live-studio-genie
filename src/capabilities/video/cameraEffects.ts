@@ -28,6 +28,8 @@ const backgroundImageUrlSchema = z.union([
 
 export const cameraEffectsSchema = z.object({
   smoothness: z.number().int().min(0).max(100),
+  slimFace: z.number().int().min(0).max(100),
+  bigEyes: z.number().int().min(0).max(100),
   exposure: z.number().int().min(-20).max(30),
   warmth: z.number().int().min(0).max(40),
   contrast: z.number().int().min(-20).max(40),
@@ -76,6 +78,8 @@ export const virtualBackgrounds = [
 
 export const defaultCameraEffects: CameraEffects = {
   smoothness: 0,
+  slimFace: 0,
+  bigEyes: 0,
   exposure: 0,
   warmth: 0,
   contrast: 0,
@@ -117,6 +121,8 @@ interface CameraBeautyPreset {
   settings: Pick<
     CameraEffects,
     | 'smoothness'
+    | 'slimFace'
+    | 'bigEyes'
     | 'exposure'
     | 'warmth'
     | 'contrast'
@@ -150,6 +156,8 @@ export const cameraBeautyPresets: readonly CameraBeautyPreset[] = [
     label: '原生',
     settings: {
       smoothness: 0,
+      slimFace: 0,
+      bigEyes: 0,
       exposure: 0,
       warmth: 0,
       contrast: 0,
@@ -163,12 +171,14 @@ export const cameraBeautyPresets: readonly CameraBeautyPreset[] = [
     id: 'natural',
     label: '自然',
     settings: {
-      smoothness: 12,
+      smoothness: 16,
+      slimFace: 12,
+      bigEyes: 14,
       exposure: 4,
       warmth: 4,
       contrast: 4,
       saturation: 4,
-      whitening: 10,
+      whitening: 14,
       rosiness: 6,
       clarity: 8,
     },
@@ -177,12 +187,14 @@ export const cameraBeautyPresets: readonly CameraBeautyPreset[] = [
     id: 'soft',
     label: '柔焦',
     settings: {
-      smoothness: 32,
+      smoothness: 36,
+      slimFace: 22,
+      bigEyes: 18,
       exposure: 5,
       warmth: 8,
       contrast: -3,
       saturation: 6,
-      whitening: 16,
+      whitening: 18,
       rosiness: 10,
       clarity: 4,
     },
@@ -191,12 +203,14 @@ export const cameraBeautyPresets: readonly CameraBeautyPreset[] = [
     id: 'bright',
     label: '亮颜',
     settings: {
-      smoothness: 18,
+      smoothness: 22,
+      slimFace: 18,
+      bigEyes: 22,
       exposure: 15,
       warmth: 5,
       contrast: 6,
       saturation: 8,
-      whitening: 28,
+      whitening: 32,
       rosiness: 8,
       clarity: 14,
     },
@@ -369,6 +383,8 @@ export function getMatchingCameraBeautyPresetId(
 ): CameraBeautyPresetId | null {
   return cameraBeautyPresets.find((preset) => (
     preset.settings.smoothness === settings.smoothness &&
+    preset.settings.slimFace === settings.slimFace &&
+    preset.settings.bigEyes === settings.bigEyes &&
     preset.settings.exposure === settings.exposure &&
     preset.settings.warmth === settings.warmth &&
     preset.settings.contrast === settings.contrast &&
@@ -428,6 +444,8 @@ export function recommendCameraEffects(
 export function isCameraEffectActive(settings: CameraEffects): boolean {
   return (
     settings.smoothness > 0 ||
+    settings.slimFace > 0 ||
+    settings.bigEyes > 0 ||
     settings.exposure !== 0 ||
     settings.warmth > 0 ||
     settings.contrast !== 0 ||

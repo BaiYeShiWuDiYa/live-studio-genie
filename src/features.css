@@ -49,6 +49,25 @@
   inset: 0;
 }
 
+.stage-background-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.prelive-three-quarter .camera-source,
+.prelive-three-quarter .demo-host {
+  position: relative;
+  z-index: 1;
+  height: 75%;
+  border-radius: 0 0 16px 16px;
+  background: #0b1018;
+  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.5);
+}
+
 .camera-effects-canvas {
   z-index: 1;
   pointer-events: none;

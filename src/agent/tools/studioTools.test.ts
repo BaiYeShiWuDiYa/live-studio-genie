@@ -74,6 +74,8 @@ describe('studio tool registry', () => {
     const context = createContext()
     const cameraEffects = {
       smoothness: 24,
+      slimFace: 16,
+      bigEyes: 18,
       exposure: 8,
       warmth: 12,
       contrast: 6,
