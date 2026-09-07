@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   AudioLines,
   Bell,
+  Bold,
   Camera,
   Check,
   ChevronDown,
@@ -16,13 +17,16 @@ import {
   Lightbulb,
   LoaderCircle,
   Mic,
+  Minus,
   MessageCircle,
   MonitorUp,
   Music2,
   Play,
+  Plus,
   RotateCcw,
   Send,
   Sparkles,
+  Spotlight,
   Target,
   Type,
   Upload,
@@ -81,7 +85,12 @@ import { CameraEffectsCanvas } from './components/studio/CameraEffectsCanvas'
 import { EditableCameraLayer } from './components/studio/EditableCameraLayer'
 import { LiveGoal } from './components/studio/LiveGoal'
 import { LivePoll } from './components/studio/LivePoll'
-import { CanvasGoalRing, CanvasTextSource, type WidgetOffset } from './components/studio/PreliveCanvasWidgets'
+import { CanvasGoalRing, CanvasTextSource } from './components/studio/PreliveCanvasWidgets'
+import {
+  defaultCanvasTextStyle,
+  type CanvasTextStyle,
+  type WidgetOffset,
+} from './capabilities/widgets/canvasWidgets'
 import { LiveChatPanel } from './components/studio/LiveChatPanel'
 import {
   audienceStrategies,
@@ -95,7 +104,7 @@ import { useStudioStore } from './store/studioStore'
 
 type AppView = 'onboarding' | 'prelive' | 'live'
 type Scene = StudioScene
-type StreamKind = 'music' | 'chat' | 'game'
+type StreamKind = 'music' | 'chat' | 'game' | 'show'
 type PreliveTask = 'layout' | 'visual' | 'content' | 'interaction'
 type PreliveLayout = 'portrait' | 'three-quarter' | 'stage'
 type GoalKind = StreamGoalKind
@@ -158,10 +167,21 @@ const preliveTasks: Array<{ id: PreliveTask; title: string; detail: string; acti
 ]
 
 const chatLayoutTaskTitle = '选择直播布局'
+const showLayoutTaskTitle = '直播布局调整'
 const chatLayoutTaskDetail = '已为你默认全屏摄像头画布（单人竖屏 · 9:16），可勾选画布小组件并在画布中拖动位置'
 const musicLayoutTaskDetail = '根据你的表演形式，选择适合的画面布局'
 const defaultChatText = 'Good things will happen today ❤️'
 const defaultGoalTitle = 'follower goal'
+const fallbackGoalTitle = '今日互动目标'
+const textSizeBounds = { min: 12, max: 28 }
+const textColorOptions = [
+  { id: 'gradient', label: '渐变', value: 'gradient' },
+  { id: 'white', label: '白色', value: '#ffffff' },
+  { id: 'gold', label: '金色', value: '#ffd166' },
+  { id: 'pink', label: '粉色', value: '#ff7aa8' },
+  { id: 'teal', label: '青色', value: '#7ee7d5' },
+  { id: 'purple', label: '紫色', value: '#c9a6ff' },
+] as const
 type CanvasWidgetKind = 'text' | 'goal'
 
 const emptyAudienceSnapshot: AudienceSnapshot = {
@@ -232,6 +252,10 @@ function App() {
   const [chatGoalEnabled, setChatGoalEnabled] = useState(true)
   const [chatGoalKind, setChatGoalKind] = useState<GoalKind>('follower')
   const [chatGoalTitle, setChatGoalTitle] = useState(defaultGoalTitle)
+  const [chatGoalTarget, setChatGoalTarget] = useState(
+    goalKindOptions.find((option) => option.id === 'follower')?.target ?? 60000,
+  )
+  const [chatTextStyle, setChatTextStyle] = useState<CanvasTextStyle>(defaultCanvasTextStyle)
   const [musicBackgroundId, setMusicBackgroundId] = useState<string>(stageBackgrounds[0].id)
   const [customStageBackground, setCustomStageBackground] = useState<string | null>(null)
   const [stageBackgroundUploadError, setStageBackgroundUploadError] = useState('')
@@ -641,16 +665,18 @@ function App() {
     setPreliveAnnouncement(`今晚 20:00 · ${finalTopic}`)
     const chatCompanion = theme === 'chat'
     setIsChatCompanion(chatCompanion)
-    setPreliveLayout('portrait')
-    setPreviewMode('mobile')
+    setPreliveLayout(theme === 'show' ? 'stage' : 'portrait')
+    setPreviewMode(theme === 'show' ? 'studio' : 'mobile')
     setCompletedPreliveTasks([])
     setPreliveTaskIndex(0)
     setChatTextEnabled(true)
     setChatTextDraft(defaultChatText)
     setChatTextValue(defaultChatText)
+    setChatTextStyle(defaultCanvasTextStyle)
     setChatGoalEnabled(true)
     setChatGoalKind('follower')
     setChatGoalTitle(defaultGoalTitle)
+    setChatGoalTarget(goalKindOptions.find((option) => option.id === 'follower')?.target ?? 60000)
     setMusicBackgroundId(stageBackgrounds[0].id)
     setCustomStageBackground(null)
     setStageBackgroundUploadError('')
@@ -693,9 +719,19 @@ function App() {
     setChatGoalEnabled(savedConfig.chatGoalEnabled)
     setChatGoalKind(savedConfig.chatGoalKind ?? 'follower')
     setChatGoalTitle(savedConfig.chatGoalTitle || defaultGoalTitle)
+    const restoredGoalKind = savedConfig.chatGoalKind ?? 'follower'
+    setChatGoalTarget(
+      savedConfig.chatGoalTarget
+        ?? goalKindOptions.find((option) => option.id === restoredGoalKind)?.target
+        ?? 60000,
+    )
+    setChatTextStyle({ ...defaultCanvasTextStyle, ...savedConfig.chatTextStyle })
+    setChatTextOffset(savedConfig.chatTextOffset ?? { x: 0, y: 0 })
+    setChatGoalOffset(savedConfig.chatGoalOffset ?? { x: 0, y: 0 })
     setCustomStageBackground(null)
     setMusicBackgroundId(savedConfig.musicBackgroundId || stageBackgrounds[0].id)
     setStageBackgroundUploadError('')
+    setSelectedCanvasWidget(null)
     applyCameraEffects(applyCameraEffectPreset('natural'))
     setCompletedPreliveTasks(preliveTasks.map((task) => task.id))
     setPreliveTaskIndex(0)
@@ -706,7 +742,10 @@ function App() {
   const selectChatGoalKind = (kind: GoalKind) => {
     const option = goalKindOptions.find((item) => item.id === kind)
     setChatGoalKind(kind)
-    if (option) setChatGoalTitle(option.defaultTitle)
+    if (option) {
+      setChatGoalTitle(option.defaultTitle)
+      setChatGoalTarget(option.target)
+    }
   }
 
   const selectStageBackground = (backgroundId: string) => {
@@ -728,9 +767,33 @@ function App() {
   const stageBackgroundUrl = customStageBackground
     ?? stageBackgrounds.find((background) => background.id === musicBackgroundId)?.url
     ?? null
-  const showCanvasWidgets = isChatCompanion
-    || (streamType === 'music' && preliveLayout === 'portrait')
-  const chatGoalTarget = goalKindOptions.find((item) => item.id === chatGoalKind)?.target ?? 60000
+  const canvasWidgetsAvailable = streamType === 'chat'
+    || streamType === 'music'
+    || streamType === 'show'
+  const bandLayoutActive = (streamType === 'music' && preliveLayout === 'three-quarter')
+    || (streamType === 'show' && preliveLayout === 'stage')
+
+  const renderCanvasWidgetPanel = (selectedWidget: CanvasWidgetKind | null) => (
+    <CanvasWidgetPanel
+      selectedWidget={selectedWidget}
+      onSelectWidget={setSelectedCanvasWidget}
+      textEnabled={chatTextEnabled}
+      onTextEnabledChange={setChatTextEnabled}
+      textDraft={chatTextDraft}
+      onTextDraftChange={setChatTextDraft}
+      onTextApply={() => setChatTextValue(chatTextDraft)}
+      textStyle={chatTextStyle}
+      onTextStyleChange={setChatTextStyle}
+      goalEnabled={chatGoalEnabled}
+      onGoalEnabledChange={setChatGoalEnabled}
+      goalKind={chatGoalKind}
+      onGoalKindChange={selectChatGoalKind}
+      goalTitle={chatGoalTitle}
+      onGoalTitleChange={setChatGoalTitle}
+      goalTarget={chatGoalTarget}
+      onGoalTargetChange={setChatGoalTarget}
+    />
+  )
 
   const previewSuggestion = (widgetSpec: WidgetSpec = activeWidgetSpec) => {
     if (widgetSpec.type === 'camera-effects') {
@@ -1001,6 +1064,10 @@ function App() {
         chatGoalEnabled,
         chatGoalKind,
         chatGoalTitle,
+        chatGoalTarget,
+        chatTextStyle,
+        chatTextOffset,
+        chatGoalOffset,
         musicBackgroundId,
         completedTaskIds: completedPreliveTasks,
       },
@@ -1338,7 +1405,7 @@ function App() {
           <strong>TikTok LIVE Studio</strong>
           <span className="live-brand-divider">/</span>
           <b>{view === 'prelive' ? '今日开播准备工作台' : '直播中'}</b>
-          <span className="live-session-pill"><i />{view === 'prelive' ? `${streamType === 'music' ? '秀场' : streamType === 'game' ? '游戏' : '聊天'} · ${streamTopic}` : '直播中 · 00:42:18'}</span>
+          <span className="live-session-pill"><i />{view === 'prelive' ? `${getStreamTheme(streamType).name} · ${streamTopic}` : '直播中 · 00:42:18'}</span>
         </div>
         <div className="live-status-actions">
           {view === 'live' && (
@@ -1389,10 +1456,11 @@ function App() {
             <button type="button" className={previewMode === 'mobile' ? 'selected' : ''} onClick={() => setPreviewMode('mobile')}>移动端预览</button>
             <button type="button" className={previewMode === 'studio' ? 'selected' : ''} onClick={() => setPreviewMode('studio')}>Studio 视图</button>
           </div>
-          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} strategy={strategyCommentState === 'issue' ? demoStrategy : 'normal'} liveAdjustment={liveAdjustment} previewMode={previewMode} isPreviewing={isSuggestionPreview} audience={audienceSnapshot} isLive={view === 'live'} preliveTitle={streamTopic} preliveLayout={preliveLayout} stageBackgroundUrl={stageBackgroundUrl} chatWidgets={view === 'prelive' && showCanvasWidgets ? {
+          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} strategy={strategyCommentState === 'issue' ? demoStrategy : 'normal'} liveAdjustment={liveAdjustment} previewMode={previewMode} isPreviewing={isSuggestionPreview} audience={audienceSnapshot} isLive={view === 'live'} preliveTitle={streamTopic} preliveLayout={preliveLayout} stageBackgroundUrl={stageBackgroundUrl} bandLayout={bandLayoutActive} chatWidgets={canvasWidgetsAvailable ? {
             text: chatTextEnabled ? chatTextValue : '',
             goalVisible: chatGoalEnabled,
             goal: { label: chatGoalTitle, current: 0, target: chatGoalTarget },
+            textStyle: chatTextStyle,
             selectedWidget: selectedCanvasWidget,
             onSelectWidget: setSelectedCanvasWidget,
             textOffset: chatTextOffset,
@@ -1528,6 +1596,15 @@ function App() {
                   )}
                 </div>
               </section>
+              {canvasWidgetsAvailable && (
+                <section className="live-canvas-widget-shell" aria-label="画布组件编辑">
+                  <div className="component-recall-heading">
+                    <span><Target size={13} />画布组件</span>
+                    <b>点击画布中的组件即可编辑或拖动</b>
+                  </div>
+                  {renderCanvasWidgetPanel(selectedCanvasWidget)}
+                </section>
+              )}
             </>
           ) : (
             <>
@@ -1560,6 +1637,8 @@ function App() {
                       onVisualChange={updateVisualPreview}
                       onCameraEffectsChange={updateCameraEffectsPreview}
                     />
+                  ) : canvasWidgetsAvailable && selectedCanvasWidget ? (
+                    renderCanvasWidgetPanel(selectedCanvasWidget)
                   ) : (
                     <PreliveTaskCard
                       task={preliveTasks[preliveTaskIndex]}
@@ -1577,20 +1656,9 @@ function App() {
                       pollEnabled={prelivePollEnabled}
                       pollQuestion={prelivePollQuestion}
                       isChatCompanion={isChatCompanion}
-                      chatTextEnabled={chatTextEnabled}
-                      chatTextDraft={chatTextDraft}
-                      chatGoalEnabled={chatGoalEnabled}
-                      chatGoalKind={chatGoalKind}
-                      chatGoalTitle={chatGoalTitle}
                       musicBackgroundId={musicBackgroundId}
                       customStageBackgroundUrl={customStageBackground}
                       stageBackgroundUploadError={stageBackgroundUploadError}
-                      onChatTextEnabledChange={setChatTextEnabled}
-                      onChatTextDraftChange={setChatTextDraft}
-                      onChatTextApply={() => setChatTextValue(chatTextDraft)}
-                      onChatGoalEnabledChange={setChatGoalEnabled}
-                      onChatGoalKindChange={selectChatGoalKind}
-                      onChatGoalTitleChange={setChatGoalTitle}
                       onSelectStageBackground={selectStageBackground}
                       onUploadStageBackground={uploadStageBackground}
                       onLayoutChange={(layout) => {
@@ -1616,6 +1684,9 @@ function App() {
                     />
                   )}
                 </div>
+                {canvasWidgetsAvailable && !agentWidgetSpec && !selectedCanvasWidget && (
+                  renderCanvasWidgetPanel(null)
+                )}
               </section>
             </>
           )}
@@ -1665,6 +1736,7 @@ function StreamOption({ icon, label, active, onClick }: { icon: ReactNode; label
 function themeIcon(theme: StreamThemeId) {
   if (theme === 'music') return <Music2 />
   if (theme === 'game') return <Gamepad2 />
+  if (theme === 'show') return <Spotlight />
   return <MessageCircle />
 }
 
@@ -1755,6 +1827,7 @@ type ChatCanvasWidgets = {
   text: string
   goalVisible: boolean
   goal: { label: string; current: number; target: number }
+  textStyle: CanvasTextStyle
   selectedWidget: CanvasWidgetKind | null
   onSelectWidget: (widget: CanvasWidgetKind | null) => void
   textOffset: WidgetOffset
@@ -1763,7 +1836,7 @@ type ChatCanvasWidgets = {
   onGoalOffsetChange: (offset: WidgetOffset) => void
 }
 
-function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, isPk, applied, scene, strategy, liveAdjustment, previewMode, isPreviewing, audience, isLive, preliveTitle, preliveLayout, stageBackgroundUrl, chatWidgets }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; displayStream: MediaStream | null; layoutEditing: boolean; isPk: boolean; applied: boolean; scene: Scene; strategy: AudienceStrategyId; liveAdjustment: LiveAdjustment | null; previewMode: PreviewMode; isPreviewing: boolean; audience: AudienceSnapshot; isLive: boolean; preliveTitle: string; preliveLayout: PreliveLayout; stageBackgroundUrl: string | null; chatWidgets: ChatCanvasWidgets | null }) {
+function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, isPk, applied, scene, strategy, liveAdjustment, previewMode, isPreviewing, audience, isLive, preliveTitle, preliveLayout, stageBackgroundUrl, bandLayout, chatWidgets }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; displayStream: MediaStream | null; layoutEditing: boolean; isPk: boolean; applied: boolean; scene: Scene; strategy: AudienceStrategyId; liveAdjustment: LiveAdjustment | null; previewMode: PreviewMode; isPreviewing: boolean; audience: AudienceSnapshot; isLive: boolean; preliveTitle: string; preliveLayout: PreliveLayout; stageBackgroundUrl: string | null; bandLayout: boolean; chatWidgets: ChatCanvasWidgets | null }) {
   const displayVideoRef = useRef<HTMLVideoElement>(null)
   const visualSettings = useStudioStore((state) => state.visualSettings)
   const previewStyle = {
@@ -1781,14 +1854,18 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
     }
   }, [displayStream])
 
-  return <div style={previewStyle} className={`live-stage ${applied ? 'applied' : ''} ${isPreviewing ? 'previewing' : ''} ${isPk ? 'pk-stage' : ''} scene-${scene} ${previewMode === 'studio' ? 'studio-preview' : 'mobile-preview'} ${!isLive ? `prelive-${preliveLayout}` : ''}`}>
+  return <div style={previewStyle} className={`live-stage ${applied ? 'applied' : ''} ${isPreviewing ? 'previewing' : ''} ${isPk ? 'pk-stage' : ''} scene-${scene} ${previewMode === 'studio' ? 'studio-preview' : 'mobile-preview'} ${bandLayout ? 'stage-band-layout' : ''} ${bandLayout && preliveLayout === 'stage' ? 'band-layout-wide' : ''} ${!isLive ? `prelive-${preliveLayout}` : ''}`}>
     <div className="stage-glow" />
     <div className="scan-lines" />
     <div
       className={`host-stage ${displayStream ? 'screen-sharing' : ''}`}
-      onPointerDown={() => chatWidgets?.onSelectWidget(null)}
+      onPointerDown={(event) => {
+        const target = event.target as HTMLElement
+        if (target.closest('.canvas-widget') || target.closest('.moveable-control-box')) return
+        chatWidgets?.onSelectWidget(null)
+      }}
     >
-      {!isLive && preliveLayout === 'three-quarter' && stageBackgroundUrl && (
+      {bandLayout && stageBackgroundUrl && (
         <div
           className="stage-background-layer"
           style={{ backgroundImage: `url("${stageBackgroundUrl}")` }}
@@ -1809,7 +1886,7 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
       {previewMode === 'studio' && <div className="studio-guides"><i /><i /><i /></div>}
       <div className="stage-label"><span />{isLive ? 'LIVE' : '林小满'}</div>
       {!isPk && isLive && <><div className="viewer-bubble"><Users size={14} />{audience.viewerCount.toLocaleString()}</div><div className="stage-duration">00:42:18</div></>}
-      {!isLive && <div className="prelive-stage-summary"><span>开播预览</span><b>{preliveTitle || '未填写直播标题'}</b><small>{preliveLayout === 'portrait' ? '全屏摄像头 · 单人竖屏 9:16' : preliveLayout === 'three-quarter' ? '3/4 摄像头 · 舞台背景' : '秀场舞台 · 16:9'}</small></div>}
+      {!isLive && <div className="prelive-stage-summary"><span>开播预览</span><b>{preliveTitle || '未填写直播标题'}</b><small>{preliveLayout === 'portrait' ? '全屏摄像头 · 单人竖屏 9:16' : preliveLayout === 'three-quarter' ? '3/5 摄像头 · 舞台背景' : '秀场舞台 · 中央 3/5 摄像头'}</small></div>}
       {applied && <div className="applied-badge"><Check size={13} />方案已应用</div>}
       {strategy === 'dim-light' && <div className="stage-hint"><Lightbulb size={14} />环境偏暗</div>}
       {strategy === 'network-lag' && <div className="stage-hint"><WifiOff size={14} />网络波动</div>}
@@ -1821,6 +1898,7 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
         <>
           <CanvasTextSource
             text={chatWidgets.text}
+            textStyle={chatWidgets.textStyle}
             selected={chatWidgets.selectedWidget === 'text'}
             onSelect={() => chatWidgets.onSelectWidget('text')}
             offset={chatWidgets.textOffset}
@@ -1828,7 +1906,7 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
           />
           {chatWidgets.goalVisible && (
             <CanvasGoalRing
-              label={chatWidgets.goal.label}
+              label={chatWidgets.goal.label.trim() || fallbackGoalTitle}
               current={chatWidgets.goal.current}
               target={chatWidgets.goal.target}
               selected={chatWidgets.selectedWidget === 'goal'}
@@ -1855,6 +1933,243 @@ function DemoOpponent() {
   return <div className="demo-opponent"><div className="opponent-hair" /><div className="opponent-face" /><div className="opponent-body" /></div>
 }
 
+function CanvasWidgetPanel({
+  selectedWidget,
+  onSelectWidget,
+  textEnabled,
+  onTextEnabledChange,
+  textDraft,
+  onTextDraftChange,
+  onTextApply,
+  textStyle,
+  onTextStyleChange,
+  goalEnabled,
+  onGoalEnabledChange,
+  goalKind,
+  onGoalKindChange,
+  goalTitle,
+  onGoalTitleChange,
+  goalTarget,
+  onGoalTargetChange,
+}: {
+  selectedWidget: CanvasWidgetKind | null
+  onSelectWidget: (widget: CanvasWidgetKind | null) => void
+  textEnabled: boolean
+  onTextEnabledChange: (enabled: boolean) => void
+  textDraft: string
+  onTextDraftChange: (draft: string) => void
+  onTextApply: () => void
+  textStyle: CanvasTextStyle
+  onTextStyleChange: (style: CanvasTextStyle) => void
+  goalEnabled: boolean
+  onGoalEnabledChange: (enabled: boolean) => void
+  goalKind: GoalKind
+  onGoalKindChange: (kind: GoalKind) => void
+  goalTitle: string
+  onGoalTitleChange: (title: string) => void
+  goalTarget: number
+  onGoalTargetChange: (target: number) => void
+}) {
+  if (selectedWidget === 'text') {
+    const stepFontSize = (delta: number) => {
+      const next = Math.round((textStyle.size + delta) * 2) / 2
+      onTextStyleChange({
+        ...textStyle,
+        size: Math.min(textSizeBounds.max, Math.max(textSizeBounds.min, next)),
+      })
+    }
+    return (
+      <div className="recommendation-card canvas-widget-card">
+        <div className="prelive-task-meta">
+          <span className="card-kicker">画布组件</span>
+          <button type="button" className="canvas-widget-back" onClick={() => onSelectWidget(null)}>返回组件列表</button>
+        </div>
+        <h2>文字源设置</h2>
+        <p>编辑展示在画面中的文字内容和样式</p>
+        <div className="chat-text-config">
+          <input
+            value={textDraft}
+            maxLength={40}
+            placeholder="输入画布上展示的文字"
+            aria-label="文字源内容"
+            onChange={(event) => onTextDraftChange(event.target.value)}
+          />
+          <button type="button" onClick={onTextApply}>更新</button>
+        </div>
+        <div className="widget-style-panel">
+          <div className="widget-style-row">
+            <span className="widget-style-label">字号</span>
+            <div className="widget-stepper" role="group" aria-label="字号调节">
+              <button type="button" aria-label="减小字号" disabled={textStyle.size <= textSizeBounds.min} onClick={() => stepFontSize(-1)}><Minus size={13} /></button>
+              <b>{textStyle.size}</b>
+              <button type="button" aria-label="增大字号" disabled={textStyle.size >= textSizeBounds.max} onClick={() => stepFontSize(1)}><Plus size={13} /></button>
+            </div>
+          </div>
+          <div className="widget-style-row">
+            <span className="widget-style-label">颜色</span>
+            <div className="widget-swatch-row" role="group" aria-label="文字颜色">
+              {textColorOptions.map((option) => (
+                <button
+                  type="button"
+                  key={option.id}
+                  className={`widget-swatch ${textStyle.color === option.value ? 'selected' : ''}`}
+                  aria-pressed={textStyle.color === option.value}
+                  aria-label={option.label}
+                  title={option.label}
+                  style={option.value === 'gradient'
+                    ? { backgroundImage: 'linear-gradient(120deg, #d06bff 0%, #9a7bff 48%, #5fb6ff 100%)' }
+                    : { backgroundColor: option.value }}
+                  onClick={() => onTextStyleChange({ ...textStyle, color: option.value })}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="widget-style-row">
+            <span className="widget-style-label">字重</span>
+            <div className="widget-segmented" role="group" aria-label="字重设置">
+              <button
+                type="button"
+                className={textStyle.bold ? 'selected' : ''}
+                aria-pressed={textStyle.bold}
+                onClick={() => onTextStyleChange({ ...textStyle, bold: !textStyle.bold })}
+              >
+                <Bold size={13} />加粗
+              </button>
+            </div>
+          </div>
+          <div className="widget-style-row">
+            <span className="widget-style-label">对齐</span>
+            <div className="widget-segmented" role="group" aria-label="对齐方式">
+              {([['left', '左对齐'], ['center', '居中'], ['right', '右对齐']] as const).map(([value, label]) => (
+                <button
+                  type="button"
+                  key={value}
+                  className={textStyle.align === value ? 'selected' : ''}
+                  aria-pressed={textStyle.align === value}
+                  onClick={() => onTextStyleChange({ ...textStyle, align: value })}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="widget-style-row">
+            <span className="widget-style-label">装饰</span>
+            <div className="widget-segmented" role="group" aria-label="背景与描边">
+              {([['none', '无'], ['stroke', '描边'], ['pill', '底色']] as const).map(([value, label]) => (
+                <button
+                  type="button"
+                  key={value}
+                  className={textStyle.decoration === value ? 'selected' : ''}
+                  aria-pressed={textStyle.decoration === value}
+                  onClick={() => onTextStyleChange({ ...textStyle, decoration: value })}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <small className="chat-widget-tip">样式修改实时同步到画布，也可以直接在画布中拖动文字源调整位置</small>
+      </div>
+    )
+  }
+
+  if (selectedWidget === 'goal') {
+    const clampTarget = (value: number) => Math.min(999000, Math.max(1000, Math.round(value / 1000) * 1000))
+    return (
+      <div className="recommendation-card canvas-widget-card">
+        <div className="prelive-task-meta">
+          <span className="card-kicker">画布组件</span>
+          <button type="button" className="canvas-widget-back" onClick={() => onSelectWidget(null)}>返回组件列表</button>
+        </div>
+        <h2>目标源设置</h2>
+        <p>设置直播目标，并展示在画面中</p>
+        <div className="goal-kind-select" role="group" aria-label="目标类型">
+          {goalKindOptions.map((option) => (
+            <button
+              type="button"
+              key={option.id}
+              className={goalKind === option.id ? 'selected' : ''}
+              aria-pressed={goalKind === option.id}
+              onClick={() => onGoalKindChange(option.id)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <label className="widget-editor-field">
+          <span>目标数值</span>
+          <div className="widget-stepper widget-stepper-wide" role="group" aria-label="目标数值调节">
+            <button type="button" aria-label="减少目标数值" onClick={() => onGoalTargetChange(clampTarget(goalTarget - 1000))}><Minus size={13} /></button>
+            <b>{goalTarget.toLocaleString()}</b>
+            <button type="button" aria-label="增加目标数值" onClick={() => onGoalTargetChange(clampTarget(goalTarget + 1000))}><Plus size={13} /></button>
+          </div>
+        </label>
+        <label className="widget-editor-field">
+          <span>目标文案</span>
+          <input
+            value={goalTitle}
+            maxLength={30}
+            placeholder={fallbackGoalTitle}
+            aria-label="目标文案"
+            onChange={(event) => onGoalTitleChange(event.target.value)}
+          />
+        </label>
+        <small className="chat-widget-tip">数值与文案实时同步到画布，也可以直接在画布中拖动目标源调整位置</small>
+      </div>
+    )
+  }
+
+  const renderWidgetRow = (
+    kind: CanvasWidgetKind,
+    icon: ReactNode,
+    name: string,
+    detail: string,
+    enabled: boolean,
+    onEnabledChange: (enabled: boolean) => void,
+  ) => (
+    <div
+      role="button"
+      tabIndex={0}
+      className={`prelive-toggle-row canvas-widget-row ${enabled ? 'is-enabled' : ''}`}
+      onClick={() => {
+        if (!enabled) onEnabledChange(true)
+        onSelectWidget(kind)
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          if (!enabled) onEnabledChange(true)
+          onSelectWidget(kind)
+        }
+      }}
+    >
+      <span>{icon}{name}<small>{detail}</small></span>
+      <input
+        type="checkbox"
+        checked={enabled}
+        aria-label={`展示${name}`}
+        onClick={(event) => event.stopPropagation()}
+        onChange={(event) => {
+          onEnabledChange(event.target.checked)
+          if (!event.target.checked) onSelectWidget(null)
+        }}
+      />
+    </div>
+  )
+
+  return (
+    <div className="recommendation-card canvas-widget-card canvas-widget-list-card">
+      <h2>画布小组件</h2>
+      <p>选择并编辑直播画面中的互动组件</p>
+      {renderWidgetRow('text', <Type size={15} />, '文字源', '画面中的装饰文字，可编辑内容与样式', textEnabled, onTextEnabledChange)}
+      {renderWidgetRow('goal', <Target size={15} />, '目标源', '展示直播目标进度，鼓励观众互动', goalEnabled, onGoalEnabledChange)}
+      <small className="chat-widget-tip">勾选后在画布中展示；点击列表项或画布中的组件即可编辑，拖动可调整位置</small>
+    </div>
+  )
+}
+
 function PreliveTaskCard({
   task,
   taskIndex,
@@ -1872,20 +2187,9 @@ function PreliveTaskCard({
   pollEnabled,
   pollQuestion,
   isChatCompanion,
-  chatTextEnabled,
-  chatTextDraft,
-  chatGoalEnabled,
-  chatGoalKind,
-  chatGoalTitle,
   musicBackgroundId,
   customStageBackgroundUrl,
   stageBackgroundUploadError,
-  onChatTextEnabledChange,
-  onChatTextDraftChange,
-  onChatTextApply,
-  onChatGoalEnabledChange,
-  onChatGoalKindChange,
-  onChatGoalTitleChange,
   onSelectStageBackground,
   onUploadStageBackground,
   onLayoutChange,
@@ -1921,20 +2225,9 @@ function PreliveTaskCard({
   pollEnabled: boolean
   pollQuestion: string
   isChatCompanion: boolean
-  chatTextEnabled: boolean
-  chatTextDraft: string
-  chatGoalEnabled: boolean
-  chatGoalKind: GoalKind
-  chatGoalTitle: string
   musicBackgroundId: string
   customStageBackgroundUrl: string | null
   stageBackgroundUploadError: string
-  onChatTextEnabledChange: (enabled: boolean) => void
-  onChatTextDraftChange: (draft: string) => void
-  onChatTextApply: () => void
-  onChatGoalEnabledChange: (enabled: boolean) => void
-  onChatGoalKindChange: (kind: GoalKind) => void
-  onChatGoalTitleChange: (title: string) => void
   onSelectStageBackground: (backgroundId: string) => void
   onUploadStageBackground: (file: File | undefined) => void
   onLayoutChange: (layout: PreliveLayout) => void
@@ -1956,8 +2249,17 @@ function PreliveTaskCard({
 }) {
   const isChatLayout = isChatCompanion && task.id === 'layout'
   const isMusicLayout = streamType === 'music' && task.id === 'layout'
-  const cardTitle = isChatLayout ? chatLayoutTaskTitle : task.title
-  const cardDetail = isChatLayout ? chatLayoutTaskDetail : isMusicLayout ? musicLayoutTaskDetail : task.detail
+  const isShowLayout = streamType === 'show' && task.id === 'layout'
+  const cardTitle = isChatLayout
+    ? chatLayoutTaskTitle
+    : isShowLayout
+      ? showLayoutTaskTitle
+      : task.title
+  const cardDetail = isChatLayout
+    ? chatLayoutTaskDetail
+    : isMusicLayout || isShowLayout
+      ? musicLayoutTaskDetail
+      : task.detail
   const canApply = task.id !== 'content'
     ? task.id !== 'interaction' || (
         warmupCopy.trim().length > 0 &&
@@ -1971,6 +2273,46 @@ function PreliveTaskCard({
         themeDescription,
         script,
       ].every((value) => value.trim().length > 0)
+
+  const renderStageBackgroundPicker = (detailText: string) => (
+    <div className="stage-background-picker">
+      <b className="stage-background-title">选择舞台背景</b>
+      <small className="stage-background-detail">{detailText}</small>
+      <div className="stage-background-grid" role="group" aria-label="舞台背景">
+        {stageBackgrounds.map((background) => (
+          <button
+            type="button"
+            key={background.id}
+            className={`stage-background-option ${!customStageBackgroundUrl && musicBackgroundId === background.id ? 'selected' : ''}`}
+            aria-pressed={!customStageBackgroundUrl && musicBackgroundId === background.id}
+            onClick={() => onSelectStageBackground(background.id)}
+          >
+            <img src={background.url} alt={background.name} />
+            <span>{background.name}</span>
+          </button>
+        ))}
+        {customStageBackgroundUrl && (
+          <button type="button" className="stage-background-option selected" aria-pressed="true">
+            <img src={customStageBackgroundUrl} alt="自定义背景" />
+            <span>自定义背景</span>
+          </button>
+        )}
+      </div>
+      <label className="stage-background-upload">
+        <Upload size={14} />上传背景图
+        <input
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={(event) => {
+            onUploadStageBackground(event.target.files?.[0])
+            event.target.value = ''
+          }}
+        />
+      </label>
+      {stageBackgroundUploadError && <small className="stage-background-error" role="alert">{stageBackgroundUploadError}</small>}
+    </div>
+  )
 
   return <div className="recommendation-card prelive-task-card">
     <div className="prelive-task-meta">
@@ -1986,98 +2328,25 @@ function PreliveTaskCard({
             <Sparkles size={14} />
             <span><b>已推荐全屏摄像头布局</b><small>单人竖屏 · 9:16，最适合聊天陪伴</small></span>
           </div>
-          <b className="chat-widget-picker-title">画布小组件</b>
-          <label className="prelive-toggle-row chat-widget-toggle">
-            <span><Type size={15} />文字源</span>
-            <input type="checkbox" checked={chatTextEnabled} onChange={(event) => onChatTextEnabledChange(event.target.checked)} />
-          </label>
-          {chatTextEnabled && (
-            <div className="chat-text-config">
-              <input
-                value={chatTextDraft}
-                maxLength={40}
-                placeholder="输入画布上展示的文字"
-                aria-label="文字源内容"
-                onChange={(event) => onChatTextDraftChange(event.target.value)}
-              />
-              <button type="button" onClick={onChatTextApply}>更新</button>
-            </div>
-          )}
-          <label className="prelive-toggle-row chat-widget-toggle">
-            <span><Target size={15} />目标源</span>
-            <input type="checkbox" checked={chatGoalEnabled} onChange={(event) => onChatGoalEnabledChange(event.target.checked)} />
-          </label>
-          {chatGoalEnabled && (
-            <div className="chat-goal-config">
-              <div className="goal-kind-select" role="group" aria-label="目标类型">
-                {goalKindOptions.map((option) => (
-                  <button
-                    type="button"
-                    key={option.id}
-                    className={chatGoalKind === option.id ? 'selected' : ''}
-                    aria-pressed={chatGoalKind === option.id}
-                    onClick={() => onChatGoalKindChange(option.id)}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-              <input
-                value={chatGoalTitle}
-                maxLength={30}
-                placeholder="输入目标标题，如 follower goal"
-                aria-label="目标标题"
-                onChange={(event) => onChatGoalTitleChange(event.target.value)}
-              />
-              <small className="chat-widget-tip">已在画布中添加目标卡片，可在画布中拖动调整位置</small>
-            </div>
-          )}
+          <small className="chat-widget-tip">在下方「画布小组件」中勾选文字源、目标源；点击画布中的组件即可编辑内容与样式，并可拖动调整位置</small>
         </div>
       ) : isMusicLayout ? (
         <div className="music-layout-picker">
           <div className="task-choice-row">
-            <button type="button" className={`task-choice ${layout === 'portrait' ? 'selected' : ''}`} onClick={() => onLayoutChange('portrait')}><Camera size={15} /><span><b>全屏摄像头布局</b></span></button>
-            <button type="button" className={`task-choice ${layout === 'three-quarter' ? 'selected' : ''}`} onClick={() => onLayoutChange('three-quarter')}><LayoutTemplate size={15} /><span><b>3/4 摄像头布局</b><small>保留主体画面，同时增加舞台氛围背景</small></span></button>
+            <button type="button" className={`task-choice ${layout === 'portrait' ? 'selected' : ''}`} onClick={() => onLayoutChange('portrait')}><Camera size={15} /><span><b>全屏摄像头布局</b><small>摄像头铺满整个画布</small></span></button>
+            <button type="button" className={`task-choice ${layout === 'three-quarter' ? 'selected' : ''}`} onClick={() => onLayoutChange('three-quarter')}><LayoutTemplate size={15} /><span><b>3/5 摄像头布局</b><small>中央摄像头约占 3/5，上下露出舞台氛围背景</small></span></button>
           </div>
-          {layout === 'three-quarter' && (
-            <div className="stage-background-picker">
-              <b className="stage-background-title">选择舞台背景</b>
-              <small className="stage-background-detail">为底部画面选择适合音乐现场的氛围背景</small>
-              <div className="stage-background-grid" role="group" aria-label="舞台背景">
-                {stageBackgrounds.map((background) => (
-                  <button
-                    type="button"
-                    key={background.id}
-                    className={`stage-background-option ${!customStageBackgroundUrl && musicBackgroundId === background.id ? 'selected' : ''}`}
-                    aria-pressed={!customStageBackgroundUrl && musicBackgroundId === background.id}
-                    onClick={() => onSelectStageBackground(background.id)}
-                  >
-                    <img src={background.url} alt={background.name} />
-                    <span>{background.name}</span>
-                  </button>
-                ))}
-                {customStageBackgroundUrl && (
-                  <button type="button" className="stage-background-option selected" aria-pressed="true">
-                    <img src={customStageBackgroundUrl} alt="自定义背景" />
-                    <span>自定义背景</span>
-                  </button>
-                )}
-              </div>
-              <label className="stage-background-upload">
-                <Upload size={14} />上传背景图
-                <input
-                  type="file"
-                  accept="image/*"
-                  hidden
-                  onChange={(event) => {
-                    onUploadStageBackground(event.target.files?.[0])
-                    event.target.value = ''
-                  }}
-                />
-              </label>
-              {stageBackgroundUploadError && <small className="stage-background-error" role="alert">{stageBackgroundUploadError}</small>}
+          {layout === 'three-quarter' && renderStageBackgroundPicker('背景图铺满整体画布，上下露出区域展示舞台氛围')}
+        </div>
+      ) : isShowLayout ? (
+        <div className="music-layout-picker">
+          <div className="task-choice-row">
+            <div className="task-choice selected show-stage-choice" role="img" aria-label="秀场舞台布局">
+              <Spotlight size={15} />
+              <span><b>秀场舞台布局</b><small>中央展示主播画面，上下保留舞台氛围背景</small></span>
             </div>
-          )}
+          </div>
+          {renderStageBackgroundPicker('背景图铺满整体画布，中央 3/5 区域展示主播画面，上下露出舞台包装')}
         </div>
       ) : (
         <div className="task-choice-row">

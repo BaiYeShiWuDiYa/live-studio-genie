@@ -1,4 +1,4 @@
-export type StreamThemeId = 'chat' | 'music' | 'game'
+export type StreamThemeId = 'chat' | 'music' | 'game' | 'show'
 
 export type StreamLayout = 'portrait' | 'three-quarter' | 'stage'
 
@@ -14,6 +14,7 @@ export const STREAM_THEMES: StreamTheme[] = [
   { id: 'chat', name: '聊天陪伴', defaultTopic: '轻松聊天陪伴' },
   { id: 'music', name: '音乐现场', defaultTopic: '晚间音乐现场' },
   { id: 'game', name: '游戏直播', defaultTopic: '今晚游戏挑战' },
+  { id: 'show', name: '秀场', defaultTopic: '今晚才艺秀场' },
 ]
 
 export function getStreamTheme(id: StreamThemeId): StreamTheme {
@@ -29,6 +30,9 @@ const THEME_KEYWORD_PATTERNS: Record<StreamThemeId, RegExp[]> = {
   ],
   game: [
     /游戏|开黑|排位|通关|电竞|带飞|副本|打怪|闯关|升级|组队|联机|主机|Steam|吃鸡|王者|对战|玩游戏|直播游戏/i,
+  ],
+  show: [
+    /秀场|才艺|舞台|跳舞|舞蹈|唱跳|走秀|演出|表演|综艺|才艺展示/,
   ],
 }
 
@@ -48,6 +52,16 @@ export function recognizeStreamTheme(input: string): StreamThemeId {
   return best.score > 0 ? best.id : 'chat'
 }
 
+export type SavedWidgetOffset = { x: number; y: number }
+
+export type SavedTextStyle = {
+  size: number
+  color: string
+  bold: boolean
+  align: 'left' | 'center' | 'right'
+  decoration: 'none' | 'stroke' | 'pill'
+}
+
 export type SavedLiveConfig = {
   topic: string
   isChatCompanion: boolean
@@ -57,6 +71,10 @@ export type SavedLiveConfig = {
   chatGoalEnabled: boolean
   chatGoalKind?: StreamGoalKind
   chatGoalTitle?: string
+  chatGoalTarget?: number
+  chatTextStyle?: SavedTextStyle
+  chatTextOffset?: SavedWidgetOffset
+  chatGoalOffset?: SavedWidgetOffset
   musicBackgroundId?: string
   completedTaskIds: string[]
 }
@@ -84,7 +102,38 @@ function getDefaultStorage(): StorageLike | null {
 }
 
 function isStreamThemeId(value: unknown): value is StreamThemeId {
-  return value === 'chat' || value === 'music' || value === 'game'
+  return value === 'chat' || value === 'music' || value === 'game' || value === 'show'
+}
+
+function normalizeOffset(value: unknown): SavedWidgetOffset | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const record = value as Record<string, unknown>
+  if (typeof record.x !== 'number' || typeof record.y !== 'number') return undefined
+  if (!Number.isFinite(record.x) || !Number.isFinite(record.y)) return undefined
+  return { x: record.x, y: record.y }
+}
+
+function normalizeTextStyle(value: unknown): SavedTextStyle | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const record = value as Record<string, unknown>
+  if (
+    typeof record.size !== 'number'
+    || typeof record.color !== 'string'
+    || typeof record.bold !== 'boolean'
+  ) {
+    return undefined
+  }
+  const align = record.align === 'center' || record.align === 'right' ? record.align : 'left'
+  const decoration = record.decoration === 'stroke' || record.decoration === 'pill'
+    ? record.decoration
+    : 'none'
+  return {
+    size: Math.min(28, Math.max(12, record.size)),
+    color: record.color,
+    bold: record.bold,
+    align,
+    decoration,
+  }
 }
 
 function normalizeConfig(raw: unknown): LastLiveConfig | null {
@@ -121,6 +170,14 @@ function normalizeConfig(raw: unknown): LastLiveConfig | null {
       musicBackgroundId: typeof savedRecord.musicBackgroundId === 'string'
         ? savedRecord.musicBackgroundId
         : undefined,
+      chatGoalTarget: typeof savedRecord.chatGoalTarget === 'number'
+        && Number.isFinite(savedRecord.chatGoalTarget)
+        && savedRecord.chatGoalTarget > 0
+        ? Math.round(savedRecord.chatGoalTarget)
+        : undefined,
+      chatTextStyle: normalizeTextStyle(savedRecord.chatTextStyle),
+      chatTextOffset: normalizeOffset(savedRecord.chatTextOffset),
+      chatGoalOffset: normalizeOffset(savedRecord.chatGoalOffset),
       completedTaskIds: Array.isArray(savedRecord.completedTaskIds)
         ? savedRecord.completedTaskIds.filter((id): id is string => typeof id === 'string')
         : [],

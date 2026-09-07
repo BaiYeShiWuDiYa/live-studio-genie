@@ -1,10 +1,14 @@
 import { useRef, type CSSProperties, type ReactNode } from 'react'
 import Moveable from 'react-moveable'
-
-export type WidgetOffset = { x: number; y: number }
+import {
+  type CanvasTextStyle,
+  defaultCanvasTextStyle,
+  type WidgetOffset,
+} from '../../capabilities/widgets/canvasWidgets'
 
 interface DraggableWidgetProps {
   className: string
+  ariaLabel: string
   selected: boolean
   offset: WidgetOffset
   onSelect: () => void
@@ -15,6 +19,7 @@ interface DraggableWidgetProps {
 
 function DraggableWidget({
   className,
+  ariaLabel,
   selected,
   offset,
   onSelect,
@@ -28,11 +33,19 @@ function DraggableWidget({
     <>
       <div
         ref={targetRef}
+        role="button"
+        tabIndex={0}
+        aria-label={ariaLabel}
+        aria-pressed={selected}
         className={`canvas-widget ${className} ${selected ? 'is-selected' : ''}`}
         style={{ transform: `translate(${offset.x}px, ${offset.y}px)`, ...style }}
-        onPointerDown={(event) => {
-          event.stopPropagation()
-          onSelect()
+        onPointerDown={() => onSelect()}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            event.stopPropagation()
+            onSelect()
+          }
         }}
       >
         {children}
@@ -54,26 +67,50 @@ function DraggableWidget({
 
 interface CanvasTextSourceProps {
   text: string
+  textStyle?: CanvasTextStyle
   selected: boolean
   onSelect: () => void
   offset: WidgetOffset
   onOffsetChange: (offset: WidgetOffset) => void
 }
 
-export function CanvasTextSource({ text, selected, onSelect, offset, onOffsetChange }: CanvasTextSourceProps) {
+export function CanvasTextSource({
+  text,
+  textStyle = defaultCanvasTextStyle,
+  selected,
+  onSelect,
+  offset,
+  onOffsetChange,
+}: CanvasTextSourceProps) {
   if (!text.trim()) return null
 
   const emojiMatch = text.match(/^([\s\S]*?)(\s*(?:\p{Extended_Pictographic}|\u200D|\uFE0F|[\u2640-\u2642])+\s*)$/u)
   const mainText = emojiMatch ? emojiMatch[1] : text
   const emoji = emojiMatch ? emojiMatch[2].trim() : ''
+  const isPlainColor = textStyle.color !== 'gradient'
+  const classNames = [
+    'canvas-text-source',
+    isPlainColor ? 'is-plain-color' : '',
+    textStyle.decoration === 'stroke' ? 'has-stroke' : '',
+    textStyle.decoration === 'pill' ? 'has-pill' : '',
+    `align-${textStyle.align}`,
+  ].filter(Boolean).join(' ')
+  const style: CSSProperties = {
+    fontSize: `${textStyle.size}px`,
+    fontWeight: textStyle.bold ? 800 : 500,
+    textAlign: textStyle.align,
+    ['--widget-text-color' as string]: isPlainColor ? textStyle.color : undefined,
+  }
 
   return (
     <DraggableWidget
-      className="canvas-text-source"
+      className={classNames}
+      ariaLabel="画布文字源"
       selected={selected}
       offset={offset}
       onSelect={onSelect}
       onOffsetChange={onOffsetChange}
+      style={style}
     >
       <span className="canvas-text-gradient">{mainText}</span>
       {emoji && <span className="canvas-text-emoji">{emoji}</span>}
@@ -110,6 +147,7 @@ export function CanvasGoalRing({
   return (
     <DraggableWidget
       className="canvas-goal-ring"
+      ariaLabel="画布目标源"
       selected={selected}
       offset={offset}
       onSelect={onSelect}

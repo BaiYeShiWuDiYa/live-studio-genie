@@ -58,14 +58,18 @@
   background-repeat: no-repeat;
 }
 
-.prelive-three-quarter .camera-source,
-.prelive-three-quarter .demo-host {
-  position: relative;
+.stage-band-layout .camera-source,
+.stage-band-layout .demo-host {
+  position: absolute;
   z-index: 1;
-  height: 75%;
-  border-radius: 0 0 16px 16px;
+  top: 20%;
+  left: 0;
+  width: 100%;
+  height: 60%;
+  border-radius: 14px;
   background: #0b1018;
-  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
 }
 
 .camera-effects-canvas {
@@ -515,6 +519,44 @@
   color: #eef4ff;
   break-before: avoid;
   -webkit-text-fill-color: currentcolor;
+}
+.canvas-text-source.is-plain-color .canvas-text-gradient {
+  background: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  color: var(--widget-text-color, #ffffff);
+  -webkit-text-fill-color: var(--widget-text-color, #ffffff);
+  filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.5));
+}
+.canvas-text-source.is-plain-color .canvas-text-emoji {
+  color: var(--widget-text-color, #eef4ff);
+  -webkit-text-fill-color: var(--widget-text-color, #eef4ff);
+}
+.canvas-text-source.has-stroke .canvas-text-gradient {
+  -webkit-text-stroke: 0.7px rgba(7, 9, 16, 0.92);
+  paint-order: stroke fill;
+}
+.canvas-text-source.has-pill {
+  padding: 5px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(15, 20, 32, 0.66);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.canvas-text-source.align-center,
+.canvas-text-source.align-right {
+  left: 22px;
+  right: 22px;
+  width: auto;
+  max-width: none;
+}
+.canvas-text-source.align-center {
+  text-align: center;
+}
+.canvas-text-source.align-right {
+  text-align: right;
 }
 .canvas-goal-ring {
   top: 9%;

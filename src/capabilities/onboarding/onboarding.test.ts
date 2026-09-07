@@ -28,14 +28,20 @@ describe('stream theme recognition', () => {
     expect(recognizeStreamTheme('直播通关新出的单机大作')).toBe('game')
   })
 
+  it('maps variety stage descriptions to show', () => {
+    expect(recognizeStreamTheme('今晚秀场才艺表演，欢迎来看')).toBe('show')
+    expect(recognizeStreamTheme('开场跳一支舞，舞台效果拉满')).toBe('show')
+    expect(recognizeStreamTheme('今晚唱跳综艺秀')).toBe('show')
+  })
+
   it('falls back to chat when nothing matches', () => {
     expect(recognizeStreamTheme('随便播点什么吧')).toBe('chat')
     expect(recognizeStreamTheme('   ')).toBe('chat')
     expect(recognizeStreamTheme('')).toBe('chat')
   })
 
-  it('only exposes the three preset themes', () => {
-    expect(STREAM_THEMES.map((theme) => theme.id)).toEqual(['chat', 'music', 'game'])
+  it('exposes the four preset themes', () => {
+    expect(STREAM_THEMES.map((theme) => theme.id)).toEqual(['chat', 'music', 'game', 'show'])
   })
 })
 
@@ -71,6 +77,32 @@ describe('last live config persistence', () => {
     const storage = createMemoryStorage()
     saveLastLiveConfig(sampleConfig, storage)
     expect(loadLastLiveConfig(storage)).toEqual(sampleConfig)
+  })
+
+  it('persists canvas widget config including goal target, text style and offsets', () => {
+    const storage = createMemoryStorage()
+    const config: LastLiveConfig = {
+      theme: 'show',
+      themeName: '秀场',
+      lastLiveTime: '2026-09-07T12:00:00.000Z',
+      savedConfig: {
+        topic: '今晚才艺秀场',
+        isChatCompanion: false,
+        layout: 'stage',
+        chatTextEnabled: true,
+        chatTextValue: '今晚演出加油',
+        chatGoalEnabled: true,
+        chatGoalKind: 'like',
+        chatGoalTitle: '今日互动目标',
+        chatGoalTarget: 88000,
+        chatTextStyle: { size: 18, color: '#ffd166', bold: true, align: 'center', decoration: 'pill' },
+        chatTextOffset: { x: 12, y: -8 },
+        chatGoalOffset: { x: -4, y: 20 },
+        completedTaskIds: ['layout'],
+      },
+    }
+    saveLastLiveConfig(config, storage)
+    expect(loadLastLiveConfig(storage)).toEqual(config)
   })
 
   it('returns null when no history exists', () => {

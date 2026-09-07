@@ -1133,6 +1133,202 @@
   color: #f08c9d;
   font-size: 9px;
 }
+.canvas-widget-card {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+.canvas-widget-list-card {
+  gap: 9px;
+}
+.canvas-widget-back {
+  border: 0;
+  background: transparent;
+  color: #8f9caf;
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+.canvas-widget-back:hover {
+  color: #d6e1ed;
+}
+.canvas-widget-row {
+  width: 100%;
+  margin: 0;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.canvas-widget-row > span {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  min-width: 0;
+}
+.canvas-widget-row > span > svg {
+  flex: none;
+  color: #7fe0d2;
+}
+.canvas-widget-row small {
+  flex-basis: 100%;
+  padding-left: 21px;
+  color: #768294;
+  font-size: 9px;
+  line-height: 1.45;
+}
+.canvas-widget-row.is-enabled {
+  border-color: rgba(100, 200, 192, 0.55);
+  background: #172a2c;
+}
+.canvas-widget-row:focus-visible {
+  outline: 2px solid rgba(107, 214, 200, 0.55);
+  outline-offset: 2px;
+}
+.widget-style-panel {
+  display: grid;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 7px;
+  background: rgba(13, 18, 28, 0.5);
+}
+.widget-style-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.widget-style-label {
+  flex: none;
+  width: 34px;
+  color: #9aa5b5;
+  font-size: 10px;
+}
+.widget-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid #354051;
+  border-radius: 6px;
+  background: #151b26;
+}
+.widget-stepper button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #aeb9c9;
+  cursor: pointer;
+}
+.widget-stepper button:hover:not(:disabled) {
+  background: rgba(102, 215, 200, 0.16);
+  color: #dffff9;
+}
+.widget-stepper button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.widget-stepper b {
+  min-width: 44px;
+  text-align: center;
+  color: #e6ebf2;
+  font-size: 11px;
+  font-weight: 700;
+}
+.widget-stepper-wide b {
+  min-width: 66px;
+}
+.widget-swatch-row {
+  display: flex;
+  gap: 7px;
+}
+.widget-swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  background-color: #2a3242;
+  cursor: pointer;
+}
+.widget-swatch.selected {
+  border-color: #6bd6c8;
+  box-shadow: 0 0 0 2px rgba(107, 214, 200, 0.22);
+}
+.widget-segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid #354051;
+  border-radius: 6px;
+  background: #151b26;
+}
+.widget-segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 9px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #9aa5b5;
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.widget-segmented button.selected {
+  background: #173438;
+  color: #c7f5ef;
+}
+.widget-editor-field {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+.widget-editor-field > span {
+  color: #9aa5b5;
+  font-size: 10px;
+}
+.widget-editor-field input {
+  width: 100%;
+  height: 35px;
+  padding: 0 10px;
+  border: 1px solid #354051;
+  border-radius: 6px;
+  background: #151b26;
+  color: #e6ebf2;
+  font: inherit;
+  font-size: 11px;
+  outline: none;
+}
+.widget-editor-field input:focus {
+  border-color: #6bd6c8;
+  box-shadow: 0 0 0 2px rgba(107, 214, 200, 0.1);
+}
+.widget-editor-field .widget-stepper {
+  justify-content: space-between;
+  padding: 4px;
+}
+.widget-editor-field .widget-stepper b {
+  flex: 1;
+}
+.live-canvas-widget-shell {
+  padding: clamp(10px, 1vw, 20px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+}
+.live-canvas-widget-shell .canvas-widget-card {
+  margin-top: 0;
+}
 .prelive-beauty-panel {
   margin-top: 12px;
 }
@@ -3008,6 +3204,10 @@
   flex: none;
   border-radius: 12px;
   background: #171318;
+}
+
+.live-app .stage-band-layout.band-layout-wide .host-stage {
+  width: min(88%, 940px);
 }
 
 .live-app .floating-comments {
