@@ -1639,54 +1639,161 @@
 }
 .golive-overlay {
   position: fixed;
-  z-index: 20;
+  z-index: 100;
   inset: 0;
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(6, 8, 12, 0.72);
-  backdrop-filter: blur(7px);
+  background: rgba(6, 8, 12, 0.56);
+  backdrop-filter: blur(4px);
+  animation: golive-overlay-in 360ms ease-out both;
 }
 .golive-dialog {
-  width: min(410px, 100%);
-  padding: 34px 30px 26px;
-  border: 1px solid #3c4f5c;
-  border-radius: 10px;
-  background: #131924;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.48);
-  text-align: center;
+  position: relative;
+  width: min(360px, calc(100vw - 48px));
+  padding: 32px 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  border: 1px solid rgba(129, 214, 188, 0.32);
+  border-radius: 12px;
+  background: rgba(24, 21, 28, 0.92);
+  box-shadow:
+    0 22px 54px rgba(0, 0, 0, 0.46),
+    inset 0 1px rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(14px);
+  animation: golive-dialog-in 420ms cubic-bezier(0.22, 1.32, 0.36, 1) both;
+}
+.golive-dialog::before,
+.golive-dialog::after {
+  position: absolute;
+  top: 18px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #70ddb9;
+  content: "";
+  opacity: 0;
+  animation: golive-confetti-in 400ms ease-out 60ms both;
+}
+.golive-dialog::before {
+  left: -36px;
+  box-shadow: -14px 16px 0 #f4c86d, 8px 29px 0 #ef3d68;
+}
+.golive-dialog::after {
+  right: -36px;
+  background: #ef3d68;
+  box-shadow: 14px 16px 0 #70ddb9, -8px 29px 0 #f4c86d;
+  animation-delay: 100ms;
 }
 .golive-mark {
-  width: 54px;
-  height: 54px;
-  margin: 0 auto 16px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: #193d3c;
-  color: #8ce5da;
-  box-shadow: 0 0 0 8px rgba(140, 229, 218, 0.07);
+  width: 48px;
+  height: 48px;
+  color: #31a76f;
+  filter: drop-shadow(0 5px 10px rgba(49, 167, 111, 0.28));
+  animation: golive-mark-pop 380ms cubic-bezier(0.22, 1.32, 0.36, 1) both;
 }
-.golive-dialog > span {
-  color: #83ddd3;
-  font-size: 11px;
+.golive-mark path {
+  stroke-dasharray: 52;
+  stroke-dashoffset: 52;
+  animation: golive-check-draw 360ms ease-out 90ms forwards;
 }
-.golive-dialog h2 {
-  margin: 8px 0;
-  color: #f0f4f8;
-  font-size: 21px;
-}
-.golive-dialog p {
-  margin: 0;
-  color: #9faaba;
-  font-size: 12px;
-  line-height: 1.7;
+.golive-dialog strong {
+  color: #f7eff4;
+  font-size: clamp(22px, 2vw, 26px);
+  font-weight: 700;
+  line-height: 1.2;
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.28);
+  animation: golive-content-in 340ms ease-out 110ms both;
 }
 .golive-button {
-  width: 100%;
-  margin-top: 22px;
-  min-height: 44px;
+  width: 160px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: #ef3d68;
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
   letter-spacing: 0.06em;
+  cursor: pointer;
+  animation: golive-content-in 340ms ease-out 150ms both;
+}
+.golive-button:hover {
+  background: #db315b;
+}
+@media (max-width: 480px) {
+  .golive-dialog {
+    padding: 28px 24px;
+  }
+}
+@keyframes golive-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes golive-dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes golive-mark-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes golive-check-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes golive-content-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes golive-confetti-in {
+  from {
+    opacity: 0;
+    transform: translateY(9px) scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .golive-overlay,
+  .golive-dialog,
+  .golive-dialog::before,
+  .golive-dialog::after,
+  .golive-mark,
+  .golive-mark path,
+  .golive-dialog strong,
+  .golive-button {
+    animation: none;
+  }
 }
 .checklist {
   padding: 14px;
@@ -1986,6 +2093,87 @@
   gap: 6px;
   color: #9ca8b8;
   font-size: 10px;
+}
+.prelive-form-section > small {
+  color: #778395;
+  font-size: 9px;
+  line-height: 1.5;
+}
+.chat-topic-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+.chat-topic-option {
+  min-height: 58px;
+  padding: 9px;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  border: 1px solid #354051;
+  border-radius: 6px;
+  background: #151b26;
+  color: #b6c0ce;
+  text-align: left;
+}
+.chat-topic-option b {
+  color: inherit;
+  font-size: 10px;
+}
+.chat-topic-option small {
+  color: #7f899b;
+  font-size: 9px;
+  line-height: 1.35;
+}
+.chat-topic-option.selected {
+  border-color: #64c8c0;
+  background: #173438;
+  color: #d5faf4;
+}
+.chat-topic-option.selected small {
+  color: #a7ddd4;
+}
+.custom-chat-topic-input input {
+  height: 35px;
+  padding: 0 10px;
+}
+.smart-script-recommendation {
+  padding: 10px 0 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-left: 2px solid rgba(111, 223, 188, 0.68);
+}
+.smart-script-recommendation > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.smart-script-recommendation span {
+  color: #82ded2;
+  font-size: 9px;
+}
+.smart-script-recommendation b {
+  overflow: hidden;
+  color: #dce8e6;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.smart-script-recommendation small {
+  color: #83928f;
+  font-size: 9px;
+  line-height: 1.4;
+}
+.smart-script-recommendation button {
+  flex: none;
+  padding: 6px 8px;
+  border: 1px solid #42605f;
+  border-radius: 5px;
+  background: #203236;
+  color: #9be0d7;
+  font-size: 9px;
 }
 .prelive-cover-suggestion {
   padding: 10px;
@@ -3735,6 +3923,61 @@
 
 .prelive-control-task .recommendation-card {
   min-height: 0;
+}
+
+.prelive-task-transition {
+  outline: 0;
+}
+
+.prelive-task-transition.is-entering {
+  animation: prelive-task-card-enter 220ms ease-out both;
+}
+
+.prelive-task-transition.is-exiting {
+  pointer-events: none;
+  animation: prelive-task-card-exit 220ms ease-in both;
+}
+
+.prelive-tasks-complete {
+  min-height: 132px;
+  padding: 24px 16px;
+  display: grid;
+  place-items: center;
+  gap: 7px;
+  border: 1px solid rgba(111, 223, 188, 0.32);
+  border-radius: 7px;
+  background: rgba(46, 77, 68, 0.2);
+  color: #91ebce;
+  text-align: center;
+  animation: prelive-task-card-enter 220ms ease-out both;
+}
+
+.prelive-tasks-complete b {
+  color: #e4fff6;
+  font-size: 14px;
+}
+
+.prelive-tasks-complete span {
+  color: #9ab9ae;
+  font-size: 11px;
+}
+
+@keyframes prelive-task-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes prelive-task-card-exit {
+  to {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.98);
+  }
 }
 
 .live-genie-heading {
