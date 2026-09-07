@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { ButtonV4 as Button } from '@byted/creator-ui'
 import {
   Activity,
@@ -36,6 +37,7 @@ import {
   Users,
   WandSparkles,
   WifiOff,
+  X,
   Zap,
 } from 'lucide-react'
 import './App.css'
@@ -68,6 +70,13 @@ import {
   selectThresholdChangedSuggestions,
 } from './capabilities/monitoring/rightRailUpdates'
 import {
+  buildPostLiveAiPrompt,
+  createLocalPostLiveSummary,
+  createPostLiveReport,
+  formatDuration,
+  type PostLiveReport,
+} from './capabilities/postlive/postLiveReview'
+import {
   appendNewSuggestions,
   appendTriggeredSuggestion,
   removeSuggestionWidget,
@@ -95,6 +104,7 @@ import { CameraEffectsCanvas } from './components/studio/CameraEffectsCanvas'
 import { EditableCameraLayer } from './components/studio/EditableCameraLayer'
 import { LiveGoal } from './components/studio/LiveGoal'
 import { LivePoll } from './components/studio/LivePoll'
+import { PostLiveReview } from './components/studio/PostLiveReview'
 import { CanvasGoalRing, CanvasTextSource } from './components/studio/PreliveCanvasWidgets'
 import {
   defaultCanvasTextStyle,
@@ -115,7 +125,7 @@ import { studioRuntimeConfig } from './config/studioRuntime'
 import { askGenie, GenieRequestError } from './services/genie'
 import { useStudioStore } from './store/studioStore'
 
-type AppView = 'onboarding' | 'prelive' | 'live'
+type AppView = 'onboarding' | 'prelive' | 'live' | 'postlive'
 type Scene = StudioScene
 type StreamKind = 'music' | 'chat' | 'game' | 'show'
 type PreliveTask = 'layout' | 'visual' | 'content'
@@ -294,6 +304,14 @@ function App() {
   const [agentWidgetSpec, setAgentWidgetSpec] = useState<WidgetSpec | null>(null)
   const [genieError, setGenieError] = useState('')
   const [genieRequestStatus, setGenieRequestStatus] = useState<GenieRequestStatus>('idle')
+  const [showEndLiveConfirm, setShowEndLiveConfirm] = useState(false)
+  const [postLiveReport, setPostLiveReport] = useState<PostLiveReport | null>(null)
+  const [postLiveAiSummary, setPostLiveAiSummary] = useState('')
+  const [postLiveMessages, setPostLiveMessages] = useState<ChatMessage[]>([])
+  const [postLiveInput, setPostLiveInput] = useState('')
+  const [postLiveError, setPostLiveError] = useState('')
+  const [postLiveRequestStatus, setPostLiveRequestStatus] =
+    useState<GenieRequestStatus>('idle')
   const [liveTick, setLiveTick] = useState(0)
   const [liveStartedAt, setLiveStartedAt] = useState(0)
   const [strategyWarmupComplete, setStrategyWarmupComplete] = useState(false)
@@ -328,6 +346,12 @@ function App() {
   const strategyRecoveryTimeoutRef = useRef<number | null>(null)
   const genieAbortRef = useRef<AbortController | null>(null)
   const lastGenieRequestRef = useRef<{ question: string; prompt: string } | null>(null)
+  const postLiveAbortRef = useRef<AbortController | null>(null)
+  const lastPostLiveRequestRef = useRef<{
+    report: PostLiveReport
+    question: string
+    mode: 'summary' | 'conversation'
+  } | null>(null)
   const resetCameraLayerLayout = useStudioStore((state) => state.resetCameraLayerLayout)
   const previewVisualSettings = useStudioStore((state) => state.previewVisualSettings)
   const applyVisualSettings = useStudioStore((state) => state.applyVisualSettings)
@@ -711,6 +735,7 @@ function App() {
     const removalTimeouts = removalTimeoutsRef.current
     return () => {
       genieAbortRef.current?.abort()
+      postLiveAbortRef.current?.abort()
       const backgroundImageUrl = useStudioStore.getState().cameraEffects.backgroundImageUrl
       if (backgroundImageUrl?.startsWith('blob:')) {
         URL.revokeObjectURL(backgroundImageUrl)
@@ -1562,6 +1587,135 @@ function App() {
     if (!lastGenieRequestRef.current || genieRequestStatus === 'loading') return
     void runGenieRequest(lastGenieRequestRef.current, false)
   }
+
+  const runPostLiveRequest = async (
+    report: PostLiveReport,
+    question: string,
+    mode: 'summary' | 'conversation',
+    appendQuestion: boolean,
+  ) => {
+    postLiveAbortRef.current?.abort()
+    const controller = new AbortController()
+    postLiveAbortRef.current = controller
+    lastPostLiveRequestRef.current = { report, question, mode }
+    if (appendQuestion) {
+      setPostLiveMessages((messages) => [...messages, { role: 'user', text: question }])
+      setPostLiveInput('')
+    }
+    setPostLiveError('')
+    setPostLiveRequestStatus('loading')
+
+    try {
+      const result = await askGenie(
+        buildPostLiveAiPrompt(report, question),
+        { signal: controller.signal, instruction: question },
+      )
+      if (postLiveAbortRef.current !== controller) return
+      const response = result.text || createLocalPostLiveSummary(report)
+      if (mode === 'summary') {
+        setPostLiveAiSummary(response)
+      } else {
+        setPostLiveMessages((messages) => [
+          ...messages,
+          { role: 'assistant', text: response },
+        ])
+      }
+      setPostLiveRequestStatus('idle')
+    } catch (error) {
+      if (postLiveAbortRef.current !== controller) return
+      setPostLiveError(
+        error instanceof GenieRequestError
+          ? error.message
+          : 'AI 深度复盘暂不可用，已保留本地数据建议。',
+      )
+      setPostLiveRequestStatus(
+        error instanceof GenieRequestError ? error.code : 'error',
+      )
+    } finally {
+      if (postLiveAbortRef.current === controller) {
+        postLiveAbortRef.current = null
+      }
+    }
+  }
+
+  const confirmEndLive = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    const endedAt = Math.round(performance.timeOrigin + event.timeStamp)
+    const elapsedSeconds = liveStartedAt > 0
+      ? Math.round((endedAt - liveStartedAt) / 1000)
+      : liveTick
+    const report = createPostLiveReport({
+      topic: streamTopic,
+      streamType,
+      strategyId: demoStrategy,
+      strategyLabel: selectedStrategy.label,
+      durationSeconds: Math.max(liveTick, elapsedSeconds),
+      audience: audienceSnapshot,
+      appliedSuggestionCount: suggestionQueue.filter(
+        (suggestion) => suggestion.widgets.length === 0,
+      ).length,
+    })
+
+    setPostLiveReport(report)
+    setPostLiveAiSummary(createLocalPostLiveSummary(report))
+    setPostLiveMessages([])
+    setPostLiveInput('')
+    setShowEndLiveConfirm(false)
+    setIsPk(false)
+    stopScreenShare()
+    hidePoll()
+    backgroundMusicRef.current?.close()
+    backgroundMusicRef.current = null
+    setIsBackgroundMusicPlaying(false)
+    audioProcessorRef.current?.close()
+    audioProcessorRef.current = null
+    setProcessedAudioStream(null)
+    setMediaStream((currentStream) => {
+      stopMediaStream(currentStream)
+      return null
+    })
+    setCameraEnabled(false)
+    cameraAttemptedRef.current = false
+    if (strategyRecoveryTimeoutRef.current !== null) {
+      window.clearTimeout(strategyRecoveryTimeoutRef.current)
+      strategyRecoveryTimeoutRef.current = null
+    }
+    setView('postlive')
+    void runPostLiveRequest(
+      report,
+      '请总结本场直播表现，并给出下一场最值得执行的三个优化动作。',
+      'summary',
+      false,
+    )
+  }
+
+  const handlePostLiveSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const question = postLiveInput.trim()
+    if (!postLiveReport || !question || postLiveRequestStatus === 'loading') return
+    void runPostLiveRequest(postLiveReport, question, 'conversation', true)
+  }
+
+  const cancelPostLiveRequest = () => {
+    postLiveAbortRef.current?.abort()
+  }
+
+  const retryPostLiveRequest = () => {
+    const request = lastPostLiveRequestRef.current
+    if (!request || postLiveRequestStatus === 'loading') return
+    void runPostLiveRequest(request.report, request.question, request.mode, false)
+  }
+
+  const leavePostLive = (nextView: 'onboarding' | 'prelive') => {
+    postLiveAbortRef.current?.abort()
+    setPostLiveRequestStatus('idle')
+    setPostLiveError('')
+    setPostLiveReport(null)
+    setPostLiveMessages([])
+    setPostLiveInput('')
+    cameraAttemptedRef.current = false
+    setView(nextView)
+  }
+
   if (view === 'onboarding') {
     return (
       <main className="onboarding-shell">
@@ -1631,6 +1785,26 @@ function App() {
     )
   }
 
+  if (view === 'postlive') {
+    if (!postLiveReport) return null
+    return (
+      <PostLiveReview
+        report={postLiveReport}
+        aiSummary={postLiveAiSummary}
+        messages={postLiveMessages}
+        input={postLiveInput}
+        requestStatus={postLiveRequestStatus}
+        error={postLiveError}
+        onInputChange={(value) => setPostLiveInput(value.slice(0, 500))}
+        onSubmit={handlePostLiveSubmit}
+        onCancel={cancelPostLiveRequest}
+        onRetry={retryPostLiveRequest}
+        onStartNext={() => leavePostLive('prelive')}
+        onBackHome={() => leavePostLive('onboarding')}
+      />
+    )
+  }
+
   return (
     <main className={`app-shell live-app ${view === 'prelive' ? 'prelive-live-mode' : ''}`}>
       <header className="topbar">
@@ -1677,10 +1851,11 @@ function App() {
           <strong>TikTok LIVE Studio</strong>
           <span className="live-brand-divider">/</span>
           <b>{view === 'prelive' ? '今日开播准备工作台' : '直播中'}</b>
-          <span className="live-session-pill"><i />{view === 'prelive' ? `${getStreamTheme(streamType).name} · ${streamTopic}` : '直播中 · 00:42:18'}</span>
+          <span className="live-session-pill"><i />{view === 'prelive' ? `${getStreamTheme(streamType).name} · ${streamTopic}` : `直播中 · ${formatDuration(liveTick)}`}</span>
         </div>
         <div className="live-status-actions">
           {view === 'live' && (
+            <>
               <button
                 className="prelive-entry-button"
                 type="button"
@@ -1691,6 +1866,14 @@ function App() {
               >
                 <ArrowLeft size={14} />直播前设置
               </button>
+              <button
+                className="end-live-button"
+                type="button"
+                onClick={() => setShowEndLiveConfirm(true)}
+              >
+                <CircleStop size={14} />结束直播
+              </button>
+            </>
           )}
           <span className={`network-pill ${view === 'prelive' ? 'prelive-network' : ''}`}><i />{view === 'prelive' ? '预览已连接 · 延迟 42ms' : '推流稳定 · 延迟 42ms'}</span>
           <button className="notification-button" type="button" aria-label="通知">
@@ -1721,7 +1904,7 @@ function App() {
             {view === 'prelive' ? (
               <button className="secondary-button" type="button" onClick={enableCamera}><Camera size={16} />连接设备</button>
             ) : (
-              <div className="live-clock"><span /> LIVE&nbsp; 00:23:41</div>
+              <div className="live-clock"><span /> LIVE&nbsp; {formatDuration(liveTick)}</div>
             )}
           </div>
           {view === 'live' ? (
@@ -2055,6 +2238,39 @@ function App() {
           </form>
         </aside>
       </section>
+      {showEndLiveConfirm && createPortal(
+        <div className="end-live-overlay" role="presentation">
+          <section
+            className="end-live-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="end-live-title"
+          >
+            <button
+              type="button"
+              className="end-live-close"
+              aria-label="关闭"
+              onClick={() => setShowEndLiveConfirm(false)}
+            >
+              <X size={17} />
+            </button>
+            <span className="end-live-mark"><CircleStop size={21} /></span>
+            <small>END LIVE</small>
+            <h2 id="end-live-title">确认结束本场直播？</h2>
+            <p>结束后将停止设备采集，并由 Genie 根据本场数据生成直播复盘和下一场经营建议。</p>
+            <div className="end-live-summary">
+              <span>直播时长<b>{formatDuration(liveTick)}</b></span>
+              <span>当前观看<b>{audienceSnapshot.viewerCount.toLocaleString()}</b></span>
+              <span>已采纳建议<b>{suggestionQueue.filter((suggestion) => suggestion.widgets.length === 0).length}</b></span>
+            </div>
+            <div className="end-live-dialog-actions">
+              <button type="button" onClick={() => setShowEndLiveConfirm(false)}>继续直播</button>
+              <button type="button" onClick={confirmEndLive}>结束并生成复盘</button>
+            </div>
+          </section>
+        </div>,
+        document.body,
+      )}
     </main>
   )
 }

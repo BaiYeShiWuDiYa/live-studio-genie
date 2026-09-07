@@ -497,6 +497,36 @@ git diff --check
 
 Result: 13 test files and 63 tests passed. Browser regression verified bottom-appended comments, rotating user names and timestamps, 10-second recovery comments, and final return to normal comments.
 
+### 最新主分支能力同步
+
+- 播前准备任务收敛为布局、人像美化、直播信息与内容三类，并使用轻量状态提示替代阻断式通知。
+- 直播监控和评论合并到统一 `LiveChatPanel`，播前展示设备状态，播中切换为实时指标、礼物和评论。
+- 实时建议支持同一建议携带多个可操作组件，已应用组件独立移除，建议历史继续保留。
+- 聊天陪伴画布支持文字源、目标源的内容、样式、位置编辑，并持久化到历史直播配置。
+- 游戏直播新增竖屏和横屏布局，支持投屏画面与摄像头画中画拖动。
+- 音乐直播新增四分之三舞台布局、自定义舞台背景和更完整的播前美化配置。
+
+### AI 播后复盘与结束直播
+
+- 播中顶部新增“结束直播”入口，并提供包含直播时长、当前观看和已采纳建议数的二次确认。
+- 确认结束后停止摄像头、麦克风处理、游戏投屏和 BGM，冻结本场 Audience Snapshot。
+- 新增播后复盘页，展示总观看、峰值在线、新增粉丝、评论、礼物、留存和直播表现指数。
+- 根据正常、画面偏暗、声音偏小、互动转冷、网络卡顿、PK 冲刺策略生成对应经营建议。
+- 进入播后页后自动调用 Genie 生成深度总结；接口不可用时保留本地可复现的兜底分析。
+- 新增开放式输入框与快捷问题，主播可描述本场感受，并携带整场数据上下文继续追问下一场优化。
+- 新增 `postLiveReview` 数据聚合、建议生成、AI Prompt 和时长格式化测试。
+
+Validation:
+
+```bash
+npm run test
+npm run build
+npm run lint
+git diff --check
+```
+
+Result: 15 test files and 83 tests passed. Browser regression verified the end-live confirmation, responsive post-live review, automatic AI summary, quick questions, and contextual follow-up response.
+
 ## Next
 
 1. Add eyebrow controls and face-shape deformation.
