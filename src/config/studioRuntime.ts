@@ -24,6 +24,16 @@ export const studioRuntimeConfig = {
   suggestion: {
     /** 右侧 Genie 建议队列同步周期，单位为毫秒。 */
     syncIntervalMs: 60_000,
+    /** 指标趋势变化达到该值时触发即时更新。 */
+    metricTrendDeltaThreshold: 8,
+    /** 指标更新后的最短冷却时间，避免右栏频繁抖动。 */
+    metricUpdateCooldownMs: 5_000,
+    /** 评论变化后的分析延迟，保证在三秒响应要求内完成聚合。 */
+    commentAnalysisDelayMs: 1_200,
+    /** 同类评论洞察再次触发的最短间隔。 */
+    commentCategoryCooldownMs: 8_000,
+    /** 停止输入后自动恢复建议视图的等待时间。 */
+    inputModeIdleMs: 1_800,
   },
   mediaMonitoring: {
     /** 摄像头亮度采样周期，单位为毫秒。 */

@@ -3,6 +3,7 @@ import { studioRuntimeConfig } from '../../config/studioRuntime'
 import type { LiveSuggestion } from './liveDiagnostics'
 import {
   appendNewSuggestions,
+  appendTriggeredSuggestion,
   markSuggestionSeen,
   removeSuggestionWidget,
 } from './suggestionQueue'
@@ -65,6 +66,36 @@ describe('suggestion queue', () => {
     )
 
     expect(result).toEqual([])
+  })
+
+  it('keeps comment and monitor triggers independent for the same signal', () => {
+    const monitorQueue = appendNewSuggestions(
+      [],
+      [suggestion('comments')],
+      new Set(),
+      100,
+    )
+    const withCommentInsight = appendTriggeredSuggestion(
+      monitorQueue,
+      suggestion('comments'),
+      'comment',
+      'request',
+      200,
+    )
+    const duplicateCommentInsight = appendTriggeredSuggestion(
+      withCommentInsight,
+      suggestion('comments'),
+      'comment',
+      'request',
+      300,
+    )
+
+    expect(withCommentInsight).toHaveLength(2)
+    expect(withCommentInsight.map((item) => item.source)).toEqual([
+      'monitor',
+      'comment',
+    ])
+    expect(duplicateCommentInsight).toBe(withCommentInsight)
   })
 
   it('marks a selected suggestion as seen without changing other items', () => {

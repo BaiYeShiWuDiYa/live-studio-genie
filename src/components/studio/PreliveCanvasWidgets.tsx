@@ -10,6 +10,7 @@ interface DraggableWidgetProps {
   className: string
   ariaLabel: string
   selected: boolean
+  editable: boolean
   offset: WidgetOffset
   onSelect: () => void
   onOffsetChange: (offset: WidgetOffset) => void
@@ -21,6 +22,7 @@ function DraggableWidget({
   className,
   ariaLabel,
   selected,
+  editable,
   offset,
   onSelect,
   onOffsetChange,
@@ -33,20 +35,22 @@ function DraggableWidget({
     <>
       <div
         ref={targetRef}
-        role="button"
-        tabIndex={0}
+        role={editable ? 'button' : undefined}
+        tabIndex={editable ? 0 : undefined}
         aria-label={ariaLabel}
-        aria-pressed={selected}
-        className={`canvas-widget ${className} ${selected ? 'is-selected' : ''}`}
+        aria-pressed={editable ? selected : undefined}
+        className={`canvas-widget ${className} ${selected ? 'is-selected' : ''} ${editable ? '' : 'is-read-only'}`}
         style={{ transform: `translate(${offset.x}px, ${offset.y}px)`, ...style }}
-        onPointerDown={() => onSelect()}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault()
-            event.stopPropagation()
-            onSelect()
-          }
-        }}
+        onClick={editable ? onSelect : undefined}
+        onKeyDown={editable
+          ? (event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                event.stopPropagation()
+                onSelect()
+              }
+            }
+          : undefined}
       >
         {children}
       </div>
@@ -72,6 +76,7 @@ interface CanvasTextSourceProps {
   onSelect: () => void
   offset: WidgetOffset
   onOffsetChange: (offset: WidgetOffset) => void
+  editable?: boolean
 }
 
 export function CanvasTextSource({
@@ -81,6 +86,7 @@ export function CanvasTextSource({
   onSelect,
   offset,
   onOffsetChange,
+  editable = true,
 }: CanvasTextSourceProps) {
   if (!text.trim()) return null
 
@@ -106,7 +112,8 @@ export function CanvasTextSource({
     <DraggableWidget
       className={classNames}
       ariaLabel="画布文字源"
-      selected={selected}
+      selected={editable && selected}
+      editable={editable}
       offset={offset}
       onSelect={onSelect}
       onOffsetChange={onOffsetChange}
@@ -127,6 +134,7 @@ interface CanvasGoalRingProps {
   onSelect: () => void
   offset: WidgetOffset
   onOffsetChange: (offset: WidgetOffset) => void
+  editable?: boolean
 }
 
 export function CanvasGoalRing({
@@ -138,6 +146,7 @@ export function CanvasGoalRing({
   onSelect,
   offset,
   onOffsetChange,
+  editable = true,
 }: CanvasGoalRingProps) {
   const progress = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0
   const radius = 44
@@ -151,7 +160,8 @@ export function CanvasGoalRing({
       <DraggableWidget
         className="canvas-goal-ring canvas-goal-progress"
         ariaLabel="画布目标源"
-        selected={selected}
+        selected={editable && selected}
+        editable={editable}
         offset={offset}
         onSelect={onSelect}
         onOffsetChange={onOffsetChange}
@@ -182,7 +192,8 @@ export function CanvasGoalRing({
     <DraggableWidget
       className="canvas-goal-ring"
       ariaLabel="画布目标源"
-      selected={selected}
+      selected={editable && selected}
+      editable={editable}
       offset={offset}
       onSelect={onSelect}
       onOffsetChange={onOffsetChange}

@@ -878,6 +878,12 @@
 .canvas-widget:active {
   cursor: grabbing;
 }
+.canvas-widget.is-read-only,
+.canvas-widget.is-read-only:active {
+  cursor: default;
+  pointer-events: none;
+  touch-action: auto;
+}
 .canvas-widget.is-selected {
   outline: 1.5px dashed rgba(126, 231, 213, 0.9);
   outline-offset: 6px;

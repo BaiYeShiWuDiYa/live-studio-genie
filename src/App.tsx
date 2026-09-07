@@ -10,9 +10,12 @@ import {
   Check,
   ChevronDown,
   CircleStop,
+  Eye,
+  EyeOff,
   Gamepad2,
   History,
   LayoutTemplate,
+  Link2,
   Lightbulb,
   LoaderCircle,
   Mic,
@@ -24,6 +27,7 @@ import {
   Plus,
   RotateCcw,
   Send,
+  Share2,
   Sparkles,
   Spotlight,
   Target,
@@ -55,10 +59,17 @@ import { requestCameraStream, requestDisplayStream, stopMediaStream } from './ca
 import { useMediaMonitoring } from './capabilities/monitoring/useMediaMonitoring'
 import {
   buildLiveDiagnostics,
+  type LiveDiagnostics,
   type LiveSuggestion,
 } from './capabilities/monitoring/liveDiagnostics'
 import {
+  createCommentInsightSuggestion,
+  rightRailUpdateConfig,
+  selectThresholdChangedSuggestions,
+} from './capabilities/monitoring/rightRailUpdates'
+import {
   appendNewSuggestions,
+  appendTriggeredSuggestion,
   removeSuggestionWidget,
   type QueuedSuggestion,
 } from './capabilities/monitoring/suggestionQueue'
@@ -91,6 +102,9 @@ import {
   type WidgetOffset,
 } from './capabilities/widgets/canvasWidgets'
 import { LiveChatPanel } from './components/studio/LiveChatPanel'
+import { AtomicRecallCard } from './components/atomic/AtomicRecallCard'
+import { recallAtomicComponents } from './components/atomic/intentRecall'
+import type { AtomicComponentId } from './components/atomic/types'
 import {
   audienceStrategies,
   doesSuggestionResolveStrategy,
@@ -122,6 +136,8 @@ const goalKindOptions: ReadonlyArray<{ id: GoalKind; label: string; defaultTitle
 ]
 
 type PreviewMode = 'mobile' | 'studio'
+type LiveStageMode = 'preview' | 'clean'
+type RightRailSource = 'trigger' | 'input'
 type GenieRequestStatus = 'idle' | 'loading' | 'cancelled' | 'timeout' | 'error'
 type StrategyCommentState = 'issue' | 'recovery' | 'normal'
 
@@ -273,6 +289,7 @@ function App() {
   const [hostComments, setHostComments] = useState<AudienceComment[]>([])
   const readyScore = Math.round(20 + completedPreliveTasks.length * (80 / preliveTasks.length))
   const [genieInput, setGenieInput] = useState('')
+  const [isGenieComposerFocused, setIsGenieComposerFocused] = useState(false)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [agentWidgetSpec, setAgentWidgetSpec] = useState<WidgetSpec | null>(null)
   const [genieError, setGenieError] = useState('')
@@ -289,6 +306,13 @@ function App() {
   const [isBackgroundMusicPlaying, setIsBackgroundMusicPlaying] = useState(false)
   const [backgroundMusicError, setBackgroundMusicError] = useState('')
   const [previewMode, setPreviewMode] = useState<PreviewMode>('mobile')
+  const [liveStageMode, setLiveStageMode] = useState<LiveStageMode>('preview')
+  const [inputAtomicComponents, setInputAtomicComponents] = useState<AtomicComponentId[]>([])
+  const [rightRailSource, setRightRailSource] = useState<RightRailSource>('trigger')
+  const [dismissedAtomicComponents, setDismissedAtomicComponents] =
+    useState<Set<string>>(() => new Set())
+  const [removingAtomicComponents, setRemovingAtomicComponents] =
+    useState<Set<string>>(() => new Set())
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null)
   const [processedAudioStream, setProcessedAudioStream] = useState<MediaStream | null>(null)
   const [displayStream, setDisplayStream] = useState<MediaStream | null>(null)
@@ -299,6 +323,8 @@ function App() {
   const backgroundMusicRef = useRef<BackgroundMusicPlayer | null>(null)
   const cameraAttemptedRef = useRef(false)
   const strategySelectorRef = useRef<HTMLDivElement>(null)
+  const genieComposerRef = useRef<HTMLFormElement>(null)
+  const genieInputModeTimeoutRef = useRef<number | null>(null)
   const strategyRecoveryTimeoutRef = useRef<number | null>(null)
   const genieAbortRef = useRef<AbortController | null>(null)
   const lastGenieRequestRef = useRef<{ question: string; prompt: string } | null>(null)
@@ -400,11 +426,14 @@ function App() {
     scene,
   ])
   const [suggestionQueue, setSuggestionQueue] = useState<QueuedSuggestion[]>([])
-  const [previewingComponentId, setPreviewingComponentId] = useState<string | null>(null)
-  const [removingComponentIds, setRemovingComponentIds] = useState<Set<string>>(
-    () => new Set(),
-  )
+  const suggestionQueueRef = useRef(suggestionQueue)
   const latestDiagnosticsRef = useRef(diagnostics)
+  const previousDiagnosticsRef = useRef<LiveDiagnostics | null>(null)
+  const latestAudienceRef = useRef(audienceSnapshot)
+  const lastMetricUpdateAtRef = useRef(0)
+  const lastAnalyzedCommentIdRef = useRef<string | null>(null)
+  const commentAnalysisTimeoutRef = useRef<number | null>(null)
+  const commentTriggerTimesRef = useRef(new Map<string, number>())
   const strategyActivatedRef = useRef(false)
   const dismissedSignalIdsRef = useRef(new Set<LiveSuggestion['signalId']>())
   const removalTimeoutsRef = useRef(new Map<string, number>())
@@ -427,13 +456,160 @@ function App() {
       : []),
     ...suggestionComponents,
   ]
+  const atomicRecalledComponents = (() => {
+    const inputCandidates = inputAtomicComponents.map((componentId) => ({
+        key: `input-${componentId}`,
+        componentId,
+        metric: 'Genie 输入意图',
+        source: '输入框识别',
+        suggestionNumber: null,
+        suggestionId: null,
+      }))
+    const triggeredCandidates = suggestionQueue.flatMap((suggestion, suggestionIndex) =>
+        recallAtomicComponents({
+          source: suggestion.source,
+          text: `${suggestion.metric} ${suggestion.action}`,
+          signalIds: [suggestion.signalId],
+        }).componentIds.map((componentId) => ({
+          key: `${suggestion.queueId}-${componentId}`,
+          componentId,
+          metric: suggestion.metric,
+          source: suggestion.source === 'comment'
+            ? '评论实时分析'
+            : '监控指标触发',
+          suggestionNumber: suggestionIndex + 1,
+          suggestionId: suggestion.queueId,
+        })),
+      )
+    const candidates = rightRailSource === 'input'
+      ? inputCandidates
+      : triggeredCandidates
+    return candidates.filter((candidate) => {
+      return !dismissedAtomicComponents.has(candidate.key)
+    })
+  })()
+  const atomicComponentCountsBySuggestion = atomicRecalledComponents.reduce(
+    (counts, component) => {
+      if (component.suggestionId) {
+        counts.set(
+          component.suggestionId,
+          (counts.get(component.suggestionId) ?? 0) + 1,
+        )
+      }
+      return counts
+    },
+    new Map<string, number>(),
+  )
   const activeWidgetSpec = agentWidgetSpec
     ?? recalledComponents[0]?.widgetSpec
     ?? getSceneWidgetSpec(scene)
+  const liveRightRailMode = selectedCanvasWidget
+    ? 'canvas-config'
+    : rightRailSource === 'input'
+      ? 'components'
+      : 'overview'
+
+  useEffect(() => {
+    suggestionQueueRef.current = suggestionQueue
+  }, [suggestionQueue])
 
   useEffect(() => {
     latestDiagnosticsRef.current = diagnostics
-  }, [diagnostics])
+    latestAudienceRef.current = audienceSnapshot
+  }, [audienceSnapshot, diagnostics])
+
+  useEffect(() => {
+    const previous = previousDiagnosticsRef.current
+    previousDiagnosticsRef.current = diagnostics
+    if (view !== 'live' || strategyWarmupActive || !previous) return
+
+    const now = Date.now()
+    if (
+      now - lastMetricUpdateAtRef.current <
+      rightRailUpdateConfig.metricUpdateCooldownMs
+    ) {
+      return
+    }
+
+    const changedSuggestions = selectThresholdChangedSuggestions(
+      previous,
+      diagnostics,
+      rightRailUpdateConfig.metricTrendDeltaThreshold,
+    )
+    if (changedSuggestions.length === 0) return
+
+    const currentQueue = suggestionQueueRef.current
+    const nextQueue = appendNewSuggestions(
+      currentQueue,
+      changedSuggestions,
+      dismissedSignalIdsRef.current,
+      now,
+    )
+    if (nextQueue === currentQueue) return
+
+    suggestionQueueRef.current = nextQueue
+    setSelectedCanvasWidget(null)
+    setRightRailSource('trigger')
+    setSuggestionQueue(nextQueue)
+    lastMetricUpdateAtRef.current = now
+  }, [diagnostics, strategyWarmupActive, view])
+
+  useEffect(() => {
+    if (view !== 'live') {
+      if (commentAnalysisTimeoutRef.current !== null) {
+        window.clearTimeout(commentAnalysisTimeoutRef.current)
+        commentAnalysisTimeoutRef.current = null
+      }
+      return
+    }
+
+    const latestComment = audienceSnapshot.comments.at(-1)
+    if (
+      !latestComment ||
+      latestComment.id === lastAnalyzedCommentIdRef.current ||
+      commentAnalysisTimeoutRef.current !== null
+    ) {
+      return
+    }
+    lastAnalyzedCommentIdRef.current = latestComment.id
+
+    commentAnalysisTimeoutRef.current = window.setTimeout(() => {
+      commentAnalysisTimeoutRef.current = null
+      const snapshot = latestAudienceRef.current
+      const suggestion = createCommentInsightSuggestion(
+        snapshot.insight,
+        snapshot.comments,
+      )
+      if (!suggestion) return
+
+      const triggerKey = snapshot.insight.category
+      const now = Date.now()
+      const lastTriggeredAt =
+        commentTriggerTimesRef.current.get(triggerKey) ?? 0
+      if (
+        now - lastTriggeredAt <
+        rightRailUpdateConfig.commentCategoryCooldownMs
+      ) {
+        return
+      }
+
+      const currentQueue = suggestionQueueRef.current
+      const nextQueue = appendTriggeredSuggestion(
+        currentQueue,
+        suggestion,
+        'comment',
+        triggerKey,
+        now,
+      )
+      if (nextQueue === currentQueue) return
+
+      suggestionQueueRef.current = nextQueue
+      setSelectedCanvasWidget(null)
+      setRightRailSource('trigger')
+      setSuggestionQueue(nextQueue)
+      commentTriggerTimesRef.current.set(triggerKey, now)
+    }, rightRailUpdateConfig.commentAnalysisDelayMs)
+  }, [audienceSnapshot.comments, view])
 
   useEffect(() => {
     if (!canvasNotice) return
@@ -453,18 +629,37 @@ function App() {
   }, [strategyMenuOpen])
 
   useEffect(() => {
+    if (!isGenieComposerFocused) return
+
+    const leaveComposerOnOutsidePointer = (event: PointerEvent) => {
+      if (!genieComposerRef.current?.contains(event.target as Node)) {
+        setIsGenieComposerFocused(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', leaveComposerOnOutsidePointer)
+    return () =>
+      document.removeEventListener('pointerdown', leaveComposerOnOutsidePointer)
+  }, [isGenieComposerFocused])
+
+  useEffect(() => {
     if (view !== 'live') {
       strategyActivatedRef.current = false
       return
     }
     if (strategyWarmupActive || strategyActivatedRef.current) return
 
+    const currentQueue = suggestionQueueRef.current
     const nextQueue = appendNewSuggestions(
-      [],
+      currentQueue,
       latestDiagnosticsRef.current.suggestions,
       dismissedSignalIdsRef.current,
     )
-    setSuggestionQueue(nextQueue)
+    if (nextQueue !== currentQueue) {
+      suggestionQueueRef.current = nextQueue
+      setSelectedCanvasWidget(null)
+      setSuggestionQueue(nextQueue)
+    }
     strategyActivatedRef.current = true
   }, [activeAudienceStrategy, strategyWarmupActive, view])
 
@@ -522,6 +717,12 @@ function App() {
       }
       removalTimeouts.forEach((timeoutId) => window.clearTimeout(timeoutId))
       removalTimeouts.clear()
+      if (commentAnalysisTimeoutRef.current !== null) {
+        window.clearTimeout(commentAnalysisTimeoutRef.current)
+      }
+      if (genieInputModeTimeoutRef.current !== null) {
+        window.clearTimeout(genieInputModeTimeoutRef.current)
+      }
       if (strategyRecoveryTimeoutRef.current !== null) {
         window.clearTimeout(strategyRecoveryTimeoutRef.current)
       }
@@ -638,6 +839,7 @@ function App() {
     studioToolRegistry.execute('studio.reset_live_goal_preview', {}, studioToolContext)
     studioToolRegistry.execute('studio.reset_camera_effects_preview', {}, studioToolContext)
     setAgentWidgetSpec(null)
+    setSelectedCanvasWidget(null)
     setScene(nextScene)
     setApplied(false)
     setIsSuggestionPreview(false)
@@ -662,12 +864,19 @@ function App() {
     setIsPk(view === 'live' && strategy.scene === 'pk')
     setApplied(false)
     setAgentWidgetSpec(null)
+    setSelectedCanvasWidget(null)
     setSuggestionQueue([])
-    setPreviewingComponentId(null)
-    setRemovingComponentIds(new Set())
+    setInputAtomicComponents([])
+    setRightRailSource('trigger')
+    setDismissedAtomicComponents(new Set())
+    setRemovingAtomicComponents(new Set())
     removalTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId))
     removalTimeoutsRef.current.clear()
     dismissedSignalIdsRef.current.clear()
+    commentTriggerTimesRef.current.clear()
+    lastAnalyzedCommentIdRef.current = null
+    lastMetricUpdateAtRef.current = 0
+    previousDiagnosticsRef.current = null
     strategyActivatedRef.current = false
     applyVisualSettings(strategy.visualSettings)
     applyAudioSettings(strategy.audioSettings)
@@ -897,14 +1106,9 @@ function App() {
   ) => {
     if (!componentId) return
 
-    if (suggestion?.widgets.length === 1) {
+    if (suggestion?.source === 'monitor' && suggestion.widgets.length === 1) {
       dismissedSignalIdsRef.current.add(suggestion.signalId)
     }
-    setRemovingComponentIds((currentIds) => {
-      const nextIds = new Set(currentIds)
-      nextIds.add(componentId)
-      return nextIds
-    })
     const existingTimeout = removalTimeoutsRef.current.get(componentId)
     if (existingTimeout !== undefined) {
       window.clearTimeout(existingTimeout)
@@ -917,19 +1121,23 @@ function App() {
       } else {
         setAgentWidgetSpec(null)
       }
-      setRemovingComponentIds((currentIds) => {
-        const nextIds = new Set(currentIds)
-        nextIds.delete(componentId)
-        return nextIds
-      })
-      setPreviewingComponentId((currentId) =>
-        currentId === componentId ? null : currentId,
-      )
       setApplied(false)
       setIsSuggestionPreview(false)
       removalTimeoutsRef.current.delete(componentId)
     }, 320)
     removalTimeoutsRef.current.set(componentId, timeoutId)
+  }
+
+  const scheduleAtomicRemoval = (componentKey: string) => {
+    setRemovingAtomicComponents((current) => new Set(current).add(componentKey))
+    window.setTimeout(() => {
+      setDismissedAtomicComponents((current) => new Set(current).add(componentKey))
+      setRemovingAtomicComponents((current) => {
+        const next = new Set(current)
+        next.delete(componentKey)
+        return next
+      })
+    }, 320)
   }
 
   const beginStrategyRecovery = (
@@ -1120,13 +1328,21 @@ function App() {
     setScene(selectedStrategy.scene)
     setIsPk(selectedStrategy.scene === 'pk')
     setSuggestionQueue([])
-    setPreviewingComponentId(null)
-    setRemovingComponentIds(new Set())
+    setInputAtomicComponents([])
+    setRightRailSource('trigger')
+    setDismissedAtomicComponents(new Set())
+    setRemovingAtomicComponents(new Set())
     removalTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId))
     removalTimeoutsRef.current.clear()
     dismissedSignalIdsRef.current.clear()
+    commentTriggerTimesRef.current.clear()
+    lastAnalyzedCommentIdRef.current = null
+    lastMetricUpdateAtRef.current = 0
+    previousDiagnosticsRef.current = null
     strategyActivatedRef.current = false
     setApplied(false)
+    setSelectedCanvasWidget(null)
+    setLiveStageMode('preview')
     setView('live')
   }
 
@@ -1191,6 +1407,7 @@ function App() {
 
   const openCameraEffects = () => {
     studioToolRegistry.execute('studio.reset_camera_effects_preview', {}, studioToolContext)
+    setSelectedCanvasWidget(null)
     setAgentWidgetSpec(getCameraEffectsWidgetSpec())
     setApplied(false)
     setIsSuggestionPreview(false)
@@ -1280,6 +1497,24 @@ function App() {
     event.preventDefault()
     const question = genieInput.trim()
     if (!question || genieRequestStatus === 'loading') return
+    if (genieInputModeTimeoutRef.current !== null) {
+      window.clearTimeout(genieInputModeTimeoutRef.current)
+      genieInputModeTimeoutRef.current = null
+    }
+    setIsGenieComposerFocused(false)
+    const intentRecall = recallAtomicComponents({
+      source: 'input',
+      text: question,
+    })
+    if (view === 'live') {
+      setInputAtomicComponents(intentRecall.componentIds)
+      setRightRailSource('input')
+      setDismissedAtomicComponents((current) => {
+        const next = new Set(current)
+        intentRecall.componentIds.forEach((id) => next.delete(`input-${id}`))
+        return next
+      })
+    }
 
     const context = view === 'prelive'
       ? '当前处于开播准备阶段，直播主题是晚间唱歌聊天。'
@@ -1305,6 +1540,18 @@ function App() {
     ].join('\n')
 
     void runGenieRequest({ question, prompt }, true)
+  }
+
+  const activateGenieInputMode = () => {
+    setIsGenieComposerFocused(true)
+    setSelectedCanvasWidget(null)
+    if (genieInputModeTimeoutRef.current !== null) {
+      window.clearTimeout(genieInputModeTimeoutRef.current)
+    }
+    genieInputModeTimeoutRef.current = window.setTimeout(() => {
+      setIsGenieComposerFocused(false)
+      genieInputModeTimeoutRef.current = null
+    }, studioRuntimeConfig.suggestion.inputModeIdleMs)
   }
 
   const cancelGenieRequest = () => {
@@ -1477,10 +1724,36 @@ function App() {
               <div className="live-clock"><span /> LIVE&nbsp; 00:23:41</div>
             )}
           </div>
-          <div className="preview-mode-switch" role="tablist" aria-label="预览模式">
-            <button type="button" className={previewMode === 'mobile' ? 'selected' : ''} onClick={() => setPreviewMode('mobile')}>移动端预览</button>
-            <button type="button" className={previewMode === 'studio' ? 'selected' : ''} onClick={() => setPreviewMode('studio')}>Studio 视图</button>
-          </div>
+          {view === 'live' ? (
+            <div className="live-stage-mode-switch" role="tablist" aria-label="直播画面模式">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={liveStageMode === 'preview'}
+                className={liveStageMode === 'preview' ? 'selected' : ''}
+                onClick={() => {
+                  setSelectedCanvasWidget(null)
+                  setLiveStageMode('preview')
+                }}
+              >
+                <Eye size={14} />预览
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={liveStageMode === 'clean'}
+                className={liveStageMode === 'clean' ? 'selected' : ''}
+                onClick={() => setLiveStageMode('clean')}
+              >
+                <EyeOff size={14} />清屏
+              </button>
+            </div>
+          ) : (
+            <div className="preview-mode-switch" role="tablist" aria-label="预览模式">
+              <button type="button" className={previewMode === 'mobile' ? 'selected' : ''} onClick={() => setPreviewMode('mobile')}>移动端预览</button>
+              <button type="button" className={previewMode === 'studio' ? 'selected' : ''} onClick={() => setPreviewMode('studio')}>Studio 视图</button>
+            </div>
+          )}
           {canvasNotice && (
             <div className="task-save-notice" role="status">
               <Check size={15} />
@@ -1490,7 +1763,7 @@ function App() {
               </div>
             </div>
           )}
-          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} strategy={strategyCommentState === 'issue' ? demoStrategy : 'normal'} liveAdjustment={liveAdjustment} previewMode={previewMode} isPreviewing={isSuggestionPreview} audience={audienceSnapshot} isLive={view === 'live'} preliveTitle={streamTopic} preliveLayout={preliveLayout} stageBackgroundUrl={stageBackgroundUrl} bandLayout={bandLayoutActive} gameLayout={gameLayout} gameCameraOffset={gameCameraOffset} onGameCameraOffsetChange={setGameCameraOffset} chatWidgets={canvasWidgetsAvailable ? {
+          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} strategy={strategyCommentState === 'issue' ? demoStrategy : 'normal'} liveAdjustment={liveAdjustment} previewMode={previewMode} liveStageMode={liveStageMode} isPreviewing={isSuggestionPreview} audience={audienceSnapshot} isLive={view === 'live'} preliveTitle={streamTopic} preliveLayout={preliveLayout} stageBackgroundUrl={stageBackgroundUrl} bandLayout={bandLayoutActive} gameLayout={gameLayout} gameCameraOffset={gameCameraOffset} onGameCameraOffsetChange={setGameCameraOffset} chatWidgets={canvasWidgetsAvailable ? {
             text: chatTextEnabled ? chatTextValue : '',
             goalVisible: chatGoalEnabled,
             goal: { label: chatGoalTitle, current: 0, target: chatGoalTarget },
@@ -1529,41 +1802,73 @@ function App() {
               <div className="live-genie-heading">
                 <span><i />GENIE · READY TO ASSIST</span>
                 <div className="live-follow-status">
-                  <b>{suggestionQueue.length} 条建议</b>
-                  <span className="suggestion-sync-status"><i />每分钟同步</span>
+                  <b>
+                    {liveRightRailMode === 'canvas-config'
+                      ? '组件配置'
+                      : liveRightRailMode === 'components'
+                        ? `${atomicRecalledComponents.length} 个组件`
+                        : `${suggestionQueue.length} 条建议`}
+                  </b>
+                  <span className="suggestion-sync-status">
+                    <i />
+                    {liveRightRailMode === 'canvas-config'
+                      ? '上下文已同步'
+                      : liveRightRailMode === 'components'
+                        ? '输入交互中'
+                        : '实时监测'}
+                  </span>
                 </div>
               </div>
-              <section className="generated-suggestions" aria-label="实时生成建议">
+              <div
+                className={`live-right-rail-view mode-${liveRightRailMode}`}
+                key={liveRightRailMode}
+              >
+              {liveRightRailMode === 'canvas-config' ? (
+                <section className="live-canvas-widget-shell is-focused" aria-label="当前画布组件配置">
+                  <div className="component-recall-heading">
+                    <span><Target size={13} />当前画布组件</span>
+                    <b>配置与画布选择已同步</b>
+                    <button
+                      type="button"
+                      className="right-rail-back-button"
+                      onClick={() => setSelectedCanvasWidget(null)}
+                    >
+                      <ArrowLeft size={12} />
+                      返回实时建议
+                    </button>
+                  </div>
+                  {renderCanvasWidgetPanel(selectedCanvasWidget)}
+                </section>
+              ) : (
+                <>
+              {liveRightRailMode === 'overview' && (
+                <section className="generated-suggestions" aria-label="实时生成建议">
                 <div className="generated-suggestions-title">
                   <span>改进建议</span>
-                  <small>仅追加新建议，保留历史记录</small>
+                  <small>阈值触发 · 评论分析不超过 3 秒</small>
                 </div>
                 <div className="generated-suggestion-list" role="list">
-                  {suggestionQueue.map((suggestion) => (
+                  {suggestionQueue.map((suggestion) => {
+                    const presentation = getSuggestionPresentation(suggestion)
+                    return (
                     <article
                       aria-label={`${suggestion.metric}，建议：${suggestion.action}`}
                       className={[
                         'generated-suggestion',
                         `tone-${suggestion.tone}`,
                         suggestion.isNew ? 'is-new' : '',
-                        suggestion.widgets.length === 0 ? 'is-resolved' : '',
+                        (atomicComponentCountsBySuggestion.get(suggestion.queueId) ?? 0) === 0
+                          ? 'is-resolved'
+                          : '',
                       ].filter(Boolean).join(' ')}
                       key={suggestion.queueId}
                       role="listitem"
                     >
-                      <span className="suggestion-item-heading">
-                        <b>{suggestion.metric}</b>
-                        <em>
-                          {suggestion.widgets.length === 0
-                            ? '已应用'
-                            : suggestion.isNew
-                              ? '新增'
-                              : '待处理'}
-                        </em>
-                      </span>
-                      <span className="suggestion-item-description">{suggestion.action}</span>
+                      <b className="suggestion-action-title">{presentation.title}</b>
+                      <span className="suggestion-item-description">{presentation.reason}</span>
                     </article>
-                  ))}
+                    )
+                  })}
                   {suggestionQueue.length === 0 && (
                     <div className="suggestion-empty-state" role="status">
                       <Check size={15} />
@@ -1572,57 +1877,35 @@ function App() {
                   )}
                 </div>
               </section>
-              <div className="live-section-divider" />
-              <section className="live-recommendations" aria-label="建议对应组件">
+              )}
+              {liveRightRailMode === 'overview' && <div className="live-section-divider" />}
+              <section
+                className={`live-recommendations ${liveRightRailMode === 'components' ? 'is-components-only' : ''}`}
+                aria-label="建议对应组件"
+              >
                 <div className="component-recall-heading">
                   <span><Zap size={13} />对应组件</span>
-                  <b>全部建议的可操作组件</b>
-                  <small>{recalledComponents.length} 个待应用</small>
+                  <b>
+                    {liveRightRailMode === 'components'
+                      ? '选择需要的操作组件'
+                      : '全部建议的可操作组件'}
+                  </b>
+                  <small>{atomicRecalledComponents.length} 个待应用</small>
                 </div>
                 <div className="recalled-component-list">
-                  {recalledComponents.map(({
-                    componentId,
-                    suggestion,
-                    widgetIndex,
-                    widgetSpec,
-                  }) => (
+                  {atomicRecalledComponents.map((component) => (
                     <div
-                      className={`recalled-component-item ${removingComponentIds.has(componentId) ? 'is-removing' : ''}`}
-                      key={componentId}
+                      className={`recalled-component-item ${removingAtomicComponents.has(component.key) ? 'is-removing' : ''}`}
+                      key={component.key}
                     >
-                      <div className="component-source-heading">
-                        <span>{suggestion?.metric ?? 'Genie 对话建议'}</span>
-                        <small>{suggestion ? '实时监控召回' : '对话生成'}</small>
-                      </div>
-                      <WidgetRenderer
-                        spec={widgetSpec}
-                        applied={applied && removingComponentIds.has(componentId)}
-                        isPreviewing={isSuggestionPreview && previewingComponentId === componentId}
-                        onPreview={() => {
-                          setPreviewingComponentId(componentId)
-                          if (suggestion) {
-                            setScene(suggestion.scene)
-                            setIsPk(false)
-                          }
-                          previewSuggestion(widgetSpec)
-                        }}
-                        onApply={() => applySuggestion(
-                          widgetSpec,
-                          suggestion,
-                          componentId,
-                          widgetIndex,
-                        )}
-                        onUndo={() => {
-                          setPreviewingComponentId(null)
-                          undoSuggestion(widgetSpec)
-                        }}
-                        onAudioChange={updateAudioPreview}
-                        onVisualChange={updateVisualPreview}
-                        onCameraEffectsChange={updateCameraEffectsPreview}
+                      <AtomicRecallCard
+                        componentId={component.componentId}
+                        audience={audienceSnapshot}
+                        onApplied={() => scheduleAtomicRemoval(component.key)}
                       />
                     </div>
                   ))}
-                  {recalledComponents.length === 0 && (
+                  {atomicRecalledComponents.length === 0 && (
                     <div className="component-empty-state">
                       <LayoutTemplate size={18} />
                       <span>暂无待应用组件</span>
@@ -1630,15 +1913,9 @@ function App() {
                   )}
                 </div>
               </section>
-              {canvasWidgetsAvailable && (
-                <section className="live-canvas-widget-shell" aria-label="画布组件编辑">
-                  <div className="component-recall-heading">
-                    <span><Target size={13} />画布组件</span>
-                    <b>点击画布中的组件即可编辑或拖动</b>
-                  </div>
-                  {renderCanvasWidgetPanel(selectedCanvasWidget)}
-                </section>
+                </>
               )}
+              </div>
             </>
           ) : (
             <>
@@ -1745,9 +2022,31 @@ function App() {
               <button type="button" onClick={retryGenieRequest}><RotateCcw size={13} />重试</button>
             </div>
           )}
-          <form className="genie-composer" onSubmit={handleGenieSubmit}>
+          <form
+            className="genie-composer"
+            ref={genieComposerRef}
+            onSubmit={handleGenieSubmit}
+          >
             <div className="composer-field">
-              <input value={genieInput} onChange={(event) => setGenieInput(event.target.value)} placeholder="问 Genie：帮我调整一下…" aria-label="向 Genie 提问" />
+              <input
+                value={genieInput}
+                onChange={(event) => {
+                  const value = event.target.value
+                  setGenieInput(value)
+                  if (view === 'live') {
+                    setInputAtomicComponents(recallAtomicComponents({
+                      source: 'input',
+                      text: value,
+                    }).componentIds)
+                    setRightRailSource(value.trim() ? 'input' : 'trigger')
+                  }
+                  activateGenieInputMode()
+                }}
+                onFocus={activateGenieInputMode}
+                onBlur={() => setIsGenieComposerFocused(false)}
+                placeholder="问 Genie：帮我调整一下…"
+                aria-label="向 Genie 提问"
+              />
               <span>{genieRequestStatus === 'loading' ? '正在生成建议' : 'Enter 发送'}</span>
             </div>
             <button type="submit" disabled={!genieInput.trim() || genieRequestStatus === 'loading'} aria-label="发送消息">
@@ -1867,9 +2166,10 @@ type ChatCanvasWidgets = {
   onGoalOffsetChange: (offset: WidgetOffset) => void
 }
 
-function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, isPk, applied, scene, strategy, liveAdjustment, previewMode, isPreviewing, audience, isLive, preliveTitle, preliveLayout, stageBackgroundUrl, bandLayout, gameLayout, gameCameraOffset, onGameCameraOffsetChange, chatWidgets }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; displayStream: MediaStream | null; layoutEditing: boolean; isPk: boolean; applied: boolean; scene: Scene; strategy: AudienceStrategyId; liveAdjustment: LiveAdjustment | null; previewMode: PreviewMode; isPreviewing: boolean; audience: AudienceSnapshot; isLive: boolean; preliveTitle: string; preliveLayout: PreliveLayout; stageBackgroundUrl: string | null; bandLayout: boolean; gameLayout: 'vertical' | 'landscape' | null; gameCameraOffset: WidgetOffset; onGameCameraOffsetChange: (offset: WidgetOffset) => void; chatWidgets: ChatCanvasWidgets | null }) {
+function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, isPk, applied, scene, strategy, liveAdjustment, previewMode, liveStageMode, isPreviewing, audience, isLive, preliveTitle, preliveLayout, stageBackgroundUrl, bandLayout, gameLayout, gameCameraOffset, onGameCameraOffsetChange, chatWidgets }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; displayStream: MediaStream | null; layoutEditing: boolean; isPk: boolean; applied: boolean; scene: Scene; strategy: AudienceStrategyId; liveAdjustment: LiveAdjustment | null; previewMode: PreviewMode; liveStageMode: LiveStageMode; isPreviewing: boolean; audience: AudienceSnapshot; isLive: boolean; preliveTitle: string; preliveLayout: PreliveLayout; stageBackgroundUrl: string | null; bandLayout: boolean; gameLayout: 'vertical' | 'landscape' | null; gameCameraOffset: WidgetOffset; onGameCameraOffsetChange: (offset: WidgetOffset) => void; chatWidgets: ChatCanvasWidgets | null }) {
   const displayVideoRef = useRef<HTMLVideoElement>(null)
   const visualSettings = useStudioStore((state) => state.visualSettings)
+  const showAudiencePreview = isLive && liveStageMode === 'preview' && !isPk
   const previewStyle = {
     '--studio-video-filter': [
       `brightness(${visualSettings.brightness})`,
@@ -1895,7 +2195,7 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
     ? <video ref={displayVideoRef} autoPlay muted playsInline className="screen-feed" />
     : <DemoGameScreen />
 
-  return <div style={previewStyle} className={`live-stage ${applied ? 'applied' : ''} ${isPreviewing ? 'previewing' : ''} ${isPk ? 'pk-stage' : ''} scene-${scene} ${previewMode === 'studio' ? 'studio-preview' : 'mobile-preview'} ${bandLayout ? 'stage-band-layout' : ''} ${bandLayout && preliveLayout === 'stage' ? 'band-layout-wide' : ''} ${gameLayout ? `game-layout game-${gameLayout}-layout` : ''} ${!isLive ? `prelive-${preliveLayout}` : ''}`}>
+  return <div style={previewStyle} className={`live-stage ${applied ? 'applied' : ''} ${isPreviewing ? 'previewing' : ''} ${isPk ? 'pk-stage' : ''} scene-${scene} ${previewMode === 'studio' ? 'studio-preview' : 'mobile-preview'} ${bandLayout ? 'stage-band-layout' : ''} ${bandLayout && preliveLayout === 'stage' ? 'band-layout-wide' : ''} ${gameLayout ? `game-layout game-${gameLayout}-layout` : ''} ${!isLive ? `prelive-${preliveLayout}` : ''} ${showAudiencePreview ? 'audience-preview-mode' : 'clean-screen-mode'}`}>
     <div className="stage-glow" />
     <div className="scan-lines" />
     <div
@@ -1941,8 +2241,9 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
           ? <div className="camera-source">{renderCameraContent()}</div>
           : <DemoHost />}
       {previewMode === 'studio' && <div className="studio-guides"><i /><i /><i /></div>}
-      <div className="stage-label"><span />{isLive ? 'LIVE' : '林小满'}</div>
-      {!isPk && isLive && <><div className="viewer-bubble"><Users size={14} />{audience.viewerCount.toLocaleString()}</div><div className="stage-duration">00:42:18</div></>}
+      {!showAudiencePreview && <div className="stage-label"><span />{isLive ? 'LIVE' : '林小满'}</div>}
+      {!isPk && isLive && !showAudiencePreview && <><div className="viewer-bubble"><Users size={14} />{audience.viewerCount.toLocaleString()}</div><div className="stage-duration">00:42:18</div></>}
+      {showAudiencePreview && <AudiencePreviewOverlay audience={audience} />}
       {!isLive && <div className="prelive-stage-summary"><span>开播预览</span><b>{preliveTitle || '未填写直播标题'}</b><small>{preliveLayout === 'portrait' ? '全屏摄像头 · 单人竖屏 9:16' : preliveLayout === 'three-quarter' ? '3/5 摄像头 · 舞台背景' : preliveLayout === 'game-vertical' ? '竖屏摄像头 · 游戏投屏' : preliveLayout === 'game-landscape' ? '横屏投屏 · 悬浮摄像头' : '秀场舞台 · 中央 3/5 摄像头'}</small></div>}
       {applied && <div className="applied-badge"><Check size={13} />方案已应用</div>}
       {strategy === 'dim-light' && <div className="stage-hint"><Lightbulb size={14} />环境偏暗</div>}
@@ -1960,6 +2261,7 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
             onSelect={() => chatWidgets.onSelectWidget('text')}
             offset={chatWidgets.textOffset}
             onOffsetChange={chatWidgets.onTextOffsetChange}
+            editable={!showAudiencePreview}
           />
           {chatWidgets.goalVisible && (
             <CanvasGoalRing
@@ -1971,16 +2273,64 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
               onSelect={() => chatWidgets.onSelectWidget('goal')}
               offset={chatWidgets.goalOffset}
               onOffsetChange={chatWidgets.onGoalOffsetChange}
+              editable={!showAudiencePreview}
             />
           )}
         </>
       )}
     </div>
     {isPk && <><div className="pk-versus">VS</div><div className="opponent-stage"><DemoOpponent /><div className="stage-label opponent"><span />陈妍</div></div><div className="pk-scorebar"><div><b>8,740</b><span>林小满</span></div><strong>01:18</strong><div><b>10,000</b><span>陈妍</span></div></div></>}
-    {isLive && <div className="floating-comments">
+    {isLive && !showAudiencePreview && <div className="floating-comments">
       {audience.comments.slice(0, 2).map((comment) => <span key={comment.id}>{comment.text}</span>)}
     </div>}
   </div>
+}
+
+function AudiencePreviewOverlay({ audience }: { audience: AudienceSnapshot }) {
+  const recentGift = audience.gifts[0]
+  const recentComments = audience.comments.slice(-4)
+
+  return (
+    <div className="audience-preview-overlay" aria-label="观众端直播预览">
+      <header className="audience-preview-header">
+        <span className="audience-host-avatar">林</span>
+        <span className="audience-host-copy">
+          <b>林小满</b>
+          <small>♥ 99.9K</small>
+        </span>
+        <span className="audience-preview-count"><Users size={11} />{audience.viewerCount.toLocaleString()}</span>
+      </header>
+      <div className="audience-preview-badges">
+        <span>🔥 Daily ranking</span>
+        <span>🪙 157 / 299</span>
+        <span>LIVE Fest</span>
+      </div>
+      <div className="audience-preview-feed">
+        {recentGift && (
+          <div className="audience-preview-gift">
+            <i>{recentGift.icon}</i>
+            <span><b>{recentGift.userName}</b><small> sent {recentGift.giftName}</small></span>
+            <strong>×{recentGift.count}</strong>
+          </div>
+        )}
+        {recentComments.map((comment, index) => (
+          <div className="audience-preview-comment" key={comment.id}>
+            <i className={`avatar avatar-${(index % 4) + 1}`}>{comment.userName.slice(0, 1)}</i>
+            <span><b>{comment.userName}</b>{comment.text}</span>
+          </div>
+        ))}
+        <div className="audience-preview-entry">
+          <span>👋</span>
+          <small>{recentComments.at(-1)?.userName ?? '新观众'} joined</small>
+        </div>
+      </div>
+      <div className="audience-preview-actions" aria-hidden="true">
+        <span><Link2 size={14} /></span>
+        <span><Users size={14} /></span>
+        <span className="share-action"><Share2 size={14} /></span>
+      </div>
+    </div>
+  )
 }
 
 function DemoHost() {
@@ -2472,6 +2822,31 @@ function PreliveTaskCard({
     <Button className="primary-button full-button" color="primary" disabled={!canApply} onClick={onApply}><Check size={16} />{completed ? '更新当前设置' : task.action}</Button>
     <button className="card-text-button" type="button" onClick={onSkip}>跳过并稍后处理</button>
   </div>
+}
+
+function getSuggestionPresentation(suggestion: QueuedSuggestion): {
+  title: string
+  reason: string
+} {
+  const titles: Record<LiveSuggestion['signalId'], string> = {
+    exposure: '提高人物补光',
+    contrast: '优化画面对比度',
+    framing: '调整人脸构图',
+    fps: '降低画面负载',
+    microphone: '调整麦克风音量',
+    comments: '发起观众互动',
+    entrants: '承接新进观众',
+    retention: '提升新观众留存',
+    gifts: '设置互动目标',
+  }
+  const reason = suggestion.source === 'comment'
+    ? `评论区反馈：${suggestion.metric.replace(/^评论热点\s*·\s*/, '')}`
+    : `监控指标反馈：${suggestion.metric}`
+
+  return {
+    title: titles[suggestion.signalId],
+    reason,
+  }
 }
 
 export default App

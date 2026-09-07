@@ -75,10 +75,9 @@ export function LiveChatPanel({
               key={signal.id}
               title={`${signal.label} ${signal.value} ${signal.trendLabel}`}
             >
-              <Activity size={13} />
               <b>{signal.label}</b>
-              <i>
-                {signal.value} · {signal.trendLabel} {signal.direction === 'up' ? '↑' : '↓'}
+              <i aria-label={signal.direction === 'up' ? '上升' : '下降'}>
+                {signal.direction === 'up' ? '↑' : '↓'}
               </i>
             </span>
           ))

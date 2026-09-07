@@ -5,6 +5,8 @@ export interface QueuedSuggestion extends LiveSuggestion {
   queueId: string
   addedAt: number
   isNew: boolean
+  source: 'monitor' | 'comment'
+  triggerKey: string
   widgets: WidgetSpec[]
 }
 
@@ -16,7 +18,10 @@ export function appendNewSuggestions(
 ): QueuedSuggestion[] {
   const queuedSignalIds = new Set(
     queue
-      .filter((suggestion) => suggestion.widgets.length > 0)
+      .filter((suggestion) =>
+        suggestion.source === 'monitor' &&
+        suggestion.widgets.length > 0,
+      )
       .map((suggestion) => suggestion.signalId),
   )
   const additions = incoming
@@ -30,10 +35,40 @@ export function appendNewSuggestions(
       queueId: `${suggestion.signalId}-${addedAt}-${index}`,
       addedAt,
       isNew: true,
+      source: 'monitor' as const,
+      triggerKey: `monitor:${suggestion.signalId}`,
       widgets: [suggestion.widget],
     }))
 
   return additions.length > 0 ? [...queue, ...additions] : queue
+}
+
+export function appendTriggeredSuggestion(
+  queue: QueuedSuggestion[],
+  incoming: LiveSuggestion,
+  source: QueuedSuggestion['source'],
+  triggerKey: string,
+  addedAt = Date.now(),
+): QueuedSuggestion[] {
+  const alreadyQueued = queue.some((suggestion) =>
+    suggestion.source === source &&
+    suggestion.triggerKey === triggerKey &&
+    suggestion.widgets.length > 0,
+  )
+  if (incoming.tone === 'good' || alreadyQueued) return queue
+
+  return [
+    ...queue,
+    {
+      ...incoming,
+      queueId: `${source}-${triggerKey}-${addedAt}`,
+      addedAt,
+      isNew: true,
+      source,
+      triggerKey,
+      widgets: [incoming.widget],
+    },
+  ]
 }
 
 export function markSuggestionSeen(
