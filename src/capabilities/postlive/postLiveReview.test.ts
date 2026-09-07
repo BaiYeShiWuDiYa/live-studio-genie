@@ -44,8 +44,8 @@ describe('post-live review', () => {
     const report = createPostLiveReport({
       topic: '晚间唱歌聊天',
       streamType: 'music',
-      strategyId: 'cold-interaction',
-      strategyLabel: '互动转冷',
+      strategyId: 'cold-comments',
+      strategyLabel: '评论区转冷',
       durationSeconds: 120,
       audience,
       appliedSuggestionCount: 2,
@@ -61,10 +61,10 @@ describe('post-live review', () => {
 
   it('returns strategy-aware recommendations', () => {
     const report = createPostLiveReport({
-      topic: 'PK 冲刺',
+      topic: '礼物互动',
       streamType: 'chat',
-      strategyId: 'pk-push',
-      strategyLabel: 'PK 冲刺',
+      strategyId: 'gift-drop',
+      strategyLabel: '送礼减少',
       durationSeconds: 60,
       audience,
       appliedSuggestionCount: 1,
@@ -74,7 +74,7 @@ describe('post-live review', () => {
     const recommendations = getPostLiveRecommendations(report)
 
     expect(recommendations).toHaveLength(3)
-    expect(recommendations[0].title).toContain('目标进度')
+    expect(recommendations[0].title).toContain('LIVE Goal')
     expect(recommendations[2].detail).toContain('1 项建议')
   })
 
@@ -82,8 +82,8 @@ describe('post-live review', () => {
     const report = createPostLiveReport({
       topic: '游戏直播',
       streamType: 'game',
-      strategyId: 'network-lag',
-      strategyLabel: '网络卡顿',
+      strategyId: 'entrant-drop',
+      strategyLabel: '进房人数减少',
       durationSeconds: 90,
       audience,
       appliedSuggestionCount: 0,
@@ -91,7 +91,7 @@ describe('post-live review', () => {
     })
     const prompt = buildPostLiveAiPrompt(report, '下一场怎么减少卡顿？')
 
-    expect(prompt).toContain('演示策略：网络卡顿')
+    expect(prompt).toContain('演示策略：进房人数减少')
     expect(prompt).toContain('下一场怎么减少卡顿？')
     expect(prompt).toContain('不要虚构未提供的真实平台数据')
   })

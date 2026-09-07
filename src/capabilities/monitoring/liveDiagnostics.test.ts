@@ -5,6 +5,7 @@ import {
 } from '../audience/audienceEvents'
 import { idleMediaMetric, type MediaMetric } from './types'
 import { buildLiveDiagnostics } from './liveDiagnostics'
+import { audienceStrategies } from '../../config/audienceComments'
 
 const metric = (score: number, value = `${score}`): MediaMetric => ({
   score,
@@ -65,7 +66,7 @@ describe('live diagnostics', () => {
 
     expect(result.primaryScene).toBe('interaction')
     expect(result.suggestions[0].widget.type).toBe('audience-poll')
-    expect(result.suggestions[0].action).toBe('在新观众进房后的 10 秒内发布点歌选择题。')
+    expect(result.suggestions[0].action).toContain('参与入口')
     expect(result.suggestions[0].signalId).toBe(result.improvements[0].id)
   })
 
@@ -102,7 +103,7 @@ describe('live diagnostics', () => {
     )
 
     expect(commentSuggestion?.action)
-      .toBe('设置一个观众心愿互动环节，提升评论参与率。')
+      .toContain('轻量互动')
   })
 
   it('always exposes two ranked metrics in each section and one sentence per decline', () => {
@@ -134,7 +135,7 @@ describe('live diagnostics', () => {
 
     expect(result.suggestions[0].signalId).toBe('gifts')
     expect(result.suggestions[0].widget.type).toBe('live-goal')
-    expect(result.suggestions[0].action).toContain('阶段礼物目标')
+    expect(result.suggestions[0].action).toContain('阶段目标')
   })
 
   it('changes the recalled component as independent live signals change', () => {
@@ -145,7 +146,7 @@ describe('live diagnostics', () => {
     }
     const scenes = ([
       'dim-light',
-      'cold-interaction',
+      'cold-comments',
       'low-audio',
     ] as const).map((strategy) => buildLiveDiagnostics({
       mediaMetrics: disconnectedMedia,
@@ -160,18 +161,49 @@ describe('live diagnostics', () => {
     expect(scenes).toEqual(['quality', 'interaction', 'troubleshoot'])
   })
 
-  it('turns the network strategy into a frame-rate diagnosis', () => {
-    const result = buildLiveDiagnostics({
+  it('turns color cast and cluttered background into targeted diagnoses', () => {
+    const colorResult = buildLiveDiagnostics({
       mediaMetrics,
       audience: mockAudienceEventAdapter.getStrategySnapshot(
-        'network-lag',
+        'color-cast',
         false,
         20,
       ),
-      strategy: 'network-lag',
+      strategy: 'color-cast',
+    })
+    const backgroundResult = buildLiveDiagnostics({
+      mediaMetrics,
+      audience: mockAudienceEventAdapter.getStrategySnapshot(
+        'cluttered-background',
+        false,
+        20,
+      ),
+      strategy: 'cluttered-background',
     })
 
-    expect(result.improvements[0].id).toBe('fps')
-    expect(result.suggestions[0].action).toContain('30 fps')
+    expect(colorResult.improvements[0].id).toBe('color-accuracy')
+    expect(colorResult.suggestions[0].action).toContain('白平衡')
+    expect(backgroundResult.improvements[0].id).toBe('background-cleanliness')
+    expect(backgroundResult.suggestions[0].action).toContain('虚拟背景')
+  })
+
+  it('uses each scenario threshold to prioritize its primary suggestion', () => {
+    audienceStrategies.forEach((scenario) => {
+      const result = buildLiveDiagnostics({
+        mediaMetrics,
+        audience: mockAudienceEventAdapter.getStrategySnapshot(
+          scenario.id,
+          false,
+          20,
+        ),
+        strategy: scenario.id,
+      })
+
+      expect(scenario.monitoring.simulatedValue)
+        .toBeLessThan(scenario.monitoring.criticalBelow)
+      expect(result.improvements[0].id).toBe(scenario.primarySignal)
+      expect(result.suggestions[0].action).toBe(scenario.recommendation)
+      expect(result.suggestions[0].severity).toBe(96)
+    })
   })
 })

@@ -3,6 +3,10 @@ import type {
   CommentInsight,
 } from '../audience/audienceEvents'
 import { studioRuntimeConfig } from '../../config/studioRuntime'
+import {
+  getAudienceStrategy,
+  type AudienceStrategyId,
+} from '../../config/audienceComments'
 import type {
   LiveDiagnostics,
   LiveSuggestion,
@@ -43,6 +47,18 @@ export function selectThresholdChangedSuggestions(
     const trendDelta = Math.abs(currentSignal.trend - previousSignal.trend)
     return worsenedToBad || trendDelta >= threshold
   })
+}
+
+export function selectSuggestionsForStrategy(
+  suggestions: readonly LiveSuggestion[],
+  strategyId: AudienceStrategyId,
+): LiveSuggestion[] {
+  if (strategyId === 'normal') return [...suggestions]
+
+  const primarySignal = getAudienceStrategy(strategyId).primarySignal
+  return suggestions
+    .filter((suggestion) => suggestion.signalId === primarySignal)
+    .slice(0, 1)
 }
 
 export function createCommentInsightSuggestion(

@@ -1,13 +1,17 @@
 import { useMemo, useState } from 'react'
-import { Check, Plus, Trophy } from 'lucide-react'
+import { Check, Pencil, Plus, Save, Trophy, X } from 'lucide-react'
 import { useStudioStore } from '../../../store/studioStore'
 import type { AtomicPanelProps } from '../types'
 
 export function PollPanel({ onApplied }: AtomicPanelProps) {
   const publish = useStudioStore((state) => state.publishPoll)
   const poll = useStudioStore((state) => state.pollState)
-  const [question, setQuestion] = useState('接下来想看什么？')
-  const [options, setOptions] = useState(['继续当前内容', '换个主题'])
+  const [question, setQuestion] = useState(
+    () => poll.config?.question ?? '接下来想看什么？',
+  )
+  const [options, setOptions] = useState(
+    () => poll.config?.options ?? ['继续当前内容', '换个主题'],
+  )
   const votes = poll.votes.length ? poll.votes : [31, 19]
   const total = Math.max(1, votes.reduce((sum, value) => sum + value, 0))
 
@@ -25,8 +29,12 @@ export function PollPanel({ onApplied }: AtomicPanelProps) {
 export function GoalPanel({ onApplied }: AtomicPanelProps) {
   const publish = useStudioStore((state) => state.publishLiveGoal)
   const goal = useStudioStore((state) => state.liveGoalState)
-  const [label, setLabel] = useState('本场点赞目标')
-  const [target, setTarget] = useState(10000)
+  const [label, setLabel] = useState(
+    () => goal.config?.label ?? '本场点赞目标',
+  )
+  const [target, setTarget] = useState(
+    () => goal.config?.target ?? 10000,
+  )
   const current = goal.config?.current ?? 3280
   const progress = Math.min(100, Math.round(current / target * 100))
 
@@ -41,16 +49,81 @@ export function GoalPanel({ onApplied }: AtomicPanelProps) {
 }
 
 export function WishesPanel({ onApplied }: AtomicPanelProps) {
-  const [wishes, setWishes] = useState([
-    { id: 1, text: '唱一首轻快的歌', user: '柚子茶', done: false },
-    { id: 2, text: '分享今天的妆容', user: '甜甜圈', done: false },
-    { id: 3, text: '和新观众打招呼', user: '小宇同学', done: true },
-  ])
+  const publish = useStudioStore((state) => state.publishAudienceWishes)
+  const current = useStudioStore((state) => state.audienceWishesState)
+  const [wishes, setWishes] = useState(() => current.config
+    ? current.config.items.map((text, index) => ({
+        id: index + 1,
+        text,
+        user: ['柚子茶', '甜甜圈', '小宇同学'][index] ?? '观众',
+        done: false,
+      }))
+    : [
+        { id: 1, text: '唱一首轻快的歌', user: '柚子茶', done: false },
+        { id: 2, text: '分享今天的妆容', user: '甜甜圈', done: false },
+        { id: 3, text: '和新观众打招呼', user: '小宇同学', done: true },
+      ])
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [draft, setDraft] = useState('')
+
+  const beginEdit = (id: number, text: string) => {
+    setEditingId(id)
+    setDraft(text)
+  }
+  const cancelEdit = () => {
+    setEditingId(null)
+    setDraft('')
+  }
+  const saveEdit = () => {
+    const text = draft.trim()
+    if (editingId === null || !text) return
+    setWishes((items) => items.map((item) =>
+      item.id === editingId ? { ...item, text } : item,
+    ))
+    cancelEdit()
+  }
 
   return (
     <Panel title="观众心愿">
-      <div className="atomic-wish-list">{wishes.map((wish) => <button type="button" className={wish.done ? 'done' : ''} key={wish.id} onClick={() => setWishes((items) => items.map((item) => item.id === wish.id ? { ...item, done: !item.done } : item))}><span>{wish.text}<small>{wish.user}</small></span>{wish.done && <Check size={14} />}</button>)}</div>
-      <ApplyButton label="展示未完成心愿" onClick={() => onApplied?.('audience-wishes')} />
+      <div className="atomic-wish-list">
+        {wishes.map((wish) => (
+          <div className={`atomic-wish-row ${wish.done ? 'done' : ''}`} key={wish.id}>
+            {editingId === wish.id ? (
+              <>
+                <input
+                  value={draft}
+                  maxLength={40}
+                  autoFocus
+                  aria-label={`编辑${wish.user}的心愿`}
+                  onChange={(event) => setDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') saveEdit()
+                    if (event.key === 'Escape') cancelEdit()
+                  }}
+                />
+                <button type="button" className="atomic-icon-action" aria-label="保存心愿" title="保存" disabled={!draft.trim()} onClick={saveEdit}><Save size={13} /></button>
+                <button type="button" className="atomic-icon-action" aria-label="取消编辑" title="取消" onClick={cancelEdit}><X size={13} /></button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="atomic-wish-toggle" onClick={() => setWishes((items) => items.map((item) => item.id === wish.id ? { ...item, done: !item.done } : item))}>
+                  <span>{wish.text}<small>{wish.user}</small></span>
+                  {wish.done && <Check size={14} />}
+                </button>
+                <button type="button" className="atomic-icon-action" aria-label={`编辑心愿：${wish.text}`} title="编辑" onClick={() => beginEdit(wish.id, wish.text)}><Pencil size={13} /></button>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+      <ApplyButton label="展示未完成心愿" onClick={() => {
+        const items = wishes.filter((wish) => !wish.done).map((wish) => wish.text)
+        publish({
+          title: '观众心愿',
+          items: items.length ? items : wishes.map((wish) => wish.text),
+        })
+        onApplied?.('audience-wishes')
+      }} />
     </Panel>
   )
 }

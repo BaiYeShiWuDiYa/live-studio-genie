@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { studioRuntimeConfig } from '../../config/studioRuntime'
 import { useStudioStore } from '../../store/studioStore'
 
-export function LivePoll() {
+export function LivePoll({ onSelect }: { onSelect?: () => void }) {
   const pollState = useStudioStore((state) => state.pollState)
   const hidePoll = useStudioStore((state) => state.hidePoll)
   const votePoll = useStudioStore((state) => state.votePoll)
@@ -32,7 +32,19 @@ export function LivePoll() {
   const totalVotes = pollState.votes.reduce((total, count) => total + count, 0)
 
   return (
-    <div className={`live-poll ${pollState.status === 'preview' ? 'is-preview' : ''}`}>
+    <div
+      className={`live-poll ${pollState.status === 'preview' ? 'is-preview' : ''}`}
+      aria-label="观众投票组件"
+      tabIndex={0}
+      onPointerDown={(event) => {
+        event.stopPropagation()
+        onSelect?.()
+      }}
+      onClick={() => onSelect?.()}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') onSelect?.()
+      }}
+    >
       <span>{pollState.status === 'preview' ? '预览' : '点歌投票'} · {formatDuration(remainingSeconds)}</span>
       <strong>{pollState.config.question}</strong>
       <div>

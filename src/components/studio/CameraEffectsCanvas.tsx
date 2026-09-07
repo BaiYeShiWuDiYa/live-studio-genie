@@ -308,8 +308,16 @@ function drawProcessedFrame({
   } else if (settings.backgroundMode === 'image' && backgroundImage) {
     drawImageCover(context, backgroundImage, width, height)
   } else {
-    context.filter = 'blur(18px) brightness(0.72)'
-    context.drawImage(video, -24, -24, width + 48, height + 48)
+    const blurRadius = 4 + settings.backgroundBlur * 0.22
+    const bleed = Math.ceil(blurRadius * 1.4)
+    context.filter = `blur(${blurRadius}px) brightness(0.72)`
+    context.drawImage(
+      video,
+      -bleed,
+      -bleed,
+      width + bleed * 2,
+      height + bleed * 2,
+    )
     context.filter = 'none'
   }
 

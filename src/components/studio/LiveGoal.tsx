@@ -3,7 +3,7 @@ import { useEffect } from 'react'
 import { studioRuntimeConfig } from '../../config/studioRuntime'
 import { useStudioStore } from '../../store/studioStore'
 
-export function LiveGoal() {
+export function LiveGoal({ onSelect }: { onSelect?: () => void }) {
   const goalState = useStudioStore((state) => state.liveGoalState)
   const advanceGoal = useStudioStore((state) => state.advanceLiveGoal)
 
@@ -24,7 +24,19 @@ export function LiveGoal() {
   const complete = config.current >= config.target
 
   return (
-    <div className={`live-goal-overlay ${goalState.status === 'preview' ? 'is-preview' : ''} ${complete ? 'is-complete' : ''}`}>
+    <div
+      className={`live-goal-overlay ${goalState.status === 'preview' ? 'is-preview' : ''} ${complete ? 'is-complete' : ''}`}
+      aria-label="LIVE goal 组件"
+      tabIndex={0}
+      onPointerDown={(event) => {
+        event.stopPropagation()
+        onSelect?.()
+      }}
+      onClick={() => onSelect?.()}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') onSelect?.()
+      }}
+    >
       <div className="live-goal-heading">
         <Trophy size={15} />
         <span>{goalState.status === 'preview' ? '目标预览' : config.label}</span>

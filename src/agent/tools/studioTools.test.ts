@@ -84,6 +84,7 @@ describe('studio tool registry', () => {
       rosiness: 10,
       clarity: 12,
       backgroundMode: 'blur' as const,
+      backgroundBlur: 55,
       backgroundColor: '#163d38',
       backgroundImageUrl: null,
       backgroundPreset: null,

@@ -29,6 +29,10 @@ describe('camera effects', () => {
     })).toThrow()
     expect(() => cameraEffectsSchema.parse({
       ...recommendedCameraEffects,
+      backgroundBlur: 101,
+    })).toThrow()
+    expect(() => cameraEffectsSchema.parse({
+      ...recommendedCameraEffects,
       backgroundImageUrl: 'https://example.com/untrusted.jpg',
     })).toThrow()
     virtualBackgrounds.forEach(({ id }) => {

@@ -582,6 +582,12 @@
   color: #effffc;
 }
 
+.effect-mode-control.prop-modes button {
+  min-height: 34px;
+  display: grid;
+  place-items: center;
+}
+
 .effect-color-control {
   display: grid;
   grid-template-columns: 1fr 25px auto;
@@ -618,14 +624,16 @@
 
 .virtual-background-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
   margin: 8px 0 12px;
 }
 
 .virtual-background-grid button {
   position: relative;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
   overflow: hidden;
   padding: 0;
   border: 1px solid rgba(112, 130, 161, 0.3);
@@ -860,6 +868,64 @@
 .live-goal-overlay > button:disabled {
   cursor: default;
   opacity: 0.64;
+}
+
+.live-goal-overlay:focus-visible,
+.live-poll:focus-visible,
+.live-wishes-overlay:focus-visible {
+  outline: 2px solid #7ef0dc;
+  outline-offset: 2px;
+}
+
+.live-wishes-overlay {
+  position: absolute;
+  z-index: 6;
+  top: 184px;
+  right: 14px;
+  width: min(210px, calc(100% - 28px));
+  padding: 9px;
+  border: 1px solid rgba(240, 125, 165, 0.48);
+  border-radius: 7px;
+  background: rgba(47, 31, 48, 0.92);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+}
+
+.live-wishes-overlay > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  color: #ffc6dc;
+  font-size: 10px;
+}
+
+.live-wishes-overlay p {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  margin: 4px 0;
+  color: #f4e8ef;
+  font-size: 9px;
+}
+
+.live-wishes-overlay p i {
+  width: 17px;
+  height: 17px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(244, 116, 165, 0.18);
+  color: #ffb5d0;
+  font-style: normal;
+}
+
+.live-wishes-overlay p span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .canvas-widget {

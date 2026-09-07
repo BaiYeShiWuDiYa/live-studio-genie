@@ -474,7 +474,7 @@ Result: 13 test files and 57 tests passed. Production build completed with the e
 ### Configurable Audience Strategies
 
 - Added a strategy selector to the TikTok icon in the shared pre-live/live top bar.
-- Added normal, dim-light, low-audio, cold-interaction, network-lag, and PK-push Demo strategies.
+- Added the original normal, dim-light, low-audio, cold-interaction, network-lag, and PK-push Demo strategies.
 - Applied strategy-specific visual and audio settings before going live for deterministic demonstrations.
 - Added a configurable 15-second normal-comment warmup before strategy-specific feedback appears.
 - Added a configurable 10-second recovery phase after accepting the matching AI suggestion, followed by normal comments.
@@ -511,7 +511,7 @@ Result: 13 test files and 63 tests passed. Browser regression verified bottom-ap
 - 播中顶部新增“结束直播”入口，并提供包含直播时长、当前观看和已采纳建议数的二次确认。
 - 确认结束后停止摄像头、麦克风处理、游戏投屏和 BGM，冻结本场 Audience Snapshot。
 - 新增播后复盘页，展示总观看、峰值在线、新增粉丝、评论、礼物、留存和直播表现指数。
-- 根据正常、画面偏暗、声音偏小、互动转冷、网络卡顿、PK 冲刺策略生成对应经营建议。
+- 根据正常场景和七个典型问题场景生成对应经营建议。
 - 进入播后页后自动调用 Genie 生成深度总结；接口不可用时保留本地可复现的兜底分析。
 - 新增开放式输入框与快捷问题，主播可描述本场感受，并携带整场数据上下文继续追问下一场优化。
 - 新增 `postLiveReview` 数据聚合、建议生成、AI Prompt 和时长格式化测试。
@@ -519,6 +519,14 @@ Result: 13 test files and 63 tests passed. Browser regression verified bottom-ap
 - 播后页新增整场真实监控区域，展示平均业务值、平均/最低评分、异常占比和有效样本数。
 - 真实监控摘要已接入表现指数、经营建议、Genie 自动复盘和开放式追问上下文。
 - 新增 `docs/post-live-data-source-guide.md`，完整区分关播页真实监控、真实会话状态、Mock、派生和 AI 生成数据。
+
+### Typical Scenario Simulation
+
+- Renamed the top-left strategy selector to “典型场景”.
+- Replaced the previous demo choices with seven scenarios: dim screen, color cast, cluttered background, low audio, cold comments, reduced gifts, and reduced entrants.
+- Added scenario-specific visual overlays, monitoring baselines, LIVE Chat pools, actionable suggestions, recovery feedback, and atomic component recall.
+- Kept `normal` as the default live scenario and exposed it as the first selectable option.
+- Added regression coverage for the seven-item catalog and reduced gift/entrant simulations.
 
 Validation:
 
@@ -530,6 +538,73 @@ git diff --check
 ```
 
 Result: 18 test files and 100 tests passed. Browser regression verified the end-live confirmation, responsive post-live review, automatic AI summary, contextual follow-up response, and no-device monitoring fallback.
+
+Result: 16 test files and 93 tests passed. Production build completed with the existing large-chunk warning.
+
+### Scenario Intent And Recall Optimization
+
+- Added a single scenario model for recognizable symptoms, warning/critical thresholds, preferred components, friendly guidance, user utterances, and standard responses.
+- Added independent color-accuracy and background-cleanliness monitoring signals.
+- Added a dedicated color-adjustment atomic component with white-balance, color-temperature, and color-depth controls.
+- Enforced scenario-specific recall priority, including the five-component entrant-recovery sequence.
+- Generated seven structured few-shot samples directly from scenario configuration.
+- Updated the visible recommendation cards to show actionable guidance instead of metric-only copy.
+- Added coverage for all thresholds, component order, issue/recovery chat pools, and few-shot completeness.
+
+Validation:
+
+```bash
+npm test
+npm run build
+npm run lint
+git diff --check
+```
+
+Result: 16 test files and 102 tests passed. Production build completed with the existing large-chunk warning.
+
+### Live-only Scenario Isolation
+
+- Limited the seven typical scenarios to the live workspace.
+- Restored the pre-live default to the normal scene with no scenario overlay or simulated data.
+- Preserved pre-live visual and audio settings before going live and restored them when returning.
+- Made live scenario selection immediate while keeping the pre-live task flow unchanged.
+
+### Strict Scenario Right Rail
+
+- Added a single scenario whitelist at every suggestion queue entry point.
+- Limited each typical scene to one primary recommendation and its configured components.
+- Suspended comment-analysis suggestions while a typical scene is active.
+- Preserved the existing multi-signal and comment-analysis behavior in normal live mode.
+
+### Selectable Normal Scene
+
+- Added “正常场景” as the first live scene option and kept it as the automatic Go Live default.
+- Added deterministic natural variation for comments, entrants, retention, viewer growth, and gifts.
+- Added frequent low-value gifts, intermittent gift gaps, and occasional rare gifts with rotating audience names.
+- Restored multi-signal monitoring and comment-driven recommendations whenever normal scene is active.
+- Added regression coverage for the eight-option scene menu and normal audience distribution.
+
+### Shared Controls And Atomic Component UX
+
+- Rebuilt the shared range control with live fill progress, complete thumb travel, and correct negative-range handling.
+- Made automatic, soft, and stage lighting modes immediately update the live preview.
+- Added adjustable background blur, icon-only background/effect choices, and no-camera preview fallbacks.
+- Added immediate studio-template preview for visual and camera-effect settings.
+- Added editable audience wishes with save/cancel actions and a live canvas overlay.
+- Connected LIVE goal, audience poll, and audience wishes canvas clicks to their right-rail configuration panels.
+- Hid applied recommendation copy while preserving unrelated pending component actions.
+- Reduced the right-rail width and suggestion-area ratio, unified recommendation styling, and preserved complete recommendation text.
+
+Validation:
+
+```bash
+npm test
+npm run build
+npm run lint
+git diff --check
+```
+
+Result: 19 test files and 114 tests passed. Production build completed with the existing large-chunk warning.
 
 ## Next
 

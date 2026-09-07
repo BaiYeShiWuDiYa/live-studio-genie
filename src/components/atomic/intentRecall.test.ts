@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { recallAtomicComponents, type IntentFewShotExample } from './intentRecall'
+import { audienceStrategies } from '../../config/audienceComments'
+import {
+  recallAtomicComponents,
+  scenarioIntentFewShots,
+  type IntentFewShotExample,
+} from './intentRecall'
 
 describe('atomic component intent recall', () => {
   it('composes multiple components from a host input', () => {
@@ -22,8 +27,39 @@ describe('atomic component intent recall', () => {
     expect(result.componentIds).toEqual([
       'microphone',
       'live-goal',
-      'gift-ranking',
     ])
+  })
+
+  it('keeps the requested component priority for all seven scenarios', () => {
+    audienceStrategies.forEach((scenario) => {
+      const result = recallAtomicComponents({
+        source: 'monitor',
+        text: scenario.recommendation,
+        signalIds: [scenario.primarySignal],
+        strategyId: scenario.id,
+      })
+
+      expect(result.componentIds).toEqual(scenario.componentPriority)
+    })
+  })
+
+  it('does not let a secondary monitor signal override scenario components', () => {
+    expect(recallAtomicComponents({
+      source: 'monitor',
+      signalIds: ['retention'],
+      strategyId: 'entrant-drop',
+    }).componentIds).toEqual([])
+  })
+
+  it('exports seven complete scenario few-shot training samples', () => {
+    expect(scenarioIntentFewShots).toHaveLength(7)
+    scenarioIntentFewShots.forEach((example) => {
+      expect(example.sceneDescription).toBeTruthy()
+      expect(example.input).toBeTruthy()
+      expect(example.aliases?.length).toBeGreaterThanOrEqual(2)
+      expect(example.standardResponse).toMatch(/检测到/)
+      expect(example.componentIds.length).toBeGreaterThan(0)
+    })
   })
 
   it('supports external few-shot examples without changing recognition code', () => {

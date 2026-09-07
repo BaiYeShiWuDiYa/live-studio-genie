@@ -1,5 +1,17 @@
 import { ButtonV4 as Button } from '@byted/creator-ui'
-import { Check, Gift, RefreshCw, RotateCcw, Sparkles } from 'lucide-react'
+import {
+  Check,
+  Gamepad2,
+  Gift,
+  Glasses,
+  Heart,
+  House,
+  Music2,
+  RadioTower,
+  RefreshCw,
+  RotateCcw,
+  Sparkles,
+} from 'lucide-react'
 import { useState, type ComponentType } from 'react'
 import { widgetSpecSchema, type WidgetSpec } from '../../agent/widgets/widgetSpec'
 import type { AudioSettings } from '../../capabilities/audio/types'
@@ -16,6 +28,7 @@ import {
   getMatchingCameraMakeupPresetId,
   virtualBackgrounds,
   type CameraEffects,
+  type VirtualBackground,
 } from '../../capabilities/video/cameraEffects'
 import { useStudioStore } from '../../store/studioStore'
 import { Adjustment } from './Adjustment'
@@ -234,22 +247,23 @@ export function CameraEffectsWidget({
           {activeSection === 'bundle' && <p className="effect-section-label">人脸道具</p>}
         <div className="effect-mode-control prop-modes" role="group" aria-label="道具方案">
           {([
-            ['none', '无道具'],
-            ['sparkles', '星光'],
-            ['glasses', '眼镜'],
-            ['sunglasses', '黑色墨镜'],
-            ['heart-sticker', '爱心贴纸'],
-            ['cheek-stars', '星星贴纸'],
-            ['butterfly-sticker', '蝴蝶贴纸'],
-            ['lightning-sticker', '闪电贴纸'],
+            ['sparkles', '星光', Sparkles],
+            ['glasses', '眼镜', Glasses],
+            ['heart-sticker', '爱心', Heart],
           ] as const).map(([faceEffect, label]) => (
             <button
               type="button"
               className={settings.faceEffect === faceEffect ? 'selected' : ''}
               key={faceEffect}
+              title={label}
+              aria-label={label}
               onClick={() => update({ faceEffect })}
             >
-              {label}
+              {faceEffect === 'sparkles'
+                ? <Sparkles size={16} />
+                : faceEffect === 'glasses'
+                  ? <Glasses size={16} />
+                  : <Heart size={16} />}
             </button>
           ))}
         </div>
@@ -258,63 +272,57 @@ export function CameraEffectsWidget({
       {(activeSection === 'bundle' || activeSection === 'background') && (
         <>
           {activeSection === 'bundle' && <p className="effect-section-label">虚拟背景</p>}
-          <div className="effect-mode-control background-modes" role="group" aria-label="虚拟背景模式">
-            {([
-              ['none', '原始'],
-              ['blur', '虚化'],
-              ['color', '纯色'],
-            ] as const).map(([mode, label]) => (
-              <button
-                type="button"
-                className={settings.backgroundMode === mode ? 'selected' : ''}
-                key={mode}
-                onClick={() => update({ backgroundMode: mode })}
-              >
-                {label}
-              </button>
-            ))}
+          <div className="adjustments">
+            <Adjustment
+              label="虚化"
+              max={100}
+              value={`${settings.backgroundMode === 'blur' ? settings.backgroundBlur : 0}%`}
+              onChange={(backgroundBlur) => update({
+                backgroundBlur,
+                backgroundMode: backgroundBlur === 0 ? 'none' : 'blur',
+              })}
+            />
           </div>
-          {settings.backgroundMode === 'color' && (
-            <label className="effect-color-control">
-              <span>背景颜色</span>
-              <input
-                type="color"
-                value={settings.backgroundColor}
-                onChange={(event) => update({ backgroundColor: event.target.value })}
-                aria-label="背景颜色"
-              />
-              <b>{settings.backgroundColor.toUpperCase()}</b>
-            </label>
-          )}
           <div className="virtual-background-grid" role="group" aria-label="预置虚拟背景">
-            {virtualBackgrounds.map((background) => (
-              <button
-                type="button"
-                className={
-                  settings.backgroundMode === 'image' &&
-                  settings.backgroundPreset === background.id
-                    ? 'selected'
-                    : ''
-                }
-                key={background.id}
-                onClick={() => update({
-                  backgroundMode: 'image',
-                  backgroundImageUrl: null,
-                  backgroundPreset: background.id,
-                })}
-              >
-                <span
-                  className={`virtual-background-preview ${background.id}`}
-                  aria-hidden="true"
-                />
-                <span>{background.label}</span>
-              </button>
-            ))}
+            {virtualBackgrounds.map((background) => {
+              const Icon = virtualBackgroundIcon(background.id)
+              return (
+                <button
+                  type="button"
+                  className={
+                    settings.backgroundMode === 'image' &&
+                    settings.backgroundPreset === background.id
+                      ? 'selected'
+                      : ''
+                  }
+                  key={background.id}
+                  title={background.label}
+                  aria-label={background.label}
+                  onClick={() => update({
+                    backgroundMode: 'image',
+                    backgroundImageUrl: null,
+                    backgroundPreset: background.id,
+                  })}
+                >
+                  <Icon size={17} />
+                </button>
+              )
+            })}
           </div>
         </>
       )}
     </>
   )
+}
+
+function virtualBackgroundIcon(background: VirtualBackground) {
+  const icons: Record<VirtualBackground, typeof RadioTower> = {
+    'neon-studio': RadioTower,
+    'music-room': Music2,
+    'cyber-arena': Gamepad2,
+    'creator-loft': House,
+  }
+  return icons[background]
 }
 
 function EffectSwatches({
@@ -369,9 +377,9 @@ function VisualAdjustmentWidget({ spec, applied, isPreviewing, onVisualChange }:
   const settings = applied || isPreviewing ? visualSettings : spec.props.settings
   return (
     <div className="adjustments">
-      <Adjustment label="补光" value={`+${Math.round((settings.brightness - 1) * 100)}`} onChange={(value) => onVisualChange('brightness', value)} />
-      <Adjustment label="对比度" value={`+${Math.round((settings.contrast - 1) * 100)}`} onChange={(value) => onVisualChange('contrast', value)} />
-      <Adjustment label="暖色" value={`+${Math.round(settings.warmth * 100)}`} onChange={(value) => onVisualChange('warmth', value)} />
+      <Adjustment label="补光" min={-40} max={60} value={`${withSign(Math.round((settings.brightness - 1) * 100))}%`} onChange={(value) => onVisualChange('brightness', value)} />
+      <Adjustment label="对比度" min={-40} max={60} value={`${withSign(Math.round((settings.contrast - 1) * 100))}%`} onChange={(value) => onVisualChange('contrast', value)} />
+      <Adjustment label="暖色" max={60} value={`${withSign(Math.round(settings.warmth * 100))}%`} onChange={(value) => onVisualChange('warmth', value)} />
     </div>
   )
 }

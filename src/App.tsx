@@ -14,6 +14,7 @@ import {
   Eye,
   EyeOff,
   Gamepad2,
+  Gift,
   History,
   LayoutTemplate,
   Link2,
@@ -24,6 +25,8 @@ import {
   MessageCircle,
   MonitorUp,
   Music2,
+  Palette,
+  PanelsTopLeft,
   Play,
   Plus,
   RotateCcw,
@@ -34,9 +37,9 @@ import {
   Target,
   Type,
   Upload,
+  UserMinus,
   Users,
   WandSparkles,
-  WifiOff,
   X,
   Zap,
 } from 'lucide-react'
@@ -67,6 +70,7 @@ import {
 import {
   createCommentInsightSuggestion,
   rightRailUpdateConfig,
+  selectSuggestionsForStrategy,
   selectThresholdChangedSuggestions,
 } from './capabilities/monitoring/rightRailUpdates'
 import {
@@ -110,6 +114,7 @@ import { EditableCameraLayer } from './components/studio/EditableCameraLayer'
 import { LiveGoal } from './components/studio/LiveGoal'
 import { LivePoll } from './components/studio/LivePoll'
 import { PostLiveReview } from './components/studio/PostLiveReview'
+import { LiveWishes } from './components/studio/LiveWishes'
 import { CanvasGoalRing, CanvasTextSource } from './components/studio/PreliveCanvasWidgets'
 import {
   defaultCanvasTextStyle,
@@ -121,7 +126,7 @@ import { AtomicRecallCard } from './components/atomic/AtomicRecallCard'
 import { recallAtomicComponents } from './components/atomic/intentRecall'
 import type { AtomicComponentId } from './components/atomic/types'
 import {
-  audienceStrategies,
+  audienceSceneOptions,
   doesSuggestionResolveStrategy,
   getAudienceStrategy,
   type AudienceStrategyId,
@@ -266,6 +271,10 @@ const textColorOptions = [
   { id: 'purple', label: '紫色', value: '#c9a6ff' },
 ] as const
 type CanvasWidgetKind = 'text' | 'goal'
+type LiveCanvasComponentId = Extract<
+  AtomicComponentId,
+  'live-goal' | 'audience-poll' | 'audience-wishes'
+>
 
 function getPreviewModeForLayout(layout: PreliveLayout): PreviewMode {
   return layout === 'stage' || layout === 'game-landscape' ? 'studio' : 'mobile'
@@ -292,7 +301,7 @@ const widgetProtocol = [
   'visual-adjustment，props.settings 包含 brightness(0.6-1.6)、contrast(0.6-1.6)、warmth(0-0.6)。',
   'audience-poll，props 包含 question、options(2-4项)、durationSeconds(15-180)。',
   'audio-adjustment，props 包含 microphoneGain(-20到20)、backgroundMusicGain(-20到20)。',
-  'camera-effects，props.settings 可只返回要修改的字段：smoothness(0-100)、exposure(-20到30)、warmth(0-40)、contrast(-20到40)、saturation(-30到50)、whitening/rosiness/clarity(0-100)、backgroundMode(none/blur/color/image)、backgroundPreset(neon-studio/music-room/cyber-arena/creator-loft)、backgroundColor、faceEffect(none/sparkles/glasses/sunglasses/heart-sticker/cheek-stars/butterfly-sticker/lightning-sticker)，以及 lipstick/blush/eyeshadow 的 Intensity(0-100) 和 Color、eyelinerIntensity(0-100)、highlightIntensity(0-100)。',
+  'camera-effects，props.settings 可只返回要修改的字段：smoothness(0-100)、exposure(-20到30)、warmth(0-40)、contrast(-20到40)、saturation(-30到50)、whitening/rosiness/clarity(0-100)、backgroundMode(none/blur/color/image)、backgroundBlur(0-100)、backgroundPreset(neon-studio/music-room/cyber-arena/creator-loft)、backgroundColor、faceEffect(none/sparkles/glasses/heart-sticker)，以及 lipstick/blush/eyeshadow 的 Intensity(0-100) 和 Color、eyelinerIntensity(0-100)、highlightIntensity(0-100)。',
   'live-goal，props 包含 label、current、target、supporters。',
 ].join('\n')
 
@@ -309,6 +318,7 @@ function App() {
   )
   const [scene, setScene] = useState<Scene>('quality')
   const [demoStrategy, setDemoStrategy] = useState<AudienceStrategyId>('normal')
+  const [strategyRevision, setStrategyRevision] = useState(0)
   const [strategyMenuOpen, setStrategyMenuOpen] = useState(false)
   const [isPk, setIsPk] = useState(false)
   const [applied, setApplied] = useState(false)
@@ -342,6 +352,8 @@ function App() {
   const [customStageBackground, setCustomStageBackground] = useState<string | null>(null)
   const [stageBackgroundUploadError, setStageBackgroundUploadError] = useState('')
   const [selectedCanvasWidget, setSelectedCanvasWidget] = useState<CanvasWidgetKind | null>(null)
+  const [selectedLiveComponent, setSelectedLiveComponent] =
+    useState<LiveCanvasComponentId | null>(null)
   const [chatTextOffset, setChatTextOffset] = useState<WidgetOffset>({ x: 0, y: 0 })
   const [chatGoalOffset, setChatGoalOffset] = useState<WidgetOffset>({ x: 0, y: 0 })
   const [gameCameraOffset, setGameCameraOffset] = useState<WidgetOffset>({ x: 0, y: 0 })
@@ -394,6 +406,9 @@ function App() {
   const genieComposerRef = useRef<HTMLFormElement>(null)
   const genieInputModeTimeoutRef = useRef<number | null>(null)
   const strategyRecoveryTimeoutRef = useRef<number | null>(null)
+  const preliveVisualSettingsRef = useRef<VisualSettings | null>(null)
+  const preliveAudioSettingsRef = useRef<AudioSettings | null>(null)
+  const preliveSceneRef = useRef<Scene>('quality')
   const genieAbortRef = useRef<AbortController | null>(null)
   const lastGenieRequestRef = useRef<{ question: string; prompt: string } | null>(null)
   const postLiveAbortRef = useRef<AbortController | null>(null)
@@ -503,6 +518,9 @@ function App() {
     scene,
   ])
   const [suggestionQueue, setSuggestionQueue] = useState<QueuedSuggestion[]>([])
+  const [hiddenSuggestionIds, setHiddenSuggestionIds] = useState<Set<string>>(
+    new Set(),
+  )
   const suggestionQueueRef = useRef(suggestionQueue)
   const latestDiagnosticsRef = useRef(diagnostics)
   const previousDiagnosticsRef = useRef<LiveDiagnostics | null>(null)
@@ -521,6 +539,9 @@ function App() {
       widgetIndex,
       widgetSpec,
     })),
+  )
+  const visibleSuggestionQueue = suggestionQueue.filter(
+    (suggestion) => !hiddenSuggestionIds.has(suggestion.queueId),
   )
   const recalledComponents = [
     ...(agentWidgetSpec
@@ -547,6 +568,7 @@ function App() {
           source: suggestion.source,
           text: `${suggestion.metric} ${suggestion.action}`,
           signalIds: [suggestion.signalId],
+          strategyId: demoStrategy,
         }).componentIds.map((componentId) => ({
           key: `${suggestion.queueId}-${componentId}`,
           componentId,
@@ -580,7 +602,7 @@ function App() {
   const activeWidgetSpec = agentWidgetSpec
     ?? recalledComponents[0]?.widgetSpec
     ?? getSceneWidgetSpec(scene)
-  const liveRightRailMode = selectedCanvasWidget
+  const liveRightRailMode = selectedCanvasWidget || selectedLiveComponent
     ? 'canvas-config'
     : rightRailSource === 'input'
       ? 'components'
@@ -608,10 +630,13 @@ function App() {
       return
     }
 
-    const changedSuggestions = selectThresholdChangedSuggestions(
-      previous,
-      diagnostics,
-      rightRailUpdateConfig.metricTrendDeltaThreshold,
+    const changedSuggestions = selectSuggestionsForStrategy(
+      selectThresholdChangedSuggestions(
+        previous,
+        diagnostics,
+        rightRailUpdateConfig.metricTrendDeltaThreshold,
+      ),
+      demoStrategy,
     )
     if (changedSuggestions.length === 0) return
 
@@ -629,10 +654,14 @@ function App() {
     setRightRailSource('trigger')
     setSuggestionQueue(nextQueue)
     lastMetricUpdateAtRef.current = now
-  }, [diagnostics, strategyWarmupActive, view])
+  }, [demoStrategy, diagnostics, strategyWarmupActive, view])
 
   useEffect(() => {
-    if (view !== 'live') {
+    if (
+      view !== 'live' ||
+      strategyWarmupActive ||
+      demoStrategy !== 'normal'
+    ) {
       if (commentAnalysisTimeoutRef.current !== null) {
         window.clearTimeout(commentAnalysisTimeoutRef.current)
         commentAnalysisTimeoutRef.current = null
@@ -686,7 +715,12 @@ function App() {
       setSuggestionQueue(nextQueue)
       commentTriggerTimesRef.current.set(triggerKey, now)
     }, rightRailUpdateConfig.commentAnalysisDelayMs)
-  }, [audienceSnapshot.comments, view])
+  }, [
+    audienceSnapshot.comments,
+    demoStrategy,
+    strategyWarmupActive,
+    view,
+  ])
 
   useEffect(() => {
     if (view !== 'live') return
@@ -748,9 +782,13 @@ function App() {
     if (strategyWarmupActive || strategyActivatedRef.current) return
 
     const currentQueue = suggestionQueueRef.current
+    const strategySuggestions = selectSuggestionsForStrategy(
+      latestDiagnosticsRef.current.suggestions,
+      demoStrategy,
+    )
     const nextQueue = appendNewSuggestions(
       currentQueue,
-      latestDiagnosticsRef.current.suggestions,
+      strategySuggestions,
       dismissedSignalIdsRef.current,
     )
     if (nextQueue !== currentQueue) {
@@ -759,7 +797,13 @@ function App() {
       setSuggestionQueue(nextQueue)
     }
     strategyActivatedRef.current = true
-  }, [activeAudienceStrategy, strategyWarmupActive, view])
+  }, [
+    activeAudienceStrategy,
+    demoStrategy,
+    strategyRevision,
+    strategyWarmupActive,
+    view,
+  ])
 
   useEffect(() => {
     if (view !== 'live') return
@@ -767,7 +811,10 @@ function App() {
     let nextSyncAt = Date.now() + studioRuntimeConfig.suggestion.syncIntervalMs
     let timeoutId = 0
     const synchronizeSuggestions = () => {
-      const incoming = latestDiagnosticsRef.current.suggestions
+      const incoming = selectSuggestionsForStrategy(
+        latestDiagnosticsRef.current.suggestions,
+        demoStrategy,
+      )
       const activeSignalIds = new Set(incoming.map((suggestion) => suggestion.signalId))
       dismissedSignalIdsRef.current.forEach((signalId) => {
         if (!activeSignalIds.has(signalId)) {
@@ -792,7 +839,7 @@ function App() {
       Math.max(0, nextSyncAt - Date.now()),
     )
     return () => window.clearTimeout(timeoutId)
-  }, [view])
+  }, [demoStrategy, view])
 
   useEffect(() => {
     return () => stopMediaStream(mediaStream)
@@ -939,6 +986,7 @@ function App() {
     studioToolRegistry.execute('studio.reset_camera_effects_preview', {}, studioToolContext)
     setAgentWidgetSpec(null)
     setSelectedCanvasWidget(null)
+    setSelectedLiveComponent(null)
     setScene(nextScene)
     setApplied(false)
     setIsSuggestionPreview(false)
@@ -951,20 +999,25 @@ function App() {
   }
 
   const selectDemoStrategy = (strategyId: AudienceStrategyId) => {
+    if (view !== 'live') return
     const strategy = getAudienceStrategy(strategyId)
     if (strategyRecoveryTimeoutRef.current !== null) {
       window.clearTimeout(strategyRecoveryTimeoutRef.current)
       strategyRecoveryTimeoutRef.current = null
     }
     setDemoStrategy(strategyId)
+    setStrategyRevision((revision) => revision + 1)
     setStrategyCommentState('issue')
+    setStrategyWarmupComplete(true)
     setStrategyMenuOpen(false)
     setScene(strategy.scene)
     setIsPk(view === 'live' && strategy.scene === 'pk')
     setApplied(false)
     setAgentWidgetSpec(null)
     setSelectedCanvasWidget(null)
+    setSelectedLiveComponent(null)
     setSuggestionQueue([])
+    setHiddenSuggestionIds(new Set())
     setInputAtomicComponents([])
     setRightRailSource('trigger')
     setDismissedAtomicComponents(new Set())
@@ -1121,6 +1174,19 @@ function App() {
       : 'landscape'
     : null
 
+  const selectCanvasWidget = (widget: CanvasWidgetKind | null) => {
+    setSelectedCanvasWidget(widget)
+    if (widget) setSelectedLiveComponent(null)
+  }
+
+  const selectLiveComponent = (component: LiveCanvasComponentId | null) => {
+    setSelectedLiveComponent(component)
+    if (component) {
+      setSelectedCanvasWidget(null)
+      setRightRailSource('trigger')
+    }
+  }
+
   const renderCanvasWidgetPanel = (selectedWidget: CanvasWidgetKind | null) => (
     <CanvasWidgetPanel
       selectedWidget={selectedWidget}
@@ -1230,7 +1296,13 @@ function App() {
     removalTimeoutsRef.current.set(componentId, timeoutId)
   }
 
-  const scheduleAtomicRemoval = (componentKey: string) => {
+  const scheduleAtomicRemoval = (
+    componentKey: string,
+    suggestionId: string | null = null,
+  ) => {
+    if (suggestionId) {
+      setHiddenSuggestionIds((current) => new Set(current).add(suggestionId))
+    }
     setRemovingAtomicComponents((current) => new Set(current).add(componentKey))
     window.setTimeout(() => {
       setDismissedAtomicComponents((current) => new Set(current).add(componentKey))
@@ -1415,6 +1487,11 @@ function App() {
     }
     saveLastLiveConfig(lastConfig)
     setLastLiveConfig(lastConfig)
+    preliveVisualSettingsRef.current =
+      useStudioStore.getState().committedVisualSettings
+    preliveAudioSettingsRef.current =
+      useStudioStore.getState().committedAudioSettings
+    preliveSceneRef.current = scene
     if (prelivePollEnabled) {
       studioToolRegistry.execute('studio.configure_poll', {
         mode: 'apply',
@@ -1430,7 +1507,8 @@ function App() {
     liveSessionMetricsRef.current =
       createLiveSessionMetricsAccumulator(mediaMetrics)
     setStrategyWarmupComplete(false)
-    setStrategyCommentState('issue')
+    setDemoStrategy('normal')
+    setStrategyCommentState('normal')
     if (strategyRecoveryTimeoutRef.current !== null) {
       window.clearTimeout(strategyRecoveryTimeoutRef.current)
       strategyRecoveryTimeoutRef.current = null
@@ -1438,6 +1516,7 @@ function App() {
     setScene(selectedStrategy.scene)
     setIsPk(selectedStrategy.scene === 'pk')
     setSuggestionQueue([])
+    setHiddenSuggestionIds(new Set())
     setInputAtomicComponents([])
     setRightRailSource('trigger')
     setDismissedAtomicComponents(new Set())
@@ -1452,8 +1531,34 @@ function App() {
     strategyActivatedRef.current = false
     setApplied(false)
     setSelectedCanvasWidget(null)
+    setSelectedLiveComponent(null)
     setLiveStageMode('preview')
     setView('live')
+  }
+
+  const returnToPrelive = () => {
+    const normalStrategy = getAudienceStrategy('normal')
+    applyVisualSettings(
+      preliveVisualSettingsRef.current ?? normalStrategy.visualSettings,
+    )
+    applyAudioSettings(
+      preliveAudioSettingsRef.current ?? normalStrategy.audioSettings,
+    )
+    setScene(preliveSceneRef.current)
+    setDemoStrategy('normal')
+    setStrategyCommentState('normal')
+    setStrategyWarmupComplete(false)
+    setStrategyMenuOpen(false)
+    setSuggestionQueue([])
+    setHiddenSuggestionIds(new Set())
+    setInputAtomicComponents([])
+    setDismissedAtomicComponents(new Set())
+    setRemovingAtomicComponents(new Set())
+    setIsPk(false)
+    setApplied(false)
+    setLiveAdjustment(null)
+    setSelectedLiveComponent(null)
+    setView('prelive')
   }
 
   const undoSuggestion = (widgetSpec: WidgetSpec = activeWidgetSpec) => {
@@ -1518,6 +1623,7 @@ function App() {
   const openCameraEffects = () => {
     studioToolRegistry.execute('studio.reset_camera_effects_preview', {}, studioToolContext)
     setSelectedCanvasWidget(null)
+    setSelectedLiveComponent(null)
     setAgentWidgetSpec(getCameraEffectsWidgetSpec())
     setApplied(false)
     setIsSuggestionPreview(false)
@@ -1638,7 +1744,7 @@ function App() {
         backgroundImageUrl: studioState.cameraEffects.backgroundImageUrl ? 'local-image' : null,
       })}`,
       '涉及美颜、美妆或道具时必须返回 camera-effects 组件。settings 只需返回要修改的字段，未提及字段保持当前值。',
-      '可用道具仅限 none、sparkles、glasses、sunglasses、heart-sticker、cheek-stars、butterfly-sticker、lightning-sticker；不要生成图片 URL 或未注册的效果。',
+      '可用道具仅限 none、sparkles、glasses、heart-sticker；不要生成图片 URL 或未注册的效果。',
     ].join('\n')
     const prompt = [
       '你是 LIVE Studio Genie，一名专业、简洁的中文直播间助手。',
@@ -1655,6 +1761,7 @@ function App() {
   const activateGenieInputMode = () => {
     setIsGenieComposerFocused(true)
     setSelectedCanvasWidget(null)
+    setSelectedLiveComponent(null)
     if (genieInputModeTimeoutRef.current !== null) {
       window.clearTimeout(genieInputModeTimeoutRef.current)
     }
@@ -1908,45 +2015,51 @@ function App() {
       )}
       <header className="topbar">
         <div className="live-brand">
-          <div className="strategy-selector" ref={strategySelectorRef}>
-            <button
-              className={`live-brand-mark strategy-trigger ${strategyMenuOpen ? 'active' : ''}`}
-              type="button"
-              aria-label={`演示策略：${selectedStrategy.label}`}
-              aria-expanded={strategyMenuOpen}
-              aria-haspopup="menu"
-              title={`演示策略：${selectedStrategy.label}`}
-              onClick={() => setStrategyMenuOpen((open) => !open)}
-            >
-              <Music2 size={17} />
-              <i />
-            </button>
-            {strategyMenuOpen && (
-              <div className="strategy-menu" role="menu" aria-label="选择演示策略">
-                <div className="strategy-menu-heading">
-                  <span>演示策略</span>
-                  <small>开播后前 {studioRuntimeConfig.audience.strategyWarmupDurationMs / 1000} 秒使用正常评论</small>
+          {view === 'live' ? (
+            <div className="strategy-selector" ref={strategySelectorRef}>
+              <button
+                className={`live-brand-mark strategy-trigger ${strategyMenuOpen ? 'active' : ''}`}
+                type="button"
+                aria-label={`典型场景：${selectedStrategy.label}`}
+                aria-expanded={strategyMenuOpen}
+                aria-haspopup="menu"
+                title={`典型场景：${selectedStrategy.label}`}
+                onClick={() => setStrategyMenuOpen((open) => !open)}
+              >
+                <Music2 size={17} />
+                <i />
+              </button>
+              {strategyMenuOpen && (
+                <div className="strategy-menu" role="menu" aria-label="选择典型场景">
+                  <div className="strategy-menu-heading">
+                    <span>典型场景</span>
+                    <small>选择后同步模拟画面、指标、聊天、建议与组件</small>
+                  </div>
+                  {audienceSceneOptions.map((strategy) => (
+                    <button
+                      className={demoStrategy === strategy.id ? 'selected' : ''}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={demoStrategy === strategy.id}
+                      key={strategy.id}
+                      onClick={() => selectDemoStrategy(strategy.id)}
+                    >
+                      <StrategyIcon strategyId={strategy.id} />
+                      <span>
+                        <b>{strategy.label}</b>
+                        <small>{strategy.description}</small>
+                      </span>
+                      {demoStrategy === strategy.id && <Check size={14} />}
+                    </button>
+                  ))}
                 </div>
-                {audienceStrategies.map((strategy) => (
-                  <button
-                    className={demoStrategy === strategy.id ? 'selected' : ''}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={demoStrategy === strategy.id}
-                    key={strategy.id}
-                    onClick={() => selectDemoStrategy(strategy.id)}
-                  >
-                    <StrategyIcon strategyId={strategy.id} />
-                    <span>
-                      <b>{strategy.label}</b>
-                      <small>{strategy.description}</small>
-                    </span>
-                    {demoStrategy === strategy.id && <Check size={14} />}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          ) : (
+            <span className="live-brand-mark" aria-hidden="true">
+              <Music2 size={17} />
+            </span>
+          )}
           <strong>TikTok LIVE Studio</strong>
           <span className="live-brand-divider">/</span>
           <b>{view === 'prelive' ? '今日开播准备工作台' : '直播中'}</b>
@@ -1958,10 +2071,7 @@ function App() {
               <button
                 className="prelive-entry-button"
                 type="button"
-                onClick={() => {
-                  setIsPk(false)
-                  setView('prelive')
-                }}
+                onClick={returnToPrelive}
               >
                 <ArrowLeft size={14} />直播前设置
               </button>
@@ -2015,6 +2125,7 @@ function App() {
                 className={liveStageMode === 'preview' ? 'selected' : ''}
                 onClick={() => {
                   setSelectedCanvasWidget(null)
+                  setSelectedLiveComponent(null)
                   setLiveStageMode('preview')
                 }}
               >
@@ -2045,13 +2156,13 @@ function App() {
               </div>
             </div>
           )}
-          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} strategy={strategyCommentState === 'issue' ? demoStrategy : 'normal'} liveAdjustment={liveAdjustment} previewMode={previewMode} liveStageMode={liveStageMode} isPreviewing={isSuggestionPreview} audience={audienceSnapshot} isLive={view === 'live'} preliveLayout={preliveLayout} stageBackgroundUrl={stageBackgroundUrl} bandLayout={bandLayoutActive} gameLayout={gameLayout} gameCameraOffset={gameCameraOffset} onGameCameraOffsetChange={setGameCameraOffset} chatWidgets={canvasWidgetsAvailable ? {
+          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} strategy={view === 'live' && strategyCommentState === 'issue' ? demoStrategy : 'normal'} liveAdjustment={liveAdjustment} previewMode={previewMode} liveStageMode={liveStageMode} isPreviewing={isSuggestionPreview} audience={audienceSnapshot} isLive={view === 'live'} preliveTitle={streamTopic} preliveLayout={preliveLayout} stageBackgroundUrl={stageBackgroundUrl} bandLayout={bandLayoutActive} gameLayout={gameLayout} gameCameraOffset={gameCameraOffset} onGameCameraOffsetChange={setGameCameraOffset} onSelectLiveComponent={selectLiveComponent} chatWidgets={canvasWidgetsAvailable ? {
             text: chatTextEnabled ? chatTextValue : '',
             goalVisible: chatGoalEnabled,
             goal: { label: chatGoalTitle, current: 0, target: chatGoalTarget },
             textStyle: chatTextStyle,
             selectedWidget: selectedCanvasWidget,
-            onSelectWidget: setSelectedCanvasWidget,
+            onSelectWidget: selectCanvasWidget,
             textOffset: chatTextOffset,
             goalOffset: chatGoalOffset,
             onTextOffsetChange: setChatTextOffset,
@@ -2089,7 +2200,7 @@ function App() {
                       ? '组件配置'
                       : liveRightRailMode === 'components'
                         ? `${atomicRecalledComponents.length} 个组件`
-                        : `${suggestionQueue.length} 条建议`}
+                        : `${visibleSuggestionQueue.length} 条建议`}
                   </b>
                   <span className="suggestion-sync-status">
                     <i />
@@ -2113,13 +2224,22 @@ function App() {
                     <button
                       type="button"
                       className="right-rail-back-button"
-                      onClick={() => setSelectedCanvasWidget(null)}
+                      onClick={() => {
+                        setSelectedCanvasWidget(null)
+                        setSelectedLiveComponent(null)
+                      }}
                     >
                       <ArrowLeft size={12} />
                       返回实时建议
                     </button>
                   </div>
-                  {renderCanvasWidgetPanel(selectedCanvasWidget)}
+                  {selectedLiveComponent ? (
+                    <AtomicRecallCard
+                      componentId={selectedLiveComponent}
+                      audience={audienceSnapshot}
+                      onApplied={() => setApplied(true)}
+                    />
+                  ) : renderCanvasWidgetPanel(selectedCanvasWidget)}
                 </section>
               ) : (
                 <>
@@ -2130,7 +2250,7 @@ function App() {
                   <small>阈值触发 · 评论分析不超过 3 秒</small>
                 </div>
                 <div className="generated-suggestion-list" role="list">
-                  {suggestionQueue.map((suggestion) => {
+                  {visibleSuggestionQueue.map((suggestion) => {
                     const presentation = getSuggestionPresentation(suggestion)
                     return (
                     <article
@@ -2151,7 +2271,7 @@ function App() {
                     </article>
                     )
                   })}
-                  {suggestionQueue.length === 0 && (
+                  {visibleSuggestionQueue.length === 0 && (
                     <div className="suggestion-empty-state" role="status">
                       <Check size={15} />
                       <span>暂无待处理建议</span>
@@ -2183,7 +2303,19 @@ function App() {
                       <AtomicRecallCard
                         componentId={component.componentId}
                         audience={audienceSnapshot}
-                        onApplied={() => scheduleAtomicRemoval(component.key)}
+                        onApplied={() => {
+                          const suggestion = component.suggestionId
+                            ? suggestionQueue.find(
+                                (item) => item.queueId === component.suggestionId,
+                              ) ?? null
+                            : null
+                          beginStrategyRecovery(suggestion)
+                          setApplied(true)
+                          scheduleAtomicRemoval(
+                            component.key,
+                            component.suggestionId,
+                          )
+                        }}
                       />
                     </div>
                   ))}
@@ -2402,10 +2534,12 @@ function themeIcon(theme: StreamThemeId) {
 
 function StrategyIcon({ strategyId }: { strategyId: AudienceStrategyId }) {
   if (strategyId === 'dim-light') return <Lightbulb size={15} />
+  if (strategyId === 'color-cast') return <Palette size={15} />
+  if (strategyId === 'cluttered-background') return <PanelsTopLeft size={15} />
   if (strategyId === 'low-audio') return <Mic size={15} />
-  if (strategyId === 'cold-interaction') return <MessageCircle size={15} />
-  if (strategyId === 'network-lag') return <WifiOff size={15} />
-  if (strategyId === 'pk-push') return <Users size={15} />
+  if (strategyId === 'cold-comments') return <MessageCircle size={15} />
+  if (strategyId === 'gift-drop') return <Gift size={15} />
+  if (strategyId === 'entrant-drop') return <UserMinus size={15} />
   return <Activity size={15} />
 }
 
@@ -2494,9 +2628,10 @@ type ChatCanvasWidgets = {
   onGoalOffsetChange: (offset: WidgetOffset) => void
 }
 
-function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, isPk, applied, scene, strategy, liveAdjustment, previewMode, liveStageMode, isPreviewing, audience, isLive, preliveLayout, stageBackgroundUrl, bandLayout, gameLayout, gameCameraOffset, onGameCameraOffsetChange, chatWidgets }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; displayStream: MediaStream | null; layoutEditing: boolean; isPk: boolean; applied: boolean; scene: Scene; strategy: AudienceStrategyId; liveAdjustment: LiveAdjustment | null; previewMode: PreviewMode; liveStageMode: LiveStageMode; isPreviewing: boolean; audience: AudienceSnapshot; isLive: boolean; preliveLayout: PreliveLayout; stageBackgroundUrl: string | null; bandLayout: boolean; gameLayout: 'vertical' | 'landscape' | null; gameCameraOffset: WidgetOffset; onGameCameraOffsetChange: (offset: WidgetOffset) => void; chatWidgets: ChatCanvasWidgets | null }) {
+function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, isPk, applied, scene, strategy, liveAdjustment, previewMode, liveStageMode, isPreviewing, audience, isLive, preliveTitle, preliveLayout, stageBackgroundUrl, bandLayout, gameLayout, gameCameraOffset, onGameCameraOffsetChange, onSelectLiveComponent, chatWidgets }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; displayStream: MediaStream | null; layoutEditing: boolean; isPk: boolean; applied: boolean; scene: Scene; strategy: AudienceStrategyId; liveAdjustment: LiveAdjustment | null; previewMode: PreviewMode; liveStageMode: LiveStageMode; isPreviewing: boolean; audience: AudienceSnapshot; isLive: boolean; preliveTitle: string; preliveLayout: PreliveLayout; stageBackgroundUrl: string | null; bandLayout: boolean; gameLayout: 'vertical' | 'landscape' | null; gameCameraOffset: WidgetOffset; onGameCameraOffsetChange: (offset: WidgetOffset) => void; onSelectLiveComponent: (component: LiveCanvasComponentId | null) => void; chatWidgets: ChatCanvasWidgets | null }) {
   const displayVideoRef = useRef<HTMLVideoElement>(null)
   const visualSettings = useStudioStore((state) => state.visualSettings)
+  const cameraEffects = useStudioStore((state) => state.cameraEffects)
   const showAudiencePreview = isLive && liveStageMode === 'preview' && !isPk
   const previewStyle = {
     '--studio-video-filter': [
@@ -2523,7 +2658,7 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
     ? <video ref={displayVideoRef} autoPlay muted playsInline className="screen-feed" />
     : <DemoGameScreen />
 
-  return <div style={previewStyle} className={`live-stage ${applied ? 'applied' : ''} ${isPreviewing ? 'previewing' : ''} ${isPk ? 'pk-stage' : ''} scene-${scene} ${previewMode === 'studio' ? 'studio-preview' : 'mobile-preview'} ${bandLayout ? 'stage-band-layout' : ''} ${bandLayout && preliveLayout === 'stage' ? 'band-layout-wide' : ''} ${gameLayout ? `game-layout game-${gameLayout}-layout` : ''} ${!isLive ? `prelive-${preliveLayout}` : ''} ${showAudiencePreview ? 'audience-preview-mode' : 'clean-screen-mode'}`}>
+  return <div style={previewStyle} className={`live-stage ${applied ? 'applied' : ''} ${isPreviewing ? 'previewing' : ''} ${isPk ? 'pk-stage' : ''} scene-${scene} strategy-${strategy} ${previewMode === 'studio' ? 'studio-preview' : 'mobile-preview'} ${bandLayout ? 'stage-band-layout' : ''} ${bandLayout && preliveLayout === 'stage' ? 'band-layout-wide' : ''} ${gameLayout ? `game-layout game-${gameLayout}-layout` : ''} ${!isLive ? `prelive-${preliveLayout}` : ''} ${showAudiencePreview ? 'audience-preview-mode' : 'clean-screen-mode'}`}>
     <div className="stage-glow" />
     <div className="scan-lines" />
     <div
@@ -2532,8 +2667,28 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
         const target = event.target as HTMLElement
         if (target.closest('.canvas-widget') || target.closest('.moveable-control-box')) return
         chatWidgets?.onSelectWidget(null)
+        onSelectLiveComponent(null)
       }}
     >
+      {!cameraEnabled && cameraEffects.backgroundMode !== 'none' && (
+        <div
+          className={[
+            'demo-effect-background',
+            `mode-${cameraEffects.backgroundMode}`,
+            cameraEffects.backgroundPreset ?? '',
+          ].filter(Boolean).join(' ')}
+          style={{
+            backgroundColor: cameraEffects.backgroundMode === 'color'
+              ? cameraEffects.backgroundColor
+              : undefined,
+            backgroundImage: cameraEffects.backgroundImageUrl
+              ? `url("${cameraEffects.backgroundImageUrl}")`
+              : undefined,
+            '--demo-background-blur': `${4 + cameraEffects.backgroundBlur * 0.22}px`,
+          } as CSSProperties}
+          aria-hidden="true"
+        />
+      )}
       {bandLayout && stageBackgroundUrl && (
         <div
           className="stage-background-layer"
@@ -2568,17 +2723,21 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
         : cameraEnabled
           ? <div className="camera-source">{renderCameraContent()}</div>
           : <DemoHost />}
+      {strategy === 'cluttered-background' && (
+        <div className="scenario-clutter" aria-hidden="true">
+          <i /><i /><i /><i /><i />
+        </div>
+      )}
       {previewMode === 'studio' && <div className="studio-guides"><i /><i /><i /></div>}
       {!showAudiencePreview && <div className="stage-label"><span />{isLive ? 'LIVE' : '林小满'}</div>}
       {!isPk && isLive && !showAudiencePreview && <><div className="viewer-bubble"><Users size={14} />{audience.viewerCount.toLocaleString()}</div><div className="stage-duration">00:42:18</div></>}
       {showAudiencePreview && <AudiencePreviewOverlay audience={audience} />}
+      {!isLive && <div className="prelive-stage-summary"><span>开播预览</span><b>{preliveTitle || '未填写直播标题'}</b><small>{preliveLayout === 'portrait' ? '全屏摄像头 · 单人竖屏 9:16' : preliveLayout === 'three-quarter' ? '3/5 摄像头 · 舞台背景' : preliveLayout === 'game-vertical' ? '竖屏摄像头 · 游戏投屏' : preliveLayout === 'game-landscape' ? '横屏投屏 · 悬浮摄像头' : '秀场舞台 · 中央 3/5 摄像头'}</small></div>}
       {applied && <div className="applied-badge"><Check size={13} />方案已应用</div>}
-      {strategy === 'dim-light' && <div className="stage-hint"><Lightbulb size={14} />环境偏暗</div>}
-      {strategy === 'network-lag' && <div className="stage-hint"><WifiOff size={14} />网络波动</div>}
-      {strategy === 'low-audio' && <div className="audio-meter"><AudioLines size={15} /><span>音频峰值偏低</span><i /><i /><i /><i /></div>}
       {liveAdjustment && <div className="adjustment-toast"><Zap size={14} /><div><b>{liveAdjustment.name}</b><span>{liveAdjustment.detail}</span></div></div>}
-      <LivePoll />
-      <LiveGoal />
+      <LivePoll onSelect={() => onSelectLiveComponent('audience-poll')} />
+      <LiveGoal onSelect={() => onSelectLiveComponent('live-goal')} />
+      <LiveWishes onSelect={() => onSelectLiveComponent('audience-wishes')} />
       {chatWidgets && (
         <>
           <CanvasTextSource
@@ -2606,6 +2765,13 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
         </>
       )}
     </div>
+    {strategy === 'dim-light' && <div className="stage-hint"><Lightbulb size={14} />亮度 26/100</div>}
+    {strategy === 'color-cast' && <div className="stage-hint"><Palette size={14} />暖色偏移 +58</div>}
+    {strategy === 'cluttered-background' && <div className="stage-hint"><PanelsTopLeft size={14} />背景干扰 72%</div>}
+    {strategy === 'low-audio' && <div className="audio-meter"><AudioLines size={15} /><span>音频峰值偏低</span><i /><i /><i /><i /></div>}
+    {strategy === 'cold-comments' && <div className="stage-hint"><MessageCircle size={14} />评论 14/min</div>}
+    {strategy === 'gift-drop' && <div className="stage-hint"><Gift size={14} />礼物 -81%</div>}
+    {strategy === 'entrant-drop' && <div className="stage-hint"><UserMinus size={14} />进房 8/min</div>}
     {isPk && <><div className="pk-versus">VS</div><div className="opponent-stage"><DemoOpponent /><div className="stage-label opponent"><span />陈妍</div></div><div className="pk-scorebar"><div><b>8,740</b><span>林小满</span></div><strong>01:18</strong><div><b>10,000</b><span>陈妍</span></div></div></>}
     {isLive && !showAudiencePreview && <div className="floating-comments">
       {audience.comments.slice(0, 2).map((comment) => <span key={comment.id}>{comment.text}</span>)}
@@ -3179,6 +3345,8 @@ function getSuggestionPresentation(suggestion: QueuedSuggestion): {
 } {
   const titles: Record<LiveSuggestion['signalId'], string> = {
     exposure: '提高人物补光',
+    'color-accuracy': '校准画面色彩',
+    'background-cleanliness': '更换虚拟背景',
     contrast: '优化画面对比度',
     framing: '调整人脸构图',
     fps: '降低画面负载',
@@ -3188,13 +3356,9 @@ function getSuggestionPresentation(suggestion: QueuedSuggestion): {
     retention: '提升新观众留存',
     gifts: '设置互动目标',
   }
-  const reason = suggestion.source === 'comment'
-    ? `评论区反馈：${suggestion.metric.replace(/^评论热点\s*·\s*/, '')}`
-    : `监控指标反馈：${suggestion.metric}`
-
   return {
     title: titles[suggestion.signalId],
-    reason,
+    reason: suggestion.action,
   }
 }
 

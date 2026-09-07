@@ -10,7 +10,8 @@ const loadInteractive = () => import('./panels/InteractivePanels')
 const loadTemplate = () => import('./panels/TemplatePanel')
 
 export const atomicComponentRegistry: Readonly<Record<AtomicComponentId, AtomicComponentDefinition>> = {
-  lighting: definition('lighting', '补光', '亮度、色温与补光模式', 'basic', ['曝光', '偏暗', '亮度'], loadBasic, 'LightingPanel'),
+  lighting: definition('lighting', '亮度调节', '画面亮度、色温与补光模式', 'basic', ['曝光', '偏暗', '亮度'], loadBasic, 'LightingPanel'),
+  'color-adjustment': definition('color-adjustment', '色彩调节', '白平衡、饱和度与画面色温', 'basic', ['偏色', '白平衡', '饱和度'], loadBasic, 'ColorAdjustmentPanel'),
   microphone: definition('microphone', '麦克风', '音量、降噪、音效与测试', 'basic', ['声音', '麦克风', '噪声'], loadBasic, 'MicrophonePanel'),
   beauty: definition('beauty', '美颜', '磨皮、美白、瘦脸与预设', 'basic', ['人脸', '肤色', '美颜'], loadBasic, 'BeautyPanel'),
   makeup: definition('makeup', '美妆', '虚拟妆容与局部精细控制', 'basic', ['妆容', '口红', '气色'], loadBasic, 'MakeupPanel'),

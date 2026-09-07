@@ -6,9 +6,12 @@ import {
   resolveAudienceStrategy,
 } from './audienceEvents'
 import {
+  audienceSceneOptions,
+  audienceStrategies,
   audienceCommentsByStrategy,
   audienceRecoveryCommentsByStrategy,
   doesSuggestionResolveStrategy,
+  audienceUserNames,
 } from '../../config/audienceComments'
 import { studioRuntimeConfig } from '../../config/studioRuntime'
 
@@ -100,15 +103,104 @@ describe('audience events', () => {
 
   it('uses the configured comment pool for each explicit strategy', () => {
     const snapshot = mockAudienceEventAdapter.getStrategySnapshot(
-      'network-lag',
+      'color-cast',
       false,
       2,
     )
 
-    expect(audienceCommentsByStrategy['network-lag']).toContain(
+    expect(audienceCommentsByStrategy['color-cast']).toContain(
       snapshot.comments[0].text,
     )
     expect(audienceCommentsByStrategy.normal.length).toBeGreaterThan(10)
+  })
+
+  it('provides realistic issue and recovery chat samples for all scenarios', () => {
+    audienceStrategies.forEach((scenario) => {
+      const issueComments = audienceCommentsByStrategy[scenario.id]
+      const recoveryComments =
+        audienceRecoveryCommentsByStrategy[scenario.id] ?? []
+      const snapshot = mockAudienceEventAdapter.getStrategySnapshot(
+        scenario.id,
+        false,
+        20,
+      )
+
+      expect(issueComments.length).toBeGreaterThanOrEqual(10)
+      expect(recoveryComments.length).toBeGreaterThanOrEqual(8)
+      expect(snapshot.comments.every((comment) =>
+        issueComments.includes(comment.text),
+      )).toBe(true)
+    })
+  })
+
+  it('exposes exactly the seven requested typical scenarios', () => {
+    expect(audienceStrategies.map(({ label }) => label)).toEqual([
+      '画面转暗',
+      '画面偏色',
+      '背景杂乱',
+      '声音偏小',
+      '评论区转冷',
+      '送礼减少',
+      '进房人数减少',
+    ])
+    expect(audienceStrategies.every((scenario) =>
+      scenario.description.length >= 24 &&
+      scenario.componentPriority.length > 0 &&
+      scenario.intent.userUtterances.length >= 3 &&
+      scenario.intent.standardResponse.length > 20,
+    )).toBe(true)
+  })
+
+  it('puts the normal scene first in the live scene menu', () => {
+    expect(audienceSceneOptions).toHaveLength(8)
+    expect(audienceSceneOptions[0]).toMatchObject({
+      id: 'normal',
+      label: '正常场景',
+    })
+    expect(audienceSceneOptions.slice(1)).toEqual(audienceStrategies)
+  })
+
+  it('varies normal gifts and engagement metrics over time', () => {
+    const quietMoment = mockAudienceEventAdapter.getStrategySnapshot(
+      'normal',
+      false,
+      1,
+    )
+    const activeMoment = mockAudienceEventAdapter.getStrategySnapshot(
+      'normal',
+      false,
+      18,
+    )
+
+    expect(quietMoment.gifts).toHaveLength(1)
+    expect(activeMoment.gifts).toHaveLength(3)
+    expect(activeMoment.commentsPerMinute)
+      .not.toBe(quietMoment.commentsPerMinute)
+    expect(activeMoment.entrantsLastMinute)
+      .not.toBe(quietMoment.entrantsLastMinute)
+    expect(activeMoment.gifts.every((gift) =>
+      audienceUserNames.some((userName) => userName === gift.userName),
+    )).toBe(true)
+  })
+
+  it('simulates reduced gifts and entrants with scenario-specific data', () => {
+    const giftDrop = mockAudienceEventAdapter.getStrategySnapshot(
+      'gift-drop',
+      false,
+      20,
+    )
+    const entrantDrop = mockAudienceEventAdapter.getStrategySnapshot(
+      'entrant-drop',
+      false,
+      20,
+    )
+
+    expect(giftDrop.gifts).toHaveLength(1)
+    expect(giftDrop.gifts[0].count).toBe(1)
+    expect(entrantDrop.entrantsLastMinute).toBe(8)
+    expect(entrantDrop.viewerCount).toBeLessThan(
+      studioRuntimeConfig.audience.initialViewerCount,
+    )
   })
 
   it('switches to positive recovery comments after a strategy suggestion is accepted', () => {
@@ -129,6 +221,6 @@ describe('audience events', () => {
   it('matches AI suggestion signals to their owning strategy', () => {
     expect(doesSuggestionResolveStrategy('dim-light', 'exposure')).toBe(true)
     expect(doesSuggestionResolveStrategy('low-audio', 'microphone')).toBe(true)
-    expect(doesSuggestionResolveStrategy('network-lag', 'retention')).toBe(false)
+    expect(doesSuggestionResolveStrategy('color-cast', 'retention')).toBe(false)
   })
 })

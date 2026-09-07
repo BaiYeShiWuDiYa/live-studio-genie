@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, Save } from 'lucide-react'
+import { Check, Gamepad2, MessageCircle, Music2, Save } from 'lucide-react'
 import { applyCameraEffectPreset } from '../../../capabilities/video/cameraEffects'
 import { useStudioStore } from '../../../store/studioStore'
 import type { AtomicPanelProps } from '../types'
@@ -13,6 +13,8 @@ const templates = [
 export function TemplatePanel({ onApplied }: AtomicPanelProps) {
   const applyVisual = useStudioStore((state) => state.applyVisualSettings)
   const applyEffects = useStudioStore((state) => state.applyCameraEffects)
+  const previewVisual = useStudioStore((state) => state.previewVisualSettings)
+  const previewEffects = useStudioStore((state) => state.previewCameraEffects)
   const currentVisual = useStudioStore((state) => state.visualSettings)
   const [selected, setSelected] = useState<(typeof templates)[number]['id']>(templates[0].id)
   const [saved, setSaved] = useState(false)
@@ -23,18 +25,32 @@ export function TemplatePanel({ onApplied }: AtomicPanelProps) {
     applyEffects(applyCameraEffectPreset(template.effect))
     onApplied?.('studio-template')
   }
+  const previewTemplate = (template: (typeof templates)[number]) => {
+    setSelected(template.id)
+    setSaved(false)
+    previewVisual(template.visual)
+    previewEffects(applyCameraEffectPreset(template.effect))
+  }
+  const selectedTemplate =
+    templates.find((template) => template.id === selected) ?? templates[0]
 
   return (
     <div className="atomic-panel-body">
       <h3>装修模板</h3>
       <div className="atomic-template-grid">
         {templates.map((template) => (
-          <button type="button" className={selected === template.id ? 'selected' : ''} key={template.id} onClick={() => setSelected(template.id)}>
-            <i style={{ backgroundColor: template.color }} />
+          <button type="button" className={selected === template.id ? 'selected' : ''} key={template.id} onClick={() => previewTemplate(template)}>
+            <span className="atomic-template-icon" style={{ backgroundColor: template.color }}>
+              <TemplateIcon templateId={template.id} />
+            </span>
             <b>{template.name}</b>
             <small>画面、背景与组件布局</small>
           </button>
         ))}
+      </div>
+      <div className={`atomic-template-preview template-${selected}`} role="status">
+        <TemplateIcon templateId={selected} />
+        <span><b>正在预览：{selectedTemplate.name}</b><small>画布效果已实时同步</small></span>
       </div>
       <button className="atomic-secondary-button" type="button" onClick={() => {
         localStorage.setItem('live-studio-custom-template', JSON.stringify(currentVisual))
@@ -43,4 +59,10 @@ export function TemplatePanel({ onApplied }: AtomicPanelProps) {
       <button className="atomic-apply-button" type="button" onClick={apply}><Check size={14} />加载模板</button>
     </div>
   )
+}
+
+function TemplateIcon({ templateId }: { templateId: (typeof templates)[number]['id'] }) {
+  if (templateId === 'music') return <Music2 size={16} />
+  if (templateId === 'game') return <Gamepad2 size={16} />
+  return <MessageCircle size={16} />
 }

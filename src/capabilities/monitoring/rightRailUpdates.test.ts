@@ -3,8 +3,10 @@ import type { AudienceComment, CommentInsight } from '../audience/audienceEvents
 import {
   createCommentInsightSuggestion,
   rightRailUpdateConfig,
+  selectSuggestionsForStrategy,
   selectThresholdChangedSuggestions,
 } from './rightRailUpdates'
+import { audienceStrategies } from '../../config/audienceComments'
 import type {
   LiveDiagnostics,
   LiveSignal,
@@ -94,6 +96,24 @@ describe('right rail updates', () => {
     )
 
     expect(selectThresholdChangedSuggestions(previous, current)).toEqual([])
+  })
+
+  it('keeps only the primary suggestion for each typical scenario', () => {
+    const unrelated = suggestion('microphone')
+
+    audienceStrategies.forEach((strategy) => {
+      const primary = suggestion(strategy.primarySignal)
+      expect(selectSuggestionsForStrategy(
+        [unrelated, primary, suggestion('retention')],
+        strategy.id,
+      )).toEqual([primary])
+    })
+  })
+
+  it('keeps multi-signal suggestions in normal live mode', () => {
+    const suggestions = [suggestion('exposure'), suggestion('microphone')]
+    expect(selectSuggestionsForStrategy(suggestions, 'normal'))
+      .toEqual(suggestions)
   })
 
   it.each([

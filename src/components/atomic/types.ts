@@ -3,6 +3,7 @@ import type { AudienceSnapshot } from '../../capabilities/audience/audienceEvent
 
 export type AtomicComponentId =
   | 'lighting'
+  | 'color-adjustment'
   | 'microphone'
   | 'beauty'
   | 'makeup'

@@ -57,29 +57,41 @@ const strategyRecommendations: Record<
     detail: '观众对亮度调整给出正向反馈，建议下场开播前直接复用已确认的曝光方案。',
     impact: '减少画面流失',
   },
+  'color-cast': {
+    label: '色彩质量',
+    title: '保存校正后的色彩参数',
+    detail: '本场色彩校正改善了肤色和画面观感，建议将确认后的色温与对比度保存为开播预设。',
+    impact: '稳定画面观感',
+  },
+  'cluttered-background': {
+    label: '直播背景',
+    title: '复用本场确认的背景方案',
+    detail: '更整洁的背景有助于突出主播主体，建议下场开播前直接加载本场确认的虚拟背景。',
+    impact: '提升主体辨识度',
+  },
   'low-audio': {
     label: '音频质量',
     title: '沿用本场人声增益组合',
     detail: '麦克风调整后声音反馈明显改善，建议保存人声与 BGM 的增益差作为默认值。',
     impact: '提升听感稳定性',
   },
-  'cold-interaction': {
+  'cold-comments': {
     label: '互动经营',
-    title: '在冷场前主动发布点歌投票',
-    detail: '投票有效带动了评论恢复，下一场建议在互动下滑前 30 秒提前触发。',
+    title: '在冷场前主动发布观众心愿',
+    detail: '观众心愿有效带动了评论恢复，下一场建议在互动下滑前提前设置明确的参与目标。',
     impact: '预计留存 +8%',
   },
-  'network-lag': {
-    label: '推流质量',
-    title: '为高负载场景准备轻量配置',
-    detail: '本场出现卡顿反馈，建议下一场降低高负载特效并优先保证稳定帧率。',
-    impact: '降低卡顿反馈',
+  'gift-drop': {
+    label: '礼物转化',
+    title: '在送礼回落前展示 LIVE Goal',
+    detail: '明确的礼物目标有助于观众理解助力路径，建议下场在礼物趋势回落前提前展示阶段目标。',
+    impact: '预计礼物互动 +10%',
   },
-  'pk-push': {
-    label: 'PK 转化',
-    title: '在冲刺阶段强化目标进度',
-    detail: '阶段目标让助力路径更清晰，建议在 PK 倒计时前置展示剩余差值。',
-    impact: '预计助力率 +10%',
+  'entrant-drop': {
+    label: '进房承接',
+    title: '复用高吸引力的直播间包装',
+    detail: '装修、美化和背景调整有助于改善首屏观感，建议下场开播前组合预览并保存表现最佳的方案。',
+    impact: '提升进房转化',
   },
 }
 

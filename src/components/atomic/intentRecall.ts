@@ -1,4 +1,9 @@
 import type { LiveSignalId } from '../../capabilities/monitoring/liveDiagnostics'
+import {
+  audienceStrategies,
+  getAudienceStrategy,
+  type AudienceStrategyId,
+} from '../../config/audienceComments'
 import type { AtomicComponentId } from './types'
 
 export type IntentSource = 'input' | 'comment' | 'monitor'
@@ -7,6 +12,7 @@ export interface IntentRecallRequest {
   source: IntentSource
   text?: string
   signalIds?: readonly LiveSignalId[]
+  strategyId?: AudienceStrategyId
 }
 
 export interface IntentRecallResult {
@@ -16,42 +22,47 @@ export interface IntentRecallResult {
 }
 
 export interface IntentFewShotExample {
+  sceneId?: AudienceStrategyId
+  sceneDescription?: string
   input: string
+  aliases?: readonly string[]
+  standardResponse?: string
   componentIds: readonly AtomicComponentId[]
 }
 
-export const defaultIntentFewShots: readonly IntentFewShotExample[] = [
-  { input: '画面太暗，帮我补点光并调暖一点', componentIds: ['lighting'] },
-  { input: '听不清主播，人声小还有噪声', componentIds: ['microphone'] },
-  { input: '想让皮肤自然一点并稍微瘦脸', componentIds: ['beauty'] },
-  { input: '加一点口红和腮红，让气色更好', componentIds: ['makeup'] },
-  { input: '背景太乱，帮我虚化或换背景', componentIds: ['background'] },
-  { input: '收到礼物时播放庆祝特效', componentIds: ['effects', 'gift-ranking'] },
-  { input: '让观众投票决定下一首歌', componentIds: ['audience-poll'] },
-  { input: '设置本场点赞目标并展示进度', componentIds: ['live-goal'] },
-  { input: '收集大家想听的歌', componentIds: ['audience-wishes'] },
-  { input: '看看谁点赞最多', componentIds: ['like-ranking'] },
-  { input: '展示本场礼物贡献排行', componentIds: ['gift-ranking'] },
-  { input: '给整场直播换一套装修', componentIds: ['studio-template'] },
-] as const
+/** 七个典型场景的 few-shot 训练样本，与场景配置保持同步。 */
+export const scenarioIntentFewShots: readonly IntentFewShotExample[] =
+  audienceStrategies.map((scenario) => ({
+    sceneId: scenario.id,
+    sceneDescription: scenario.description,
+    input: scenario.intent.userUtterances[0],
+    aliases: scenario.intent.userUtterances.slice(1),
+    standardResponse: scenario.intent.standardResponse,
+    componentIds: scenario.componentPriority,
+  }))
+
+export const defaultIntentFewShots = scenarioIntentFewShots
 
 const signalComponents: Readonly<Record<LiveSignalId, readonly AtomicComponentId[]>> = {
   exposure: ['lighting'],
-  contrast: ['lighting', 'background'],
+  'color-accuracy': ['color-adjustment'],
+  'background-cleanliness': ['background'],
+  contrast: ['color-adjustment', 'lighting'],
   framing: ['beauty', 'background'],
   fps: ['background', 'effects'],
   microphone: ['microphone'],
-  comments: ['audience-poll', 'audience-wishes'],
-  entrants: ['audience-poll', 'like-ranking'],
+  comments: ['audience-wishes'],
+  entrants: ['studio-template', 'beauty', 'makeup', 'effects', 'background'],
   retention: ['audience-wishes', 'live-goal'],
-  gifts: ['live-goal', 'gift-ranking'],
+  gifts: ['live-goal'],
 }
 
 const intentPatterns: ReadonlyArray<{
   pattern: RegExp
   componentIds: readonly AtomicComponentId[]
 }> = [
-  { pattern: /暗|曝光|亮度|补光|色温|冷光|暖光/, componentIds: ['lighting'] },
+  { pattern: /暗|曝光|亮度|补光|冷光|暖光/, componentIds: ['lighting'] },
+  { pattern: /偏色|白平衡|饱和度|颜色失真|色彩|色温|肤色发红|肤色发黄/, componentIds: ['color-adjustment'] },
   { pattern: /声音|音量|麦克风|话筒|噪声|降噪|听不清|音效/, componentIds: ['microphone'] },
   { pattern: /美颜|磨皮|美白|瘦脸|大眼|皮肤/, componentIds: ['beauty'] },
   { pattern: /美妆|妆容|口红|腮红|眼影|眼线|高光|气色/, componentIds: ['makeup'] },
@@ -63,6 +74,7 @@ const intentPatterns: ReadonlyArray<{
   { pattern: /点赞榜|点赞排行|谁点赞/, componentIds: ['like-ranking'] },
   { pattern: /礼物榜|送礼榜|贡献榜|礼物排行/, componentIds: ['gift-ranking'] },
   { pattern: /装修|整套|模板|整体风格|一键布置/, componentIds: ['studio-template'] },
+  { pattern: /进房|新人|第一印象|首屏|直播间氛围/, componentIds: ['studio-template', 'beauty', 'makeup', 'effects', 'background'] },
 ]
 
 export function recallAtomicComponents(
@@ -73,6 +85,37 @@ export function recallAtomicComponents(
   const matchedExamples: string[] = []
   const add = (id: AtomicComponentId, score: number) =>
     scores.set(id, Math.max(scores.get(id) ?? 0, score))
+
+  if (request.strategyId) {
+    const strategy = getAudienceStrategy(request.strategyId)
+    const primarySignalTriggered = request.signalIds?.includes(
+      strategy.primarySignal,
+    )
+    if (primarySignalTriggered) {
+      strategy.componentPriority.forEach((id, index) =>
+        add(id, 1 - index * 0.01),
+      )
+      if (request.source === 'monitor') {
+        return {
+          componentIds: [...strategy.componentPriority],
+          confidence: 1,
+          matchedExamples: [],
+        }
+      }
+    }
+    if (
+      request.source === 'monitor' &&
+      request.strategyId !== 'normal' &&
+      request.signalIds?.length &&
+      !primarySignalTriggered
+    ) {
+      return {
+        componentIds: [],
+        confidence: 0,
+        matchedExamples: [],
+      }
+    }
+  }
 
   request.signalIds?.forEach((signalId) => {
     signalComponents[signalId].forEach((id, index) => add(id, 0.96 - index * 0.04))
@@ -86,8 +129,11 @@ export function recallAtomicComponents(
     })
 
     fewShots.forEach((example) => {
-      const similarity = tokenSimilarity(normalized, normalize(example.input))
-      if (similarity < 0.16) return
+      const candidateInputs = [example.input, ...(example.aliases ?? [])]
+      const similarity = Math.max(...candidateInputs.map((input) =>
+        tokenSimilarity(normalized, normalize(input)),
+      ))
+      if (similarity < 0.22) return
       matchedExamples.push(example.input)
       example.componentIds.forEach((id) => add(id, Math.min(0.95, 0.62 + similarity)))
     })
@@ -95,7 +141,7 @@ export function recallAtomicComponents(
 
   const componentIds = [...scores.entries()]
     .sort((left, right) => right[1] - left[1])
-    .slice(0, 4)
+    .slice(0, 5)
     .map(([id]) => id)
 
   return {

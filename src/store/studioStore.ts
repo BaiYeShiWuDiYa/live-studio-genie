@@ -38,6 +38,12 @@ import {
   type PollConfig,
   type PollState,
 } from '../capabilities/widgets/poll'
+import {
+  audienceWishesConfigSchema,
+  hiddenAudienceWishesState,
+  type AudienceWishesConfig,
+  type AudienceWishesState,
+} from '../capabilities/widgets/wishes'
 
 interface StudioState {
   audioSettings: AudioSettings
@@ -56,6 +62,7 @@ interface StudioState {
   liveGoalState: LiveGoalState
   committedLiveGoalState: LiveGoalState
   previousLiveGoalState: LiveGoalState | null
+  audienceWishesState: AudienceWishesState
   mediaMetrics: Record<MediaMetricKind, MediaMetric>
   previewAudioSettings: (settings: AudioSettings) => void
   applyAudioSettings: (settings: AudioSettings) => void
@@ -82,6 +89,9 @@ interface StudioState {
   resetLiveGoalPreview: () => void
   undoLiveGoal: () => void
   advanceLiveGoal: (amount: number) => void
+  previewAudienceWishes: (config: AudienceWishesConfig) => void
+  publishAudienceWishes: (config: AudienceWishesConfig) => void
+  hideAudienceWishes: () => void
   updateMediaMetric: (kind: MediaMetricKind, metric: MediaMetric) => void
   resetMediaMetric: (kind: MediaMetricKind) => void
 }
@@ -103,6 +113,7 @@ export const useStudioStore = create<StudioState>((set) => ({
   liveGoalState: hiddenLiveGoalState,
   committedLiveGoalState: hiddenLiveGoalState,
   previousLiveGoalState: null,
+  audienceWishesState: hiddenAudienceWishesState,
   mediaMetrics: {
     brightness: idleMediaMetric,
     microphone: idleMediaMetric,
@@ -291,6 +302,25 @@ export const useStudioStore = create<StudioState>((set) => ({
       const liveGoalState: LiveGoalState = { config, status: 'active' }
       return { liveGoalState, committedLiveGoalState: liveGoalState }
     })
+  },
+  previewAudienceWishes: (config) => {
+    set({
+      audienceWishesState: {
+        config: audienceWishesConfigSchema.parse(config),
+        status: 'preview',
+      },
+    })
+  },
+  publishAudienceWishes: (config) => {
+    set({
+      audienceWishesState: {
+        config: audienceWishesConfigSchema.parse(config),
+        status: 'active',
+      },
+    })
+  },
+  hideAudienceWishes: () => {
+    set({ audienceWishesState: hiddenAudienceWishesState })
   },
   updateMediaMetric: (kind, metric) => {
     const validatedMetric = mediaMetricSchema.parse(metric)
