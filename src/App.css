@@ -5055,6 +5055,109 @@
   font-size: inherit;
 }
 
+.postlive-monitoring-heading {
+  margin: 26px 0 12px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.postlive-monitoring-heading span {
+  color: #ffbd6a;
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.postlive-monitoring-heading h3 {
+  margin: 4px 0 0;
+  font-size: 15px;
+  letter-spacing: 0;
+}
+
+.postlive-monitoring-heading > small {
+  color: #77707a;
+  font-size: 9px;
+}
+
+.postlive-monitoring-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.postlive-monitoring-metric {
+  min-width: 0;
+  padding: 14px;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 10px;
+  border: 1px solid rgba(255, 188, 106, 0.2);
+  border-radius: 7px;
+  background: rgba(43, 34, 30, 0.34);
+}
+
+.postlive-monitoring-metric > span {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  background: rgba(255, 188, 106, 0.1);
+  color: #ffc476;
+}
+
+.postlive-monitoring-metric > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.postlive-monitoring-metric small {
+  color: #8d858e;
+  font-size: 9px;
+}
+
+.postlive-monitoring-metric b {
+  color: #f5f0f4;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+
+.postlive-monitoring-metric dl {
+  grid-column: 1 / -1;
+  margin: 4px 0 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px 12px;
+}
+
+.postlive-monitoring-metric dl > div {
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 5px;
+}
+
+.postlive-monitoring-metric dt,
+.postlive-monitoring-metric dd,
+.postlive-monitoring-metric > p {
+  margin: 0;
+  color: #756e77;
+  font-size: 9px;
+}
+
+.postlive-monitoring-metric dd {
+  color: #bdb5bc;
+  font-variant-numeric: tabular-nums;
+}
+
+.postlive-monitoring-metric > p {
+  grid-column: 1 / -1;
+  padding-top: 7px;
+  border-top: 1px solid rgba(133, 120, 134, 0.16);
+}
+
 .postlive-recommendation-list {
   display: grid;
   gap: 8px;
@@ -5418,6 +5521,16 @@
 
   .postlive-metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .postlive-monitoring-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .postlive-monitoring-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
   }
 
   .postlive-score-row {

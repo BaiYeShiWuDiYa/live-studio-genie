@@ -1,5 +1,6 @@
 import type { AudienceSnapshot } from '../audience/audienceEvents'
 import type { AudienceStrategyId } from '../../config/audienceComments'
+import type { LiveSessionMonitoringSummary } from './liveSessionMetrics'
 
 export type PostLiveStreamType = 'music' | 'chat' | 'game' | 'show'
 
@@ -18,6 +19,7 @@ export interface PostLiveReport {
   retention: number
   appliedSuggestionCount: number
   performanceScore: number
+  monitoring: LiveSessionMonitoringSummary
 }
 
 export interface PostLiveRecommendation {
@@ -36,6 +38,7 @@ interface CreatePostLiveReportInput {
   durationSeconds: number
   audience: AudienceSnapshot
   appliedSuggestionCount: number
+  monitoring: LiveSessionMonitoringSummary
 }
 
 const strategyRecommendations: Record<
@@ -103,13 +106,21 @@ export function createPostLiveReport(
     1,
     Math.round(input.audience.entrantsLastMinute * durationMinutes * 0.22),
   )
+  const availableMonitoringScores = Object.values(input.monitoring)
+    .filter((metric) => metric.available)
+    .map((metric) => metric.averageScore)
+  const monitoringScore = availableMonitoringScores.length > 0
+    ? availableMonitoringScores.reduce((total, score) => total + score, 0) /
+      availableMonitoringScores.length
+    : 70
   const performanceScore = Math.min(
     96,
     Math.max(
       60,
       Math.round(
-        54 +
-        input.audience.newViewerRetention * 0.42 +
+        42 +
+        input.audience.newViewerRetention * 0.3 +
+        monitoringScore * 0.35 +
         Math.min(12, input.appliedSuggestionCount * 4),
       ),
     ),
@@ -130,12 +141,16 @@ export function createPostLiveReport(
     retention: input.audience.newViewerRetention,
     appliedSuggestionCount: input.appliedSuggestionCount,
     performanceScore,
+    monitoring: input.monitoring,
   }
 }
 
 export function getPostLiveRecommendations(
   report: PostLiveReport,
 ): PostLiveRecommendation[] {
+  const monitoringRecommendation = createMonitoringRecommendation(
+    report.monitoring,
+  )
   return [
     {
       id: 'strategy',
@@ -152,6 +167,7 @@ export function getPostLiveRecommendations(
         : `本场新观众留存为 ${report.retention}%，建议开场更早说明主题并给出互动入口。`,
       impact: report.retention >= 45 ? '稳定留存表现' : '预计留存 +6%',
     },
+    ...(monitoringRecommendation ? [monitoringRecommendation] : []),
     {
       id: 'ai-actions',
       label: 'Genie 协作',
@@ -183,6 +199,7 @@ export function buildPostLiveAiPrompt(
     `礼物数：${report.giftCount}`,
     `新观众留存：${report.retention}%`,
     `已采纳 Genie 建议：${report.appliedSuggestionCount} 项`,
+    `整场真实监控：${formatMonitoringForPrompt(report.monitoring)}`,
     '回答控制在 180 个汉字以内，优先给出 3 个下一场可执行动作。',
     `主播问题：${question}`,
   ].join('\n')
@@ -190,7 +207,8 @@ export function buildPostLiveAiPrompt(
 
 export function createLocalPostLiveSummary(report: PostLiveReport): string {
   const strategyAdvice = strategyRecommendations[report.strategyId]
-  return `本场直播表现指数 ${report.performanceScore}，新观众留存 ${report.retention}%。${strategyAdvice.detail} 下一场优先执行“${strategyAdvice.title}”，并在开播前让 Genie 完成一次设备与互动方案检查。`
+  const monitoringAdvice = createMonitoringRecommendation(report.monitoring)
+  return `本场直播表现指数 ${report.performanceScore}，新观众留存 ${report.retention}%。${monitoringAdvice?.detail ?? strategyAdvice.detail} 下一场优先执行“${monitoringAdvice?.title ?? strategyAdvice.title}”，并在开播前让 Genie 完成一次设备与互动方案检查。`
 }
 
 export function formatDuration(totalSeconds: number): string {
@@ -201,4 +219,70 @@ export function formatDuration(totalSeconds: number): string {
   return [hours, minutes, seconds]
     .map((value) => String(value).padStart(2, '0'))
     .join(':')
+}
+
+function createMonitoringRecommendation(
+  monitoring: LiveSessionMonitoringSummary,
+): PostLiveRecommendation | null {
+  const candidates = [
+    {
+      id: 'brightness',
+      summary: monitoring.brightness,
+      title: '稳定整场人物曝光',
+      detail: `整场亮度平均 ${formatMetricValue(monitoring.brightness)}，异常样本占比 ${monitoring.brightness.issueRate}%。建议保存稳定补光参数。`,
+    },
+    {
+      id: 'microphone',
+      summary: monitoring.microphone,
+      title: '稳定人声响度',
+      detail: `整场麦克风平均 ${formatMetricValue(monitoring.microphone)}，异常样本占比 ${monitoring.microphone.issueRate}%。建议下场复用增益并提前试听。`,
+    },
+    {
+      id: 'framing',
+      summary: monitoring.framing,
+      title: '保持人像占比与居中',
+      detail: `整场人脸平均占比 ${formatMetricValue(monitoring.framing)}，异常样本占比 ${monitoring.framing.issueRate}%。建议固定机位和主播活动范围。`,
+    },
+  ]
+    .filter(({ summary }) => summary.available)
+    .sort((left, right) =>
+      right.summary.issueRate - left.summary.issueRate ||
+      left.summary.averageScore - right.summary.averageScore,
+    )
+
+  const primary = candidates[0]
+  if (!primary) return null
+  return {
+    id: `monitoring-${primary.id}`,
+    label: '真实监控',
+    title: primary.title,
+    detail: primary.detail,
+    impact: primary.summary.issueRate > 0
+      ? `异常占比 -${Math.min(20, primary.summary.issueRate)}%`
+      : '保持稳定表现',
+  }
+}
+
+function formatMonitoringForPrompt(
+  monitoring: LiveSessionMonitoringSummary,
+): string {
+  return [
+    ['亮度', monitoring.brightness],
+    ['麦克风', monitoring.microphone],
+    ['人像构图', monitoring.framing],
+  ].map(([label, metric]) => {
+    if (typeof label !== 'string' || typeof metric === 'string') return ''
+    return metric.available
+      ? `${label}平均 ${formatMetricValue(metric)}，平均评分 ${metric.averageScore}/100，最低评分 ${metric.minimumScore}/100，异常占比 ${metric.issueRate}%，样本 ${metric.sampleCount} 个`
+      : `${label}暂无有效样本`
+  }).join('；')
+}
+
+function formatMetricValue(
+  metric: LiveSessionMonitoringSummary[keyof LiveSessionMonitoringSummary],
+): string {
+  if (metric.averageValue === null) return metric.latestValue
+  return metric.unit === '/ 100'
+    ? `${metric.averageValue} / 100`
+    : `${metric.averageValue}${metric.unit}`
 }

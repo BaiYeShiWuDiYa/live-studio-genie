@@ -77,6 +77,11 @@ import {
   type PostLiveReport,
 } from './capabilities/postlive/postLiveReview'
 import {
+  createLiveSessionMetricsAccumulator,
+  recordLiveSessionMetrics,
+  summarizeLiveSessionMetrics,
+} from './capabilities/postlive/liveSessionMetrics'
+import {
   appendNewSuggestions,
   appendTriggeredSuggestion,
   removeSuggestionWidget,
@@ -352,6 +357,9 @@ function App() {
     question: string
     mode: 'summary' | 'conversation'
   } | null>(null)
+  const liveSessionMetricsRef = useRef(
+    createLiveSessionMetricsAccumulator(),
+  )
   const resetCameraLayerLayout = useStudioStore((state) => state.resetCameraLayerLayout)
   const previewVisualSettings = useStudioStore((state) => state.previewVisualSettings)
   const applyVisualSettings = useStudioStore((state) => state.applyVisualSettings)
@@ -634,6 +642,14 @@ function App() {
       commentTriggerTimesRef.current.set(triggerKey, now)
     }, rightRailUpdateConfig.commentAnalysisDelayMs)
   }, [audienceSnapshot.comments, view])
+
+  useEffect(() => {
+    if (view !== 'live') return
+    liveSessionMetricsRef.current = recordLiveSessionMetrics(
+      liveSessionMetricsRef.current,
+      mediaMetrics,
+    )
+  }, [mediaMetrics, view])
 
   useEffect(() => {
     if (!canvasNotice) return
@@ -1344,6 +1360,8 @@ function App() {
     }
     setLiveTick(0)
     setLiveStartedAt(Math.round(performance.timeOrigin + event.timeStamp))
+    liveSessionMetricsRef.current =
+      createLiveSessionMetricsAccumulator(mediaMetrics)
     setStrategyWarmupComplete(false)
     setStrategyCommentState('issue')
     if (strategyRecoveryTimeoutRef.current !== null) {
@@ -1653,6 +1671,9 @@ function App() {
       appliedSuggestionCount: suggestionQueue.filter(
         (suggestion) => suggestion.widgets.length === 0,
       ).length,
+      monitoring: summarizeLiveSessionMetrics(
+        liveSessionMetricsRef.current,
+      ),
     })
 
     setPostLiveReport(report)

@@ -2,6 +2,7 @@ import type { FormEvent } from 'react'
 import {
   ArrowLeft,
   ArrowUpRight,
+  AudioLines,
   BarChart3,
   Check,
   CircleStop,
@@ -13,8 +14,10 @@ import {
   MessageCircle,
   Radio,
   RefreshCw,
+  ScanFace,
   Send,
   Sparkles,
+  SunMedium,
   TrendingUp,
   UserPlus,
   Users,
@@ -24,6 +27,7 @@ import {
   getPostLiveRecommendations,
   type PostLiveReport,
 } from '../../capabilities/postlive/postLiveReview'
+import type { LiveMetricSummary } from '../../capabilities/postlive/liveSessionMetrics'
 
 interface PostLiveMessage {
   role: 'user' | 'assistant'
@@ -74,6 +78,26 @@ export function PostLiveReview({
     { label: '礼物', value: report.giftCount.toLocaleString(), icon: Diamond },
     { label: '新观众留存', value: `${report.retention}%`, icon: TrendingUp },
   ]
+  const monitoringMetrics = [
+    {
+      label: '画面亮度',
+      value: formatMonitoringValue(report.monitoring.brightness),
+      summary: report.monitoring.brightness,
+      icon: SunMedium,
+    },
+    {
+      label: '麦克风电平',
+      value: formatMonitoringValue(report.monitoring.microphone),
+      summary: report.monitoring.microphone,
+      icon: AudioLines,
+    },
+    {
+      label: '人脸画面占比',
+      value: formatMonitoringValue(report.monitoring.framing),
+      summary: report.monitoring.framing,
+      icon: ScanFace,
+    },
+  ]
 
   return (
     <main className="postlive-shell">
@@ -116,7 +140,7 @@ export function PostLiveReview({
                 <span>LIVE DATA</span>
                 <h2 id="postlive-data-title">直播数据复盘</h2>
               </div>
-              <small>Demo 数据快照</small>
+              <small>观众指标为 Demo 数据</small>
             </div>
             <div className="postlive-metric-grid">
               {metrics.map(({ label, value, icon: Icon }) => (
@@ -137,6 +161,34 @@ export function PostLiveReview({
                 <i style={{ width: `${report.performanceScore}%` }} />
               </div>
               <p>本场已采纳 <b>{report.appliedSuggestionCount}</b> 项 Genie 建议，画面、互动与观众反馈已纳入复盘。</p>
+            </div>
+            <div className="postlive-monitoring-heading">
+              <div>
+                <span>REAL MONITORING</span>
+                <h3>整场真实监控</h3>
+              </div>
+              <small>仅统计直播期间的有效浏览器采样</small>
+            </div>
+            <div className="postlive-monitoring-grid">
+              {monitoringMetrics.map(({ label, value, summary, icon: Icon }) => (
+                <article className="postlive-monitoring-metric" key={label}>
+                  <span><Icon size={16} /></span>
+                  <div>
+                    <small>{label}</small>
+                    <b>{value}</b>
+                  </div>
+                  {summary.available ? (
+                    <dl>
+                      <div><dt>平均评分</dt><dd>{summary.averageScore}</dd></div>
+                      <div><dt>最低评分</dt><dd>{summary.minimumScore}</dd></div>
+                      <div><dt>异常占比</dt><dd>{summary.issueRate}%</dd></div>
+                      <div><dt>有效样本</dt><dd>{summary.sampleCount}</dd></div>
+                    </dl>
+                  ) : (
+                    <p>本场未获得有效设备样本</p>
+                  )}
+                </article>
+              ))}
             </div>
           </section>
 
@@ -242,4 +294,11 @@ export function PostLiveReview({
       </div>
     </main>
   )
+}
+
+function formatMonitoringValue(metric: LiveMetricSummary): string {
+  if (!metric.available || metric.averageValue === null) return '--'
+  return metric.unit === '/ 100'
+    ? `${metric.averageValue} / 100`
+    : `${metric.averageValue}${metric.unit}`
 }

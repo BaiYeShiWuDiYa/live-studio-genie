@@ -515,6 +515,9 @@ Result: 13 test files and 63 tests passed. Browser regression verified bottom-ap
 - 进入播后页后自动调用 Genie 生成深度总结；接口不可用时保留本地可复现的兜底分析。
 - 新增开放式输入框与快捷问题，主播可描述本场感受，并携带整场数据上下文继续追问下一场优化。
 - 新增 `postLiveReview` 数据聚合、建议生成、AI Prompt 和时长格式化测试。
+- 新增直播会话监控聚合器，按 `updatedAt` 去重记录亮度、麦克风和人像构图的全部有效样本。
+- 播后页新增整场真实监控区域，展示平均业务值、平均/最低评分、异常占比和有效样本数。
+- 真实监控摘要已接入表现指数、经营建议、Genie 自动复盘和开放式追问上下文。
 
 Validation:
 
@@ -525,7 +528,7 @@ npm run lint
 git diff --check
 ```
 
-Result: 15 test files and 83 tests passed. Browser regression verified the end-live confirmation, responsive post-live review, automatic AI summary, quick questions, and contextual follow-up response.
+Result: 16 test files and 88 tests passed. Browser regression verified the end-live confirmation, responsive post-live review, automatic AI summary, contextual follow-up response, and no-device monitoring fallback.
 
 ## Next
 
