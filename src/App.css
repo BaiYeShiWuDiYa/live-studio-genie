@@ -240,6 +240,7 @@
 }
 .stage-column {
   min-width: 0;
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -258,6 +259,46 @@
   font-size: 18px;
   margin: 4px 0 0;
   letter-spacing: 0;
+}
+.task-save-notice {
+  position: absolute;
+  z-index: 10;
+  top: 96px;
+  right: 14px;
+  max-width: min(360px, 100%);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid rgba(109, 219, 205, 0.38);
+  border-radius: 7px;
+  background: rgba(17, 43, 46, 0.94);
+  box-shadow: 0 8px 20px rgba(4, 16, 22, 0.2);
+  color: #d6fff8;
+  pointer-events: none;
+  animation: task-save-notice-in 180ms ease both;
+}
+.task-save-notice > svg {
+  flex: none;
+  margin-top: 1px;
+  color: #7de0d2;
+}
+.task-save-notice b,
+.task-save-notice span {
+  display: block;
+}
+.task-save-notice b {
+  font-size: 11px;
+}
+.task-save-notice span {
+  margin-top: 2px;
+  color: #a9c9c5;
+  font-size: 10px;
+  line-height: 1.35;
+}
+@keyframes task-save-notice-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .secondary-button,
 .primary-button {
@@ -1140,6 +1181,23 @@
 }
 .canvas-widget-list-card {
   gap: 9px;
+}
+.prelive-task-card .prelive-interaction-widget-panel {
+  margin-inline: 0;
+  padding: 12px 0 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.prelive-interaction-widget-panel .canvas-widget-row,
+.prelive-interaction-widget-panel .canvas-widget-row.is-enabled {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.prelive-interaction-widget-panel .canvas-widget-row:focus-visible {
+  outline: 0;
 }
 .canvas-widget-back {
   border: 0;

@@ -11,7 +11,6 @@ import {
   ChevronDown,
   CircleStop,
   Gamepad2,
-  Gift,
   History,
   LayoutTemplate,
   Lightbulb,
@@ -105,7 +104,7 @@ import { useStudioStore } from './store/studioStore'
 type AppView = 'onboarding' | 'prelive' | 'live'
 type Scene = StudioScene
 type StreamKind = 'music' | 'chat' | 'game' | 'show'
-type PreliveTask = 'layout' | 'visual' | 'content' | 'interaction'
+type PreliveTask = 'layout' | 'visual' | 'content'
 type PreliveLayout = 'portrait' | 'three-quarter' | 'stage'
 type GoalKind = StreamGoalKind
 
@@ -159,11 +158,17 @@ const sceneCopy: Record<Scene, { title: string; detail: string; action: string }
   },
 }
 
+const sceneNoticeNames: Record<Scene, string> = {
+  quality: '画面优化场景',
+  interaction: '互动场景',
+  troubleshoot: '问题排查场景',
+  pk: 'PK 对战场景',
+}
+
 const preliveTasks: Array<{ id: PreliveTask; title: string; detail: string; action: string; priority: string }> = [
   { id: 'layout', title: '选择直播布局', detail: '根据直播类型确认画面布局，并检查画面源。', action: '确认画布方案', priority: '必须完成' },
   { id: 'visual', title: '人像美化', detail: '默认应用「清透日常」预设，可在美颜、美妆分类中微调，所有处理均在本地完成。', action: '应用美化方案', priority: '必须完成' },
   { id: 'content', title: '直播信息与内容', detail: '完善直播预告、主播介绍、主题说明和首 3 分钟内容脚本。', action: '保存内容方案', priority: '建议优化' },
-  { id: 'interaction', title: '互动预热与开场', detail: '配置预热文案和首屏点歌投票，降低新观众的互动门槛。', action: '保存互动方案', priority: '可选增强' },
 ]
 
 const chatLayoutTaskTitle = '选择直播布局'
@@ -239,12 +244,9 @@ function App() {
   const [preliveThemeDescription, setPreliveThemeDescription] = useState(
     '观众参与决定今晚歌单，包含点歌、聊天和阶段互动。',
   )
-  const [preliveWarmupCopy, setPreliveWarmupCopy] = useState(
-    '提前留言你最想听的歌，开播后优先安排。',
-  )
   const [preliveCoverApplied, setPreliveCoverApplied] = useState(false)
-  const [prelivePollEnabled, setPrelivePollEnabled] = useState(true)
-  const [prelivePollQuestion, setPrelivePollQuestion] = useState('下一首唱什么？')
+  const prelivePollEnabled = true
+  const prelivePollQuestion = '下一首唱什么？'
   const [isChatCompanion, setIsChatCompanion] = useState(false)
   const [chatTextEnabled, setChatTextEnabled] = useState(true)
   const [chatTextDraft, setChatTextDraft] = useState(defaultChatText)
@@ -263,7 +265,7 @@ function App() {
   const [chatTextOffset, setChatTextOffset] = useState<WidgetOffset>({ x: 0, y: 0 })
   const [chatGoalOffset, setChatGoalOffset] = useState<WidgetOffset>({ x: 0, y: 0 })
   const [hostComments, setHostComments] = useState<AudienceComment[]>([])
-  const readyScore = 20 + completedPreliveTasks.length * 20
+  const readyScore = Math.round(20 + completedPreliveTasks.length * (80 / preliveTasks.length))
   const [genieInput, setGenieInput] = useState('')
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [agentWidgetSpec, setAgentWidgetSpec] = useState<WidgetSpec | null>(null)
@@ -275,6 +277,7 @@ function App() {
   const [strategyCommentState, setStrategyCommentState] =
     useState<StrategyCommentState>('issue')
   const [liveAdjustment, setLiveAdjustment] = useState<LiveAdjustment | null>(null)
+  const [canvasNotice, setCanvasNotice] = useState<LiveAdjustment | null>(null)
   const [isSuggestionPreview, setIsSuggestionPreview] = useState(false)
   const [isMicMuted, setIsMicMuted] = useState(false)
   const [isBackgroundMusicPlaying, setIsBackgroundMusicPlaying] = useState(false)
@@ -425,6 +428,12 @@ function App() {
   useEffect(() => {
     latestDiagnosticsRef.current = diagnostics
   }, [diagnostics])
+
+  useEffect(() => {
+    if (!canvasNotice) return
+    const timeoutId = window.setTimeout(() => setCanvasNotice(null), 2000)
+    return () => window.clearTimeout(timeoutId)
+  }, [canvasNotice])
 
   useEffect(() => {
     if (!strategyMenuOpen) return
@@ -628,6 +637,10 @@ function App() {
     setIsSuggestionPreview(false)
     setLiveAdjustment(null)
     setIsPk(nextScene === 'pk')
+    setCanvasNotice({
+      name: `已切换至${sceneNoticeNames[nextScene]}`,
+      detail: '场景配置已同步到直播画面。',
+    })
   }
 
   const selectDemoStrategy = (strategyId: AudienceStrategyId) => {
@@ -652,7 +665,7 @@ function App() {
     strategyActivatedRef.current = false
     applyVisualSettings(strategy.visualSettings)
     applyAudioSettings(strategy.audioSettings)
-    setLiveAdjustment({
+    setCanvasNotice({
       name: `已切换为${strategy.label}`,
       detail: strategy.description,
     })
@@ -999,26 +1012,13 @@ function App() {
         mode: 'apply',
         settings: useStudioStore.getState().audioSettings,
       }, studioToolContext)
-    } else if (task.id === 'interaction') {
-      if (prelivePollEnabled) {
-        studioToolRegistry.execute('studio.configure_poll', {
-          mode: 'preview',
-          config: {
-            question: prelivePollQuestion,
-            options: ['甜歌', '炸场'],
-            durationSeconds: 45,
-          },
-        }, studioToolContext)
-      } else {
-        studioToolRegistry.execute('studio.reset_poll_preview', {}, studioToolContext)
-      }
     }
 
     const completed = new Set(completedPreliveTasks)
     completed.add(task.id)
     setCompletedPreliveTasks(Array.from(completed))
     setApplied(true)
-    setLiveAdjustment({
+    setCanvasNotice({
       name: `${task.title}已保存`,
       detail: '配置已同步到本场直播方案。',
     })
@@ -1305,7 +1305,7 @@ function App() {
           <h1>陪伴你的<span>直播旅程</span></h1>
           <p>今天想播什么？告诉我，我来帮你准备。</p>
           <div className="stream-options" role="list" aria-label="直播主题">
-            {STREAM_THEMES.map((theme) => (
+            {STREAM_THEMES.filter((theme) => theme.id !== 'show').map((theme) => (
               <StreamOption
                 key={theme.id}
                 icon={themeIcon(theme.id)}
@@ -1456,6 +1456,15 @@ function App() {
             <button type="button" className={previewMode === 'mobile' ? 'selected' : ''} onClick={() => setPreviewMode('mobile')}>移动端预览</button>
             <button type="button" className={previewMode === 'studio' ? 'selected' : ''} onClick={() => setPreviewMode('studio')}>Studio 视图</button>
           </div>
+          {canvasNotice && (
+            <div className="task-save-notice" role="status">
+              <Check size={15} />
+              <div>
+                <b>{canvasNotice.name}</b>
+                <span>{canvasNotice.detail}</span>
+              </div>
+            </div>
+          )}
           <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} strategy={strategyCommentState === 'issue' ? demoStrategy : 'normal'} liveAdjustment={liveAdjustment} previewMode={previewMode} isPreviewing={isSuggestionPreview} audience={audienceSnapshot} isLive={view === 'live'} preliveTitle={streamTopic} preliveLayout={preliveLayout} stageBackgroundUrl={stageBackgroundUrl} bandLayout={bandLayoutActive} chatWidgets={canvasWidgetsAvailable ? {
             text: chatTextEnabled ? chatTextValue : '',
             goalVisible: chatGoalEnabled,
@@ -1482,7 +1491,7 @@ function App() {
           </div>
           {view === 'prelive' && (
             <div className="prelive-go-live-bar">
-              <div><b>直播准备度 {readyScore}%</b><span>{readyScore === 100 ? '全部设置已就绪' : `${completedPreliveTasks.length} / 4 项已完成，可继续调整后开播`}</span></div>
+              <div><b>直播准备度 {readyScore}%</b><span>{readyScore === 100 ? '全部设置已就绪' : `${completedPreliveTasks.length} / ${preliveTasks.length} 项已完成，可继续调整后开播`}</span></div>
               <div className="score-track"><i style={{ width: `${readyScore}%` }} /></div>
               <Button className="prelive-go-live-button" color="primary" onClick={startLiveFromPrelive}><Play size={16} fill="currentColor" />GO LIVE</Button>
             </div>
@@ -1610,7 +1619,7 @@ function App() {
             <>
               <div className="live-genie-heading">
                 <span><i />GENIE · READY TO ASSIST</span>
-                <b>{completedPreliveTasks.length} / 4 已就绪</b>
+                <b>{completedPreliveTasks.length} / {preliveTasks.length} 已就绪</b>
               </div>
               <section className="prelive-control-shell" aria-label="直播前准备任务">
                 <div className="prelive-intent-summary">
@@ -1625,6 +1634,9 @@ function App() {
                   onSelect={setPreliveTaskIndex}
                 />
                 <div className="prelive-control-task">
+                  {canvasWidgetsAvailable && selectedCanvasWidget && (
+                    renderCanvasWidgetPanel(selectedCanvasWidget)
+                  )}
                   {agentWidgetSpec ? (
                     <WidgetRenderer
                       spec={agentWidgetSpec}
@@ -1637,8 +1649,6 @@ function App() {
                       onVisualChange={updateVisualPreview}
                       onCameraEffectsChange={updateCameraEffectsPreview}
                     />
-                  ) : canvasWidgetsAvailable && selectedCanvasWidget ? (
-                    renderCanvasWidgetPanel(selectedCanvasWidget)
                   ) : (
                     <PreliveTaskCard
                       task={preliveTasks[preliveTaskIndex]}
@@ -1652,10 +1662,12 @@ function App() {
                       hostName={preliveHostName}
                       hostBio={preliveHostBio}
                       themeDescription={preliveThemeDescription}
-                      warmupCopy={preliveWarmupCopy}
-                      pollEnabled={prelivePollEnabled}
-                      pollQuestion={prelivePollQuestion}
                       isChatCompanion={isChatCompanion}
+                      canvasWidgetPanel={
+                        canvasWidgetsAvailable && preliveTasks[preliveTaskIndex].id === 'layout'
+                          ? renderCanvasWidgetPanel(null)
+                          : null
+                      }
                       musicBackgroundId={musicBackgroundId}
                       customStageBackgroundUrl={customStageBackground}
                       stageBackgroundUploadError={stageBackgroundUploadError}
@@ -1672,11 +1684,8 @@ function App() {
                       onHostNameChange={setPreliveHostName}
                       onHostBioChange={setPreliveHostBio}
                       onThemeDescriptionChange={setPreliveThemeDescription}
-                      onWarmupCopyChange={setPreliveWarmupCopy}
                       coverApplied={preliveCoverApplied}
                       onCoverAppliedChange={setPreliveCoverApplied}
-                      onPollEnabledChange={setPrelivePollEnabled}
-                      onPollQuestionChange={setPrelivePollQuestion}
                       onVisualChange={updateVisualPreview}
                       onAudioChange={updateAudioPreview}
                       onApply={completePreliveTask}
@@ -1684,9 +1693,6 @@ function App() {
                     />
                   )}
                 </div>
-                {canvasWidgetsAvailable && !agentWidgetSpec && !selectedCanvasWidget && (
-                  renderCanvasWidgetPanel(null)
-                )}
               </section>
             </>
           )}
@@ -2160,9 +2166,9 @@ function CanvasWidgetPanel({
   )
 
   return (
-    <div className="recommendation-card canvas-widget-card canvas-widget-list-card">
-      <h2>画布小组件</h2>
-      <p>选择并编辑直播画面中的互动组件</p>
+    <div className="recommendation-card canvas-widget-card canvas-widget-list-card prelive-interaction-widget-panel">
+      <h2>互动组件</h2>
+      <p>选择需要展示在直播画面中的互动内容</p>
       {renderWidgetRow('text', <Type size={15} />, '文字源', '画面中的装饰文字，可编辑内容与样式', textEnabled, onTextEnabledChange)}
       {renderWidgetRow('goal', <Target size={15} />, '目标源', '展示直播目标进度，鼓励观众互动', goalEnabled, onGoalEnabledChange)}
       <small className="chat-widget-tip">勾选后在画布中展示；点击列表项或画布中的组件即可编辑，拖动可调整位置</small>
@@ -2182,11 +2188,9 @@ function PreliveTaskCard({
   hostName,
   hostBio,
   themeDescription,
-  warmupCopy,
   coverApplied,
-  pollEnabled,
-  pollQuestion,
   isChatCompanion,
+  canvasWidgetPanel,
   musicBackgroundId,
   customStageBackgroundUrl,
   stageBackgroundUploadError,
@@ -2200,10 +2204,7 @@ function PreliveTaskCard({
   onHostNameChange,
   onHostBioChange,
   onThemeDescriptionChange,
-  onWarmupCopyChange,
   onCoverAppliedChange,
-  onPollEnabledChange,
-  onPollQuestionChange,
   onVisualChange,
   onAudioChange,
   onApply,
@@ -2220,11 +2221,9 @@ function PreliveTaskCard({
   hostName: string
   hostBio: string
   themeDescription: string
-  warmupCopy: string
   coverApplied: boolean
-  pollEnabled: boolean
-  pollQuestion: string
   isChatCompanion: boolean
+  canvasWidgetPanel: ReactNode
   musicBackgroundId: string
   customStageBackgroundUrl: string | null
   stageBackgroundUploadError: string
@@ -2238,10 +2237,7 @@ function PreliveTaskCard({
   onHostNameChange: (name: string) => void
   onHostBioChange: (bio: string) => void
   onThemeDescriptionChange: (description: string) => void
-  onWarmupCopyChange: (copy: string) => void
   onCoverAppliedChange: (applied: boolean) => void
-  onPollEnabledChange: (enabled: boolean) => void
-  onPollQuestionChange: (question: string) => void
   onVisualChange: (property: keyof VisualSettings, percentage: number) => void
   onAudioChange: (property: keyof AudioSettings, value: number) => void
   onApply: () => void
@@ -2261,10 +2257,7 @@ function PreliveTaskCard({
       ? musicLayoutTaskDetail
       : task.detail
   const canApply = task.id !== 'content'
-    ? task.id !== 'interaction' || (
-        warmupCopy.trim().length > 0 &&
-        (!pollEnabled || pollQuestion.trim().length > 0)
-      )
+    ? true
     : [
         announcement,
         hostName,
@@ -2328,7 +2321,7 @@ function PreliveTaskCard({
             <Sparkles size={14} />
             <span><b>已推荐全屏摄像头布局</b><small>单人竖屏 · 9:16，最适合聊天陪伴</small></span>
           </div>
-          <small className="chat-widget-tip">在下方「画布小组件」中勾选文字源、目标源；点击画布中的组件即可编辑内容与样式，并可拖动调整位置</small>
+          <small className="chat-widget-tip">在下方「互动组件」中勾选文字源、目标源；点击画布中的组件即可编辑内容与样式，并可拖动调整位置</small>
         </div>
       ) : isMusicLayout ? (
         <div className="music-layout-picker">
@@ -2355,6 +2348,7 @@ function PreliveTaskCard({
         </div>
       )
     )}
+    {task.id === 'layout' && canvasWidgetPanel}
     {task.id === 'visual' && (
       <div className="prelive-beauty-panel">
         <CameraEffectsWidget
@@ -2392,23 +2386,6 @@ function PreliveTaskCard({
         </div>
         <label><span>首 3 分钟内容脚本</span><textarea value={script} maxLength={240} rows={5} onChange={(event) => onScriptChange(event.target.value)} /></label>
         <small>{title.length} / 30 · {script.length} / 240</small>
-      </div>
-    )}
-    {task.id === 'interaction' && (
-      <div className="prelive-form">
-        <div className="prelive-form-section">
-          <b>互动预热文案</b>
-          <label><span>开播前引导</span><textarea value={warmupCopy} maxLength={100} rows={3} onChange={(event) => onWarmupCopyChange(event.target.value)} /></label>
-        </div>
-        <label className="prelive-toggle-row">
-          <span><Gift size={15} />开播时展示点歌投票</span>
-          <input type="checkbox" checked={pollEnabled} onChange={(event) => onPollEnabledChange(event.target.checked)} />
-        </label>
-        <label className={!pollEnabled ? 'is-disabled' : ''}>
-          <span>投票问题</span>
-          <input value={pollQuestion} maxLength={30} disabled={!pollEnabled} onChange={(event) => onPollQuestionChange(event.target.value)} />
-        </label>
-        <div className="prelive-poll-preview"><b>{pollQuestion || '下一首唱什么？'}</b><span>甜歌</span><span>炸场</span><small>开播后展示 45 秒</small></div>
       </div>
     )}
     <Button className="primary-button full-button" color="primary" disabled={!canApply} onClick={onApply}><Check size={16} />{completed ? '更新当前设置' : task.action}</Button>
