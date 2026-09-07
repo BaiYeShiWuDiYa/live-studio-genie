@@ -518,6 +518,7 @@ Result: 13 test files and 63 tests passed. Browser regression verified bottom-ap
 - 新增直播会话监控聚合器，按 `updatedAt` 去重记录亮度、麦克风和人像构图的全部有效样本。
 - 播后页新增整场真实监控区域，展示平均业务值、平均/最低评分、异常占比和有效样本数。
 - 真实监控摘要已接入表现指数、经营建议、Genie 自动复盘和开放式追问上下文。
+- 新增 `docs/post-live-data-source-guide.md`，完整区分关播页真实监控、真实会话状态、Mock、派生和 AI 生成数据。
 
 Validation:
 
@@ -528,7 +529,7 @@ npm run lint
 git diff --check
 ```
 
-Result: 16 test files and 88 tests passed. Browser regression verified the end-live confirmation, responsive post-live review, automatic AI summary, contextual follow-up response, and no-device monitoring fallback.
+Result: 18 test files and 100 tests passed. Browser regression verified the end-live confirmation, responsive post-live review, automatic AI summary, contextual follow-up response, and no-device monitoring fallback.
 
 ## Next
 

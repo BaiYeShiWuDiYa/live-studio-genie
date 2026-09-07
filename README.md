@@ -97,6 +97,7 @@ vite.config.ts         开发环境 Agent 同源代理，密钥仅在服务端�
 ## 功能文档
 
 - [功能实现状态与完整操作指南](docs/feature-status-and-usage-guide.md)
+- [关播页展示数据与来源说明](docs/post-live-data-source-guide.md)
 - [开发进展](docs/implementation-progress.md)
 
 ## 协作约定
