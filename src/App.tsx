@@ -52,7 +52,6 @@ import { requestCameraStream, requestDisplayStream, stopMediaStream } from './ca
 import { useMediaMonitoring } from './capabilities/monitoring/useMediaMonitoring'
 import {
   buildLiveDiagnostics,
-  type LiveDiagnostics,
   type LiveSuggestion,
 } from './capabilities/monitoring/liveDiagnostics'
 import {
@@ -117,13 +116,6 @@ const goalKindOptions: ReadonlyArray<{ id: GoalKind; label: string; defaultTitle
 type PreviewMode = 'mobile' | 'studio'
 type GenieRequestStatus = 'idle' | 'loading' | 'cancelled' | 'timeout' | 'error'
 type StrategyCommentState = 'issue' | 'recovery' | 'normal'
-
-const audienceTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
-  hour: '2-digit',
-  minute: '2-digit',
-  second: '2-digit',
-  hourCycle: 'h23',
-})
 
 type ChatMessage = {
   role: 'user' | 'assistant'
@@ -1370,18 +1362,15 @@ function App() {
       </header>
       <section className="workspace">
         <aside className="monitor-panel panel">
-          {view === 'live' ? (
-            <LiveOperationsPanel audience={audienceSnapshot} diagnostics={diagnostics} />
-          ) : (
-            <LiveChatPanel
-              isLive={false}
-              cameraEnabled={cameraEnabled}
-              isMicMuted={isMicMuted}
-              audience={audienceSnapshot}
-              hostComments={hostComments}
-              onSendComment={sendHostComment}
-            />
-          )}
+          <LiveChatPanel
+            isLive={view === 'live'}
+            cameraEnabled={cameraEnabled}
+            isMicMuted={isMicMuted}
+            audience={audienceSnapshot}
+            diagnostics={view === 'live' ? diagnostics : undefined}
+            hostComments={hostComments}
+            onSendComment={sendHostComment}
+          />
         </aside>
 
         <section className="stage-column">
@@ -1686,95 +1675,6 @@ function StrategyIcon({ strategyId }: { strategyId: AudienceStrategyId }) {
   if (strategyId === 'network-lag') return <WifiOff size={15} />
   if (strategyId === 'pk-push') return <Users size={15} />
   return <Activity size={15} />
-}
-
-function LiveOperationsPanel({ audience, diagnostics }: {
-  audience: AudienceSnapshot
-  diagnostics: LiveDiagnostics
-}) {
-  const commentListRef = useRef<HTMLDivElement>(null)
-  const newestCommentId = audience.comments.at(-1)?.id
-  const gifts = [
-    { icon: '🌹', user: audience.gifts[0]?.userName ?? 'Luna', gift: 'Rose', count: audience.gifts[0]?.count ?? 5, time: '12:41:30' },
-    { icon: '♪', user: 'Alex', gift: 'TikTok', count: 1, time: '12:42:02' },
-    { icon: '♥', user: audience.gifts[1]?.userName ?? 'Mie', gift: 'Heart', count: audience.gifts[1]?.count ?? 10, time: '12:42:10' },
-  ]
-
-  useEffect(() => {
-    const commentList = commentListRef.current
-    if (commentList) {
-      commentList.scrollTop = commentList.scrollHeight
-    }
-  }, [newestCommentId])
-
-  return (
-    <div className="live-operations">
-      <section className="indicator-section" aria-label="实时指标">
-        <h2>Real-time Indicators</h2>
-        <span className="monitoring-summary"><i />实时采样中 · {diagnostics.healthyCount} 项正常</span>
-        <section className="metric-group good-metrics" aria-label="做得好的">
-          <h3><Check size={13} />做得好的</h3>
-          <div className="indicator-list">
-            {diagnostics.goodSignals.map((indicator) => <IndicatorRow key={indicator.id} {...indicator} />)}
-          </div>
-        </section>
-        <section className="metric-group improvement-metrics" aria-label="需要改进的">
-          <h3><Zap size={13} />需要改进的</h3>
-          <div className="indicator-list improvement-list">
-            {diagnostics.improvements.map((indicator) => <IndicatorRow key={indicator.id} {...indicator} />)}
-          </div>
-        </section>
-      </section>
-      <section className="activity-section gift-activity">
-        <h2>Gift</h2>
-        {gifts.map((gift, index) => (
-          <div className={index === 1 ? 'activity-row highlighted' : 'activity-row'} key={`${gift.user}-${gift.gift}`}>
-            <i>{gift.icon}</i>
-            <span><b>{gift.user}</b> 送出 <em>{gift.gift}</em> ×{gift.count}</span>
-            <time>{gift.time}</time>
-          </div>
-        ))}
-      </section>
-      <section className="activity-section comment-activity">
-        <h2>Comment</h2>
-        <div className="prototype-comment-list" ref={commentListRef} role="log" aria-label="实时评论列表" aria-live="polite" tabIndex={0}>
-          {audience.comments.map((comment, index) => (
-            <div className="prototype-comment" key={comment.id}>
-              <i className={`avatar avatar-${index % 4 + 1}`}>{comment.userName.slice(0, 1)}</i>
-              <span><b>{comment.userName}:</b> {comment.text}</span>
-              <time dateTime={new Date(comment.occurredAt).toISOString()}>
-                {audienceTimeFormatter.format(comment.occurredAt)}
-              </time>
-            </div>
-          ))}
-        </div>
-      </section>
-    </div>
-  )
-}
-
-function IndicatorRow({ label, value, score, tone, direction, trendLabel, audio = false }: {
-  label: string
-  value: string
-  score: number
-  tone: string
-  direction: 'up' | 'down'
-  trendLabel: string
-  audio?: boolean
-}) {
-  const displayValue = label === '人脸构图'
-    ? value.replace('人脸 ', '')
-    : value
-
-  return (
-    <div className={`indicator-row ${tone}`}>
-      <span className="indicator-label"><i />{label}</span>
-      {audio
-        ? <span className="audio-wave" aria-hidden="true">{Array.from({ length: 17 }, (_, index) => <i key={index} />)}</span>
-        : <span className="indicator-track"><i style={{ width: `${Math.max(8, Math.min(100, score))}%` }} /></span>}
-      <b>{displayValue}<em>{direction === 'up' ? ` ${trendLabel} ↑` : ` ${trendLabel} ↓`}</em></b>
-    </div>
-  )
 }
 
 function getWidgetAdjustment(spec: WidgetSpec, mode: 'preview' | 'apply'): LiveAdjustment {

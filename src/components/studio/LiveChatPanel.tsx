@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Activity, Camera, Check, Gift, MessageCircle, Mic, Send } from 'lucide-react'
 import type { AudienceComment, AudienceSnapshot } from '../../capabilities/audience/audienceEvents'
+import type { LiveDiagnostics } from '../../capabilities/monitoring/liveDiagnostics'
 
 type LiveChatPanelProps = {
   isLive: boolean
   cameraEnabled: boolean
   isMicMuted: boolean
   audience: AudienceSnapshot
+  diagnostics?: LiveDiagnostics
   hostComments: AudienceComment[]
   onSendComment: (text: string) => void
 }
@@ -23,6 +25,7 @@ export function LiveChatPanel({
   cameraEnabled,
   isMicMuted,
   audience,
+  diagnostics,
   hostComments,
   onSendComment,
 }: LiveChatPanelProps) {
@@ -45,13 +48,6 @@ export function LiveChatPanel({
     setDraft('')
   }
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter') {
-      event.preventDefault()
-      submitComment()
-    }
-  }
-
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     submitComment()
@@ -62,26 +58,44 @@ export function LiveChatPanel({
     { icon: <Mic size={13} />, name: '麦克风', status: isMicMuted ? '已静音' : '正常', ok: !isMicMuted },
     { icon: <Activity size={13} />, name: '网络', status: '稳定 · 42ms', ok: true },
   ]
+  const monitorSignals = diagnostics
+    ? [...diagnostics.goodSignals, ...diagnostics.improvements]
+    : []
 
   return (
-    <div className="live-chat-panel">
-      <h2 className="live-chat-title">LIVE chat</h2>
-
-      <div className="live-chat-devices" aria-label="设备状态">
-        {devices.map((device) => (
-          <span className="live-chat-device" key={device.name}>
-            {device.icon}
-            <b>{device.name}</b>
-            <i className={device.ok ? 'is-ok' : 'is-warn'}>
-              {device.ok && <Check size={10} strokeWidth={3} />}
-              {device.status}
-            </i>
-          </span>
-        ))}
+    <div className={`live-chat-panel${isLive ? ' is-live' : ''}`}>
+      <div
+        className={`live-chat-devices${isLive ? ' is-monitoring' : ''}`}
+        aria-label={isLive ? '实时监控指标' : '设备状态'}
+      >
+        {isLive
+          ? monitorSignals.map((signal) => (
+            <span
+              className={`live-chat-device live-monitor-tag tone-${signal.tone}`}
+              key={signal.id}
+              title={`${signal.label} ${signal.value} ${signal.trendLabel}`}
+            >
+              <Activity size={13} />
+              <b>{signal.label}</b>
+              <i>
+                {signal.value} · {signal.trendLabel} {signal.direction === 'up' ? '↑' : '↓'}
+              </i>
+            </span>
+          ))
+          : devices.map((device) => (
+            <span className="live-chat-device" key={device.name}>
+              {device.icon}
+              <b>{device.name}</b>
+              <i className={device.ok ? 'is-ok' : 'is-warn'}>
+                {device.ok && <Check size={10} strokeWidth={3} />}
+                {device.status}
+              </i>
+            </span>
+          ))}
       </div>
 
       <section className="live-chat-gifts" aria-label="礼物区">
-        <h3>Gifts</h3>
+        <h2 className="live-chat-title">LIVE Chat</h2>
         {isLive && audience.gifts.length > 0 ? (
           <div className="live-chat-gift-list">
             {audience.gifts.slice(0, 3).map((gift) => (
@@ -139,7 +153,6 @@ export function LiveChatPanel({
             title={isLive ? undefined : 'Available when you go live.'}
             aria-label="评论输入框"
             onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={handleKeyDown}
           />
           <button
             type="submit"

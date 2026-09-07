@@ -3746,6 +3746,11 @@
   gap: 6px;
 }
 
+.live-chat-devices.is-monitoring {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .live-chat-device {
   display: inline-flex;
   align-items: center;
@@ -3779,6 +3784,49 @@
 .live-chat-device i.is-ok { color: #7edfc0; }
 .live-chat-device i.is-warn { color: #f2a275; }
 
+.live-monitor-tag {
+  min-width: 0;
+  padding-inline: 8px;
+}
+
+.live-monitor-tag b,
+.live-monitor-tag i {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-monitor-tag i {
+  margin-left: auto;
+  font-size: clamp(8px, 0.58vw, 11px);
+}
+
+.live-monitor-tag.tone-good svg,
+.live-monitor-tag.tone-good i {
+  color: #7edfc0;
+}
+
+.live-monitor-tag.tone-warn {
+  border-color: rgba(242, 162, 117, 0.34);
+  background: rgba(77, 52, 45, 0.48);
+}
+
+.live-monitor-tag.tone-warn svg,
+.live-monitor-tag.tone-warn i {
+  color: #f2a275;
+}
+
+.live-monitor-tag.tone-bad {
+  border-color: rgba(240, 93, 120, 0.38);
+  background: rgba(76, 39, 48, 0.52);
+}
+
+.live-monitor-tag.tone-bad svg,
+.live-monitor-tag.tone-bad i {
+  color: #f08b9c;
+}
+
 .live-chat-gifts {
   flex: none;
   display: flex;
@@ -3786,11 +3834,8 @@
   min-height: 0;
 }
 
-.live-chat-gifts h3 {
-  margin: 0 0 6px;
-  color: #faf5f8;
-  font-size: clamp(11px, 0.85vw, 15px);
-  font-weight: 600;
+.live-chat-gifts .live-chat-title {
+  margin-bottom: 6px;
 }
 
 .live-chat-gift-list {
