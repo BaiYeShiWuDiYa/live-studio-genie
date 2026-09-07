@@ -1,5 +1,6 @@
 import type {
   AudienceComment,
+  AudienceSnapshot,
   CommentInsight,
 } from '../audience/audienceEvents'
 import { studioRuntimeConfig } from '../../config/studioRuntime'
@@ -11,8 +12,11 @@ import type {
   LiveDiagnostics,
   LiveSuggestion,
 } from './liveDiagnostics'
+import type { MediaMetric, MediaMetricKind } from './types'
 
 export const rightRailUpdateConfig = {
+  normalDetectionIntervalMs:
+    studioRuntimeConfig.suggestion.normalDetectionIntervalMs,
   metricTrendDeltaThreshold:
     studioRuntimeConfig.suggestion.metricTrendDeltaThreshold,
   metricUpdateCooldownMs:
@@ -22,6 +26,119 @@ export const rightRailUpdateConfig = {
   commentCategoryCooldownMs:
     studioRuntimeConfig.suggestion.commentCategoryCooldownMs,
 } as const
+
+export interface NormalModeDetectionSnapshot {
+  monitoringFingerprint: string
+  latestMonitoringUpdateAt: number
+  latestCommentId: string | null
+  visualFingerprint: string
+}
+
+export interface NormalModeUpdateSources {
+  monitoring: boolean
+  comments: boolean
+  visual: boolean
+  hasUpdates: boolean
+}
+
+export function createNormalModeDetectionSnapshot(
+  diagnostics: LiveDiagnostics,
+  comments: readonly Pick<AudienceComment, 'id'>[],
+  mediaMetrics: Record<MediaMetricKind, MediaMetric>,
+): NormalModeDetectionSnapshot {
+  return {
+    monitoringFingerprint: diagnostics.signals
+      .map(({ id, score, tone, trend, value }) =>
+        `${id}:${score}:${tone}:${trend}:${value}`,
+      )
+      .join('|'),
+    latestMonitoringUpdateAt: Math.max(
+      ...Object.values(mediaMetrics).map((metric) => metric.updatedAt),
+    ),
+    latestCommentId: comments.at(-1)?.id ?? null,
+    visualFingerprint: [
+      mediaMetrics.brightness.status,
+      mediaMetrics.brightness.score,
+      mediaMetrics.brightness.value,
+      mediaMetrics.framing.status,
+      mediaMetrics.framing.score,
+      mediaMetrics.framing.value,
+    ].join(':'),
+  }
+}
+
+export function detectNormalModeUpdates(
+  previous: NormalModeDetectionSnapshot,
+  current: NormalModeDetectionSnapshot,
+): NormalModeUpdateSources {
+  const monitoring =
+    current.monitoringFingerprint !== previous.monitoringFingerprint ||
+    current.latestMonitoringUpdateAt > previous.latestMonitoringUpdateAt
+  const comments = current.latestCommentId !== previous.latestCommentId
+  const visual = current.visualFingerprint !== previous.visualFingerprint
+
+  return {
+    monitoring,
+    comments,
+    visual,
+    hasUpdates: monitoring || comments || visual,
+  }
+}
+
+export function createNormalAiAnalysisPrompt(
+  diagnostics: LiveDiagnostics,
+  audience: AudienceSnapshot,
+  updates: NormalModeUpdateSources,
+  candidates: readonly LiveSuggestion[],
+): string {
+  const updateSources = [
+    updates.monitoring ? '监控指标' : null,
+    updates.comments ? '评论区' : null,
+    updates.visual ? '直播画面' : null,
+  ].filter(Boolean).join('、')
+  const signalSummary = diagnostics.signals
+    .map((signal) =>
+      `${signal.label}: ${signal.value}, 趋势 ${signal.trendLabel}, 状态 ${signal.tone}`,
+    )
+    .join('\n')
+  const recentComments = audience.comments
+    .slice(-5)
+    .map((comment) => comment.text)
+    .join('；') || '暂无新评论'
+  const candidateSummary = candidates
+    .map((candidate) => `${candidate.metric}: ${candidate.action}`)
+    .join('\n')
+
+  return [
+    '你是 LIVE Studio Genie 的实时分析模块。',
+    `本轮检测到变化来源：${updateSources || '无'}。`,
+    '请结合当前直播画面（如请求附带画面帧）、实时指标和最新评论，判断是否需要给主播新增一条建议。',
+    '不要复述固定模板，不要仅凭单一波动下结论；优先解释画面、数据和评论之间的关联。',
+    '如果没有明确且可执行的新问题，只回复 NO_ACTION。',
+    '如果需要建议，用 80 个汉字以内给出自然、具体、可执行的中文建议，并按协议返回一个最相关组件。',
+    '返回的组件必须直接执行这条建议，不得返回与建议内容无关的组件。',
+    `当前在线：${audience.viewerCount}，近一分钟进房：${audience.entrantsLastMinute}，10 秒留存：${audience.newViewerRetention}%，评论密度：${audience.commentsPerMinute}/min。`,
+    `实时指标：\n${signalSummary}`,
+    `最新评论：${recentComments}`,
+    `本地诊断候选仅作事实参考，不得照抄：\n${candidateSummary || '无'}`,
+  ].join('\n')
+}
+
+export function createAiAnalyzedSuggestion(
+  base: LiveSuggestion,
+  analysisText: string,
+  widget?: LiveSuggestion['widget'],
+): LiveSuggestion | null {
+  const action = analysisText.trim()
+  if (!action || /^NO_ACTION[。.!！]?$/i.test(action)) return null
+
+  return {
+    ...base,
+    action: truncate(action, 180),
+    widget: widget ?? base.widget,
+    analysisSource: 'ai',
+  }
+}
 
 export function selectThresholdChangedSuggestions(
   previous: LiveDiagnostics | null,

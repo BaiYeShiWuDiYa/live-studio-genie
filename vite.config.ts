@@ -2,7 +2,7 @@ import react from '@vitejs/plugin-react'
 import { randomUUID } from 'node:crypto'
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 
-const defaultModelBaseUrl = 'https://aidp-i18ntt-sg.byteintl.net'
+const defaultModelBaseUrl = 'https://aidp-i18ntt-sg.tiktok-row.net'
 
 function genieProxy(apiKey: string | undefined, baseUrl: string): Plugin {
   return {
@@ -18,7 +18,7 @@ function genieProxy(apiKey: string | undefined, baseUrl: string): Plugin {
         if (!apiKey) {
           response.statusCode = 503
           response.setHeader('Content-Type', 'application/json')
-          response.end(JSON.stringify({ error: '未配置 GENIE_MODEL_AK，请检查 .env.local。' }))
+          response.end(JSON.stringify({ error: '未配置 GENIE_MODEL_AK，请检查 .env 或 .env.local。' }))
           return
         }
 
@@ -26,8 +26,27 @@ function genieProxy(apiKey: string | undefined, baseUrl: string): Plugin {
         for await (const chunk of request) chunks.push(Buffer.from(chunk))
 
         try {
-          const body = JSON.parse(Buffer.concat(chunks).toString()) as { prompt?: string }
+          const body = JSON.parse(Buffer.concat(chunks).toString()) as {
+            prompt?: string
+            imageDataUrl?: string
+          }
           if (!body.prompt?.trim()) throw new Error('Prompt is required')
+          const imageDataUrl =
+            typeof body.imageDataUrl === 'string' &&
+            /^data:image\/jpeg;base64,[a-z0-9+/=]+$/i.test(body.imageDataUrl) &&
+            body.imageDataUrl.length <= 800_000
+              ? body.imageDataUrl
+              : undefined
+          const content: Array<
+            | { type: 'text'; text: string }
+            | { type: 'image_url'; image_url: { url: string } }
+          > = [{ type: 'text', text: body.prompt }]
+          if (imageDataUrl) {
+            content.push({
+              type: 'image_url',
+              image_url: { url: imageDataUrl },
+            })
+          }
 
           const upstream = await fetch(
             `${baseUrl.replace(/\/$/, '')}/api/modelhub/online/v2/crawl?ak=${encodeURIComponent(apiKey)}`,
@@ -41,7 +60,7 @@ function genieProxy(apiKey: string | undefined, baseUrl: string): Plugin {
                 stream: false,
                 model: 'gpt-5.4-2026-03-05',
                 max_tokens: 500,
-                messages: [{ role: 'user', content: [{ type: 'text', text: body.prompt }] }],
+                messages: [{ role: 'user', content }],
               }),
             },
           )

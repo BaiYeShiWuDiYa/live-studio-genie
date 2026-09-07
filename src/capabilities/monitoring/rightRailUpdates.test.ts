@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import type { AudienceComment, CommentInsight } from '../audience/audienceEvents'
+import type {
+  AudienceComment,
+  AudienceSnapshot,
+  CommentInsight,
+} from '../audience/audienceEvents'
 import {
+  createAiAnalyzedSuggestion,
+  createNormalAiAnalysisPrompt,
+  createNormalModeDetectionSnapshot,
   createCommentInsightSuggestion,
+  detectNormalModeUpdates,
   rightRailUpdateConfig,
   selectSuggestionsForStrategy,
   selectThresholdChangedSuggestions,
@@ -83,6 +91,119 @@ describe('right rail updates', () => {
         (item) => item.signalId,
       ),
     ).toEqual(['exposure', 'comments'])
+  })
+
+  it('checks normal mode updates at an exact 15-second interval', () => {
+    expect(rightRailUpdateConfig.normalDetectionIntervalMs).toBe(15_000)
+  })
+
+  it('detects monitoring, comment, and visual changes independently', () => {
+    const baseDiagnostics = diagnostics(
+      [signal('exposure', -5, 'warn')],
+      [suggestion('exposure')],
+    )
+    const mediaMetrics = {
+      brightness: {
+        score: 60,
+        value: '60 / 100',
+        tone: 'good' as const,
+        status: 'ready' as const,
+        updatedAt: 100,
+      },
+      microphone: {
+        score: 50,
+        value: '-30 dB',
+        tone: 'good' as const,
+        status: 'ready' as const,
+        updatedAt: 100,
+      },
+      framing: {
+        score: 70,
+        value: '人脸 34% · 居中',
+        tone: 'good' as const,
+        status: 'ready' as const,
+        updatedAt: 100,
+      },
+    }
+    const previous = createNormalModeDetectionSnapshot(
+      baseDiagnostics,
+      [{ id: 'comment-1' }],
+      mediaMetrics,
+    )
+    const current = createNormalModeDetectionSnapshot(
+      baseDiagnostics,
+      [{ id: 'comment-1' }, { id: 'comment-2' }],
+      {
+        ...mediaMetrics,
+        brightness: {
+          ...mediaMetrics.brightness,
+          score: 42,
+          value: '42 / 100',
+          updatedAt: 200,
+        },
+      },
+    )
+
+    expect(detectNormalModeUpdates(previous, current)).toEqual({
+      monitoring: true,
+      comments: true,
+      visual: true,
+      hasUpdates: true,
+    })
+    expect(detectNormalModeUpdates(previous, previous).hasUpdates).toBe(false)
+  })
+
+  it('builds normal-mode AI context from metrics, comments, and updates', () => {
+    const currentDiagnostics = diagnostics(
+      [signal('exposure', -18, 'bad')],
+      [suggestion('exposure')],
+    )
+    const audience: AudienceSnapshot = {
+      comments: [{
+        id: 'comment-1',
+        type: 'comment',
+        userName: 'viewer',
+        text: '画面有点暗',
+        occurredAt: 100,
+      }],
+      gifts: [],
+      viewerCount: 120,
+      entrantsLastMinute: 24,
+      commentsPerMinute: 18,
+      newViewerRetention: 42,
+      insight: { category: 'visual', label: '画面反馈', count: 1 },
+    }
+    const prompt = createNormalAiAnalysisPrompt(
+      currentDiagnostics,
+      audience,
+      {
+        monitoring: true,
+        comments: true,
+        visual: true,
+        hasUpdates: true,
+      },
+      currentDiagnostics.suggestions,
+    )
+
+    expect(prompt).toContain('监控指标、评论区、直播画面')
+    expect(prompt).toContain('画面有点暗')
+    expect(prompt).toContain('NO_ACTION')
+  })
+
+  it('uses AI copy and widget while allowing NO_ACTION', () => {
+    const base = suggestion('exposure')
+    const aiWidget = suggestion('comments').widget
+
+    expect(createAiAnalyzedSuggestion(
+      base,
+      '画面与评论共同显示主体偏暗，建议小幅补光。',
+      aiWidget,
+    )).toMatchObject({
+      action: '画面与评论共同显示主体偏暗，建议小幅补光。',
+      widget: aiWidget,
+      analysisSource: 'ai',
+    })
+    expect(createAiAnalyzedSuggestion(base, 'NO_ACTION')).toBeNull()
   })
 
   it('ignores stable and recovered metrics', () => {

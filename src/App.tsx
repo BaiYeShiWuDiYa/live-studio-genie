@@ -68,10 +68,15 @@ import {
   type LiveSuggestion,
 } from './capabilities/monitoring/liveDiagnostics'
 import {
+  createAiAnalyzedSuggestion,
+  createNormalAiAnalysisPrompt,
+  createNormalModeDetectionSnapshot,
   createCommentInsightSuggestion,
+  detectNormalModeUpdates,
   rightRailUpdateConfig,
   selectSuggestionsForStrategy,
   selectThresholdChangedSuggestions,
+  type NormalModeDetectionSnapshot,
 } from './capabilities/monitoring/rightRailUpdates'
 import {
   buildPostLiveAiPrompt,
@@ -124,6 +129,7 @@ import {
 import { LiveChatPanel } from './components/studio/LiveChatPanel'
 import { AtomicRecallCard } from './components/atomic/AtomicRecallCard'
 import { recallAtomicComponents } from './components/atomic/intentRecall'
+import { atomicComponentRegistry } from './components/atomic/registry'
 import type { AtomicComponentId } from './components/atomic/types'
 import {
   audienceSceneOptions,
@@ -305,6 +311,50 @@ const widgetProtocol = [
   'live-goal，props 包含 label、current、target、supporters。',
 ].join('\n')
 
+type GenieRequest = {
+  question: string
+  prompt: string
+  imageDataUrl?: string
+}
+
+function captureStudioFrame(
+  videoRef: React.RefObject<HTMLVideoElement>,
+): string | undefined {
+  const effectsCanvas = document.querySelector<HTMLCanvasElement>(
+    '.camera-effects-canvas',
+  )
+  const video = videoRef.current
+  const source = effectsCanvas?.width && effectsCanvas.height
+    ? effectsCanvas
+    : video && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+      ? video
+      : null
+  if (!source) return undefined
+
+  const sourceWidth = source instanceof HTMLVideoElement
+    ? source.videoWidth
+    : source.width
+  const sourceHeight = source instanceof HTMLVideoElement
+    ? source.videoHeight
+    : source.height
+  if (!sourceWidth || !sourceHeight) return undefined
+
+  const maximumWidth = 480
+  const scale = Math.min(1, maximumWidth / sourceWidth)
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.round(sourceWidth * scale))
+  canvas.height = Math.max(1, Math.round(sourceHeight * scale))
+  const context = canvas.getContext('2d')
+  if (!context) return undefined
+
+  try {
+    context.drawImage(source, 0, 0, canvas.width, canvas.height)
+    return canvas.toDataURL('image/jpeg', 0.68)
+  } catch {
+    return undefined
+  }
+}
+
 function App() {
   const [view, setView] = useState<AppView>('onboarding')
   const [streamType, setStreamType] = useState<StreamKind>('music')
@@ -388,6 +438,9 @@ function App() {
   const [liveStageMode, setLiveStageMode] = useState<LiveStageMode>('preview')
   const [inputAtomicComponents, setInputAtomicComponents] = useState<AtomicComponentId[]>([])
   const [rightRailSource, setRightRailSource] = useState<RightRailSource>('trigger')
+  const [isGenieChatOpen, setIsGenieChatOpen] = useState(false)
+  const [normalAiAnalysisStatus, setNormalAiAnalysisStatus] =
+    useState<'idle' | 'loading'>('idle')
   const [dismissedAtomicComponents, setDismissedAtomicComponents] =
     useState<Set<string>>(() => new Set())
   const [removingAtomicComponents, setRemovingAtomicComponents] =
@@ -404,13 +457,15 @@ function App() {
   const cameraAttemptedRef = useRef(false)
   const strategySelectorRef = useRef<HTMLDivElement>(null)
   const genieComposerRef = useRef<HTMLFormElement>(null)
+  const genieChatMessageEndRef = useRef<HTMLDivElement>(null)
   const genieInputModeTimeoutRef = useRef<number | null>(null)
   const strategyRecoveryTimeoutRef = useRef<number | null>(null)
   const preliveVisualSettingsRef = useRef<VisualSettings | null>(null)
   const preliveAudioSettingsRef = useRef<AudioSettings | null>(null)
   const preliveSceneRef = useRef<Scene>('quality')
   const genieAbortRef = useRef<AbortController | null>(null)
-  const lastGenieRequestRef = useRef<{ question: string; prompt: string } | null>(null)
+  const lastGenieRequestRef = useRef<GenieRequest | null>(null)
+  const normalAiAnalysisAbortRef = useRef<AbortController | null>(null)
   const postLiveAbortRef = useRef<AbortController | null>(null)
   const lastPostLiveRequestRef = useRef<{
     report: PostLiveReport
@@ -526,9 +581,8 @@ function App() {
   const previousDiagnosticsRef = useRef<LiveDiagnostics | null>(null)
   const latestAudienceRef = useRef(audienceSnapshot)
   const lastMetricUpdateAtRef = useRef(0)
-  const lastAnalyzedCommentIdRef = useRef<string | null>(null)
-  const commentAnalysisTimeoutRef = useRef<number | null>(null)
-  const commentTriggerTimesRef = useRef(new Map<string, number>())
+  const normalModeDetectionRef =
+    useRef<NormalModeDetectionSnapshot | null>(null)
   const strategyActivatedRef = useRef(false)
   const dismissedSignalIdsRef = useRef(new Set<LiveSuggestion['signalId']>())
   const removalTimeoutsRef = useRef(new Map<string, number>())
@@ -539,6 +593,9 @@ function App() {
       widgetIndex,
       widgetSpec,
     })),
+  )
+  const aiSuggestionComponents = suggestionComponents.filter(
+    (component) => component.suggestion.analysisSource === 'ai',
   )
   const visibleSuggestionQueue = suggestionQueue.filter(
     (suggestion) => !hiddenSuggestionIds.has(suggestion.queueId),
@@ -554,40 +611,39 @@ function App() {
       : []),
     ...suggestionComponents,
   ]
-  const atomicRecalledComponents = (() => {
-    const inputCandidates = inputAtomicComponents.map((componentId) => ({
-        key: `input-${componentId}`,
+  const inputRecalledComponents = inputAtomicComponents
+    .map((componentId) => ({
+      key: `input-${componentId}`,
+      componentId,
+      metric: 'Genie 输入意图',
+      source: '输入框识别',
+      suggestionNumber: null,
+      suggestionId: null,
+    }))
+    .filter((candidate) => !dismissedAtomicComponents.has(candidate.key))
+  const triggeredRecalledComponents = suggestionQueue
+    .flatMap((suggestion, suggestionIndex) =>
+      suggestion.analysisSource === 'ai'
+        ? []
+        :
+      recallAtomicComponents({
+        source: suggestion.source,
+        text: `${suggestion.metric} ${suggestion.action}`,
+        signalIds: [suggestion.signalId],
+        strategyId: demoStrategy,
+      }).componentIds.map((componentId) => ({
+        key: `${suggestion.queueId}-${componentId}`,
         componentId,
-        metric: 'Genie 输入意图',
-        source: '输入框识别',
-        suggestionNumber: null,
-        suggestionId: null,
-      }))
-    const triggeredCandidates = suggestionQueue.flatMap((suggestion, suggestionIndex) =>
-        recallAtomicComponents({
-          source: suggestion.source,
-          text: `${suggestion.metric} ${suggestion.action}`,
-          signalIds: [suggestion.signalId],
-          strategyId: demoStrategy,
-        }).componentIds.map((componentId) => ({
-          key: `${suggestion.queueId}-${componentId}`,
-          componentId,
-          metric: suggestion.metric,
-          source: suggestion.source === 'comment'
-            ? '评论实时分析'
-            : '监控指标触发',
-          suggestionNumber: suggestionIndex + 1,
-          suggestionId: suggestion.queueId,
-        })),
-      )
-    const candidates = rightRailSource === 'input'
-      ? inputCandidates
-      : triggeredCandidates
-    return candidates.filter((candidate) => {
-      return !dismissedAtomicComponents.has(candidate.key)
-    })
-  })()
-  const atomicComponentCountsBySuggestion = atomicRecalledComponents.reduce(
+        metric: suggestion.metric,
+        source: suggestion.source === 'comment'
+          ? '评论实时分析'
+          : '监控指标触发',
+        suggestionNumber: suggestionIndex + 1,
+        suggestionId: suggestion.queueId,
+      })),
+    )
+    .filter((candidate) => !dismissedAtomicComponents.has(candidate.key))
+  const atomicComponentCountsBySuggestion = triggeredRecalledComponents.reduce(
     (counts, component) => {
       if (component.suggestionId) {
         counts.set(
@@ -604,9 +660,17 @@ function App() {
     ?? getSceneWidgetSpec(scene)
   const liveRightRailMode = selectedCanvasWidget || selectedLiveComponent
     ? 'canvas-config'
-    : rightRailSource === 'input'
+    : isGenieChatOpen
+      ? 'chat'
+      : rightRailSource === 'input' && isGenieComposerFocused
       ? 'components'
       : 'overview'
+  const atomicRecalledComponents = liveRightRailMode === 'overview'
+    ? triggeredRecalledComponents
+    : inputRecalledComponents
+  const liveComponentCount = atomicRecalledComponents.length +
+    (liveRightRailMode === 'chat' && agentWidgetSpec ? 1 : 0) +
+    (liveRightRailMode === 'overview' ? aiSuggestionComponents.length : 0)
 
   useEffect(() => {
     suggestionQueueRef.current = suggestionQueue
@@ -618,9 +682,33 @@ function App() {
   }, [audienceSnapshot, diagnostics])
 
   useEffect(() => {
+    if (!isGenieChatOpen) return
+    const frameId = window.requestAnimationFrame(() => {
+      genieChatMessageEndRef.current?.scrollIntoView({
+        block: 'nearest',
+        behavior: 'smooth',
+      })
+    })
+    return () => window.cancelAnimationFrame(frameId)
+  }, [
+    agentWidgetSpec,
+    chatMessages,
+    genieRequestStatus,
+    inputAtomicComponents,
+    isGenieChatOpen,
+  ])
+
+  useEffect(() => {
     const previous = previousDiagnosticsRef.current
     previousDiagnosticsRef.current = diagnostics
-    if (view !== 'live' || strategyWarmupActive || !previous) return
+    if (
+      view !== 'live' ||
+      demoStrategy === 'normal' ||
+      strategyWarmupActive ||
+      !previous
+    ) {
+      return
+    }
 
     const now = Date.now()
     if (
@@ -657,70 +745,183 @@ function App() {
   }, [demoStrategy, diagnostics, strategyWarmupActive, view])
 
   useEffect(() => {
-    if (
-      view !== 'live' ||
-      strategyWarmupActive ||
-      demoStrategy !== 'normal'
-    ) {
-      if (commentAnalysisTimeoutRef.current !== null) {
-        window.clearTimeout(commentAnalysisTimeoutRef.current)
-        commentAnalysisTimeoutRef.current = null
-      }
+    if (view !== 'live' || demoStrategy !== 'normal') {
+      normalModeDetectionRef.current = null
+      normalAiAnalysisAbortRef.current?.abort()
       return
     }
 
-    const latestComment = audienceSnapshot.comments.at(-1)
-    if (
-      !latestComment ||
-      latestComment.id === lastAnalyzedCommentIdRef.current ||
-      commentAnalysisTimeoutRef.current !== null
-    ) {
-      return
-    }
-    lastAnalyzedCommentIdRef.current = latestComment.id
+    normalModeDetectionRef.current = createNormalModeDetectionSnapshot(
+      latestDiagnosticsRef.current,
+      latestAudienceRef.current.comments,
+      useStudioStore.getState().mediaMetrics,
+    )
 
-    commentAnalysisTimeoutRef.current = window.setTimeout(() => {
-      commentAnalysisTimeoutRef.current = null
-      const snapshot = latestAudienceRef.current
-      const suggestion = createCommentInsightSuggestion(
-        snapshot.insight,
-        snapshot.comments,
-      )
-      if (!suggestion) return
-
-      const triggerKey = snapshot.insight.category
-      const now = Date.now()
-      const lastTriggeredAt =
-        commentTriggerTimesRef.current.get(triggerKey) ?? 0
-      if (
-        now - lastTriggeredAt <
-        rightRailUpdateConfig.commentCategoryCooldownMs
-      ) {
-        return
-      }
-
+    const enqueueSuggestion = (
+      suggestion: LiveSuggestion,
+      source: 'monitor' | 'comment',
+      triggerKey: string,
+    ) => {
       const currentQueue = suggestionQueueRef.current
-      const nextQueue = appendTriggeredSuggestion(
-        currentQueue,
-        suggestion,
-        'comment',
-        triggerKey,
-        now,
-      )
+      const now = Date.now()
+      const nextQueue = source === 'comment'
+        ? appendTriggeredSuggestion(
+          currentQueue,
+          suggestion,
+          source,
+          triggerKey,
+          now,
+        )
+        : appendNewSuggestions(
+          currentQueue,
+          [suggestion],
+          dismissedSignalIdsRef.current,
+          now,
+        )
       if (nextQueue === currentQueue) return
 
       suggestionQueueRef.current = nextQueue
       setSelectedCanvasWidget(null)
+      setSelectedLiveComponent(null)
       setRightRailSource('trigger')
       setSuggestionQueue(nextQueue)
-      commentTriggerTimesRef.current.set(triggerKey, now)
-    }, rightRailUpdateConfig.commentAnalysisDelayMs)
-  }, [
-    audienceSnapshot.comments,
-    demoStrategy,
-    strategyWarmupActive,
-    view,
-  ])
+    }
+
+    const detectUpdates = async () => {
+      if (normalAiAnalysisAbortRef.current) return
+      const audience = latestAudienceRef.current
+      const currentDiagnostics = latestDiagnosticsRef.current
+      const current = createNormalModeDetectionSnapshot(
+        currentDiagnostics,
+        audience.comments,
+        useStudioStore.getState().mediaMetrics,
+      )
+      const previous = normalModeDetectionRef.current
+      normalModeDetectionRef.current = current
+      if (!previous) return
+
+      const updates = detectNormalModeUpdates(previous, current)
+      if (!updates.hasUpdates) return
+      if (suggestionQueueRef.current.some((suggestion) =>
+        suggestion.analysisSource === 'ai' &&
+        suggestion.widgets.length > 0,
+      )) {
+        return
+      }
+
+      const candidates: Array<{
+        suggestion: LiveSuggestion
+        source: 'monitor' | 'comment'
+        triggerKey: string
+      }> = []
+      if (updates.monitoring || updates.visual) {
+        currentDiagnostics.suggestions
+          .filter((suggestion) => suggestion.tone !== 'good')
+          .forEach((suggestion) => candidates.push({
+            suggestion,
+            source: 'monitor',
+            triggerKey: `monitor:${suggestion.signalId}`,
+          }))
+      }
+
+      if (updates.comments) {
+        const commentSuggestion = createCommentInsightSuggestion(
+          audience.insight,
+          audience.comments,
+        )
+        if (commentSuggestion) {
+          candidates.push({
+            suggestion: commentSuggestion,
+            source: 'comment',
+            triggerKey: audience.insight.category,
+          })
+        }
+      }
+
+      const availableCandidates = candidates.filter((candidate) => {
+        if (
+          dismissedSignalIdsRef.current.has(candidate.suggestion.signalId)
+        ) {
+          return false
+        }
+        return !suggestionQueueRef.current.some((queued) =>
+          queued.source === candidate.source &&
+          queued.triggerKey === candidate.triggerKey &&
+          queued.widgets.length > 0,
+        )
+      })
+      const selected = [...availableCandidates].sort(
+        (left, right) =>
+          right.suggestion.severity - left.suggestion.severity,
+      )[0]
+      if (!selected) return
+
+      const controller = new AbortController()
+      normalAiAnalysisAbortRef.current = controller
+      setNormalAiAnalysisStatus('loading')
+      try {
+        const studioState = useStudioStore.getState()
+        const result = await askGenie([
+          createNormalAiAnalysisPrompt(
+            currentDiagnostics,
+            audience,
+            updates,
+            availableCandidates.map((candidate) => candidate.suggestion),
+          ),
+          widgetProtocol,
+        ].join('\n'), {
+          signal: controller.signal,
+          instruction: '',
+          imageDataUrl: captureStudioFrame(videoRef),
+          cameraEffects: studioState.cameraEffects,
+          recommendedCameraEffects: recommendCameraEffects(
+            studioState.cameraEffects,
+            studioState.mediaMetrics.brightness.score,
+          ),
+        })
+        const analyzedSuggestion = createAiAnalyzedSuggestion(
+          selected.suggestion,
+          result.text,
+          result.widget,
+        )
+        if (analyzedSuggestion) {
+          enqueueSuggestion(
+            analyzedSuggestion,
+            selected.source,
+            selected.triggerKey,
+          )
+        }
+      } catch (error) {
+        if (
+          !(error instanceof GenieRequestError) ||
+          error.code !== 'cancelled'
+        ) {
+          enqueueSuggestion(
+            {
+              ...selected.suggestion,
+              analysisSource: 'rules',
+            },
+            selected.source,
+            selected.triggerKey,
+          )
+        }
+      } finally {
+        if (normalAiAnalysisAbortRef.current === controller) {
+          normalAiAnalysisAbortRef.current = null
+          setNormalAiAnalysisStatus('idle')
+        }
+      }
+    }
+
+    const intervalId = window.setInterval(
+      () => void detectUpdates(),
+      rightRailUpdateConfig.normalDetectionIntervalMs,
+    )
+    return () => {
+      window.clearInterval(intervalId)
+      normalAiAnalysisAbortRef.current?.abort()
+    }
+  }, [demoStrategy, view])
 
   useEffect(() => {
     if (view !== 'live') return
@@ -779,6 +980,10 @@ function App() {
       strategyActivatedRef.current = false
       return
     }
+    if (demoStrategy === 'normal') {
+      strategyActivatedRef.current = true
+      return
+    }
     if (strategyWarmupActive || strategyActivatedRef.current) return
 
     const currentQueue = suggestionQueueRef.current
@@ -806,7 +1011,7 @@ function App() {
   ])
 
   useEffect(() => {
-    if (view !== 'live') return
+    if (view !== 'live' || demoStrategy === 'normal') return
 
     let nextSyncAt = Date.now() + studioRuntimeConfig.suggestion.syncIntervalMs
     let timeoutId = 0
@@ -863,9 +1068,6 @@ function App() {
       }
       removalTimeouts.forEach((timeoutId) => window.clearTimeout(timeoutId))
       removalTimeouts.clear()
-      if (commentAnalysisTimeoutRef.current !== null) {
-        window.clearTimeout(commentAnalysisTimeoutRef.current)
-      }
       if (genieInputModeTimeoutRef.current !== null) {
         window.clearTimeout(genieInputModeTimeoutRef.current)
       }
@@ -1020,13 +1222,12 @@ function App() {
     setHiddenSuggestionIds(new Set())
     setInputAtomicComponents([])
     setRightRailSource('trigger')
+    setIsGenieChatOpen(false)
     setDismissedAtomicComponents(new Set())
     setRemovingAtomicComponents(new Set())
     removalTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId))
     removalTimeoutsRef.current.clear()
     dismissedSignalIdsRef.current.clear()
-    commentTriggerTimesRef.current.clear()
-    lastAnalyzedCommentIdRef.current = null
     lastMetricUpdateAtRef.current = 0
     previousDiagnosticsRef.current = null
     strategyActivatedRef.current = false
@@ -1277,6 +1478,11 @@ function App() {
     if (suggestion?.source === 'monitor' && suggestion.widgets.length === 1) {
       dismissedSignalIdsRef.current.add(suggestion.signalId)
     }
+    if (suggestion) {
+      setHiddenSuggestionIds((current) =>
+        new Set(current).add(suggestion.queueId),
+      )
+    }
     const existingTimeout = removalTimeoutsRef.current.get(componentId)
     if (existingTimeout !== undefined) {
       window.clearTimeout(existingTimeout)
@@ -1519,13 +1725,12 @@ function App() {
     setHiddenSuggestionIds(new Set())
     setInputAtomicComponents([])
     setRightRailSource('trigger')
+    setIsGenieChatOpen(false)
     setDismissedAtomicComponents(new Set())
     setRemovingAtomicComponents(new Set())
     removalTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId))
     removalTimeoutsRef.current.clear()
     dismissedSignalIdsRef.current.clear()
-    commentTriggerTimesRef.current.clear()
-    lastAnalyzedCommentIdRef.current = null
     lastMetricUpdateAtRef.current = 0
     previousDiagnosticsRef.current = null
     strategyActivatedRef.current = false
@@ -1552,6 +1757,8 @@ function App() {
     setSuggestionQueue([])
     setHiddenSuggestionIds(new Set())
     setInputAtomicComponents([])
+    setRightRailSource('trigger')
+    setIsGenieChatOpen(false)
     setDismissedAtomicComponents(new Set())
     setRemovingAtomicComponents(new Set())
     setIsPk(false)
@@ -1661,7 +1868,7 @@ function App() {
   }
 
   const runGenieRequest = async (
-    request: { question: string; prompt: string },
+    request: GenieRequest,
     appendQuestion: boolean,
   ) => {
     const controller = new AbortController()
@@ -1679,6 +1886,7 @@ function App() {
       const result = await askGenie(request.prompt, {
         signal: controller.signal,
         instruction: request.question,
+        imageDataUrl: request.imageDataUrl,
         cameraEffects: studioState.cameraEffects,
         recommendedCameraEffects: recommendCameraEffects(
           studioState.cameraEffects,
@@ -1687,6 +1895,26 @@ function App() {
       })
       if (genieAbortRef.current !== controller) return
       setChatMessages((messages) => [...messages, { role: 'assistant', text: result.text || '已生成可操作方案。' }])
+      const broadRequest = /优化|检查|看看|建议|问题|调整一下/.test(
+        request.question,
+      )
+      const analyzedComponents = result.widget
+        ? []
+        : recallAtomicComponents({
+          source: 'input',
+          text: `${request.question}\n${result.text}`,
+          signalIds: broadRequest
+            ? latestDiagnosticsRef.current.improvements
+              .filter((signal) => signal.tone !== 'good')
+              .map((signal) => signal.id)
+            : undefined,
+        }).componentIds
+      setInputAtomicComponents(analyzedComponents)
+      setDismissedAtomicComponents((current) => {
+        const next = new Set(current)
+        analyzedComponents.forEach((id) => next.delete(`input-${id}`))
+        return next
+      })
       if (view !== 'onboarding' && result.widget) {
         setAgentWidgetSpec(result.widget)
         setApplied(false)
@@ -1696,6 +1924,29 @@ function App() {
       setGenieRequestStatus('idle')
     } catch (error) {
       if (genieAbortRef.current !== controller) return
+      if (!(error instanceof GenieRequestError && error.code === 'cancelled')) {
+        const fallbackComponents = recallAtomicComponents({
+          source: 'input',
+          text: request.question,
+          signalIds: latestDiagnosticsRef.current.improvements
+            .filter((signal) => signal.tone !== 'good')
+            .map((signal) => signal.id),
+        }).componentIds
+        setInputAtomicComponents(fallbackComponents)
+        const componentNames = fallbackComponents
+          .slice(0, 3)
+          .map((componentId) => atomicComponentRegistry[componentId].name)
+        const fallbackText = componentNames.length > 0
+          ? `我已根据你的需求召回${componentNames.join('、')}组件。可以先预览参数变化，确认效果后再应用到直播画面。`
+          : '我已记录你的需求。当前没有必须调整的项目，建议继续观察画面、声音和互动数据。'
+        setChatMessages((messages) => [
+          ...messages,
+          { role: 'assistant', text: fallbackText },
+        ])
+        setGenieError('')
+        setGenieRequestStatus('idle')
+        return
+      }
       setGenieError(error instanceof Error ? error.message : 'Genie 暂时无法响应。')
       setGenieRequestStatus(
         error instanceof GenieRequestError
@@ -1718,24 +1969,17 @@ function App() {
       genieInputModeTimeoutRef.current = null
     }
     setIsGenieComposerFocused(false)
-    const intentRecall = recallAtomicComponents({
-      source: 'input',
-      text: question,
-    })
-    if (view === 'live') {
-      setInputAtomicComponents(intentRecall.componentIds)
-      setRightRailSource('input')
-      setDismissedAtomicComponents((current) => {
-        const next = new Set(current)
-        intentRecall.componentIds.forEach((id) => next.delete(`input-${id}`))
-        return next
-      })
-    }
+    setInputAtomicComponents([])
+    setRightRailSource('input')
+    setIsGenieChatOpen(true)
+    setAgentWidgetSpec(null)
+    setApplied(false)
 
     const context = view === 'prelive'
       ? '当前处于开播准备阶段，直播主题是晚间唱歌聊天。'
       : `当前处于直播中，诊断场景是${sceneCopy[scene].title}。`
     const studioState = useStudioStore.getState()
+    const imageDataUrl = captureStudioFrame(videoRef)
     const cameraContext = [
       `当前画面亮度：${studioState.mediaMetrics.brightness.value}，评分 ${studioState.mediaMetrics.brightness.score}/100。`,
       `当前人脸构图：${studioState.mediaMetrics.framing.value}，评分 ${studioState.mediaMetrics.framing.score}/100。`,
@@ -1743,6 +1987,9 @@ function App() {
         ...studioState.cameraEffects,
         backgroundImageUrl: studioState.cameraEffects.backgroundImageUrl ? 'local-image' : null,
       })}`,
+      imageDataUrl
+        ? '已附加当前直播画面帧，请将画面观察作为组件召回依据。'
+        : '当前无法采集画面帧，请依据实时画面指标判断，不要假设未提供的视觉信息。',
       '涉及美颜、美妆或道具时必须返回 camera-effects 组件。settings 只需返回要修改的字段，未提及字段保持当前值。',
       '可用道具仅限 none、sparkles、glasses、heart-sticker；不要生成图片 URL 或未注册的效果。',
     ].join('\n')
@@ -1750,12 +1997,18 @@ function App() {
       '你是 LIVE Studio Genie，一名专业、简洁的中文直播间助手。',
       context,
       cameraContext,
-      '根据当前状态回答主播的问题。给出可直接执行的建议，保持在 120 个汉字以内。',
+      '请同时分析随请求附带的当前直播画面，再结合实时指标回答主播的问题。',
+      '只召回与主播问题和当前画面确实相关的组件；不要仅凭关键词生成无关组件。',
+      '给出可直接执行的建议，保持在 120 个汉字以内。',
       widgetProtocol,
       `主播问题：${question}`,
     ].join('\n')
 
-    void runGenieRequest({ question, prompt }, true)
+    void runGenieRequest({
+      question,
+      prompt,
+      imageDataUrl,
+    }, true)
   }
 
   const activateGenieInputMode = () => {
@@ -1911,6 +2164,122 @@ function App() {
     setView(nextView)
   }
 
+  const renderGenieChatPanel = () => (
+    <>
+      <div className="live-genie-heading">
+        <span><i />GENIE · CHAT</span>
+        <button
+          type="button"
+          className="genie-chat-back"
+          onClick={() => {
+            setIsGenieChatOpen(false)
+            setRightRailSource('trigger')
+          }}
+        >
+          <ArrowLeft size={13} />
+          返回当前工作台
+        </button>
+      </div>
+      <div className="live-right-rail-view mode-chat">
+        <section className="genie-chat-shell" aria-label="Genie 聊天">
+          <div className="genie-chat-body">
+            <div className="genie-chat-thread" aria-live="polite">
+              {chatMessages.length === 0 && (
+                <div className="genie-chat-intro">
+                  <MessageCircle size={18} />
+                  <b>描述你想调整的直播效果</b>
+                  <small>发送后，Genie 会结合 Prompt 和当前直播画面召回组件。</small>
+                </div>
+              )}
+              {chatMessages.map((message, index) => (
+                <article
+                  key={`${message.role}-${index}`}
+                  className={`chat-message ${message.role}`}
+                >
+                  <div className="chat-message-meta">
+                    <span>{message.role === 'assistant' ? 'Genie' : '你'}</span>
+                    <small>{message.role === 'assistant' ? '直播助手' : '刚刚'}</small>
+                  </div>
+                  <p>{message.text}</p>
+                </article>
+              ))}
+              {genieRequestStatus === 'loading' && (
+                <div className="genie-request-state is-loading" role="status">
+                  <LoaderCircle size={14} className="loading-icon" />
+                  <span>Genie 正在分析直播状态…</span>
+                  <button type="button" onClick={cancelGenieRequest}>
+                    <CircleStop size={13} />取消
+                  </button>
+                </div>
+              )}
+              {genieError && genieRequestStatus !== 'loading' && (
+                <div className="genie-request-state is-error" role="alert">
+                  <span>{genieError}</span>
+                  <button type="button" onClick={retryGenieRequest}>
+                    <RotateCcw size={13} />重试
+                  </button>
+                </div>
+              )}
+              <div ref={genieChatMessageEndRef} aria-hidden="true" />
+            </div>
+
+            <section className="genie-chat-components" aria-label="AI 召回组件">
+              <div className="component-recall-heading">
+                <span><Zap size={13} />AI 召回组件</span>
+                <b>可直接预览并应用</b>
+                <small>{liveComponentCount} 个组件</small>
+              </div>
+              <div className="recalled-component-list">
+                {inputRecalledComponents.map((component) => (
+                  <div
+                    className={`recalled-component-item ${removingAtomicComponents.has(component.key) ? 'is-removing' : ''}`}
+                    key={component.key}
+                  >
+                    <AtomicRecallCard
+                      componentId={component.componentId}
+                      audience={audienceSnapshot}
+                      onApplied={() => {
+                        setApplied(true)
+                        scheduleAtomicRemoval(component.key, null)
+                      }}
+                    />
+                  </div>
+                ))}
+                {agentWidgetSpec && (
+                  <div className="recalled-component-item agent-recalled-component">
+                    <WidgetRenderer
+                      spec={agentWidgetSpec}
+                      applied={applied}
+                      isPreviewing={isSuggestionPreview}
+                      onPreview={() => previewSuggestion(agentWidgetSpec)}
+                      onApply={() => applySuggestion(agentWidgetSpec)}
+                      onUndo={() => undoSuggestion(agentWidgetSpec)}
+                      onAudioChange={updateAudioPreview}
+                      onVisualChange={updateVisualPreview}
+                      onCameraEffectsChange={updateCameraEffectsPreview}
+                    />
+                  </div>
+                )}
+                {liveComponentCount === 0 && (
+                  <div className="component-empty-state">
+                    {genieRequestStatus === 'loading'
+                      ? <LoaderCircle size={18} className="loading-icon" />
+                      : <LayoutTemplate size={18} />}
+                    <span>
+                      {genieRequestStatus === 'loading'
+                        ? '正在结合 Prompt 与当前画面分析组件'
+                        : '发送消息后，相关组件会显示在这里'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
+        </section>
+      </div>
+    </>
+  )
+
   if (view === 'onboarding') {
     return (
       <main className="onboarding-shell">
@@ -2007,7 +2376,12 @@ function App() {
           <div className="golive-dialog" role="status">
             <Check className="golive-mark" size={48} strokeWidth={3} aria-hidden="true" />
             <strong>准备进度100%</strong>
-            <button className="golive-button" type="button" onClick={startLiveFromPrelive}>
+            <button
+              className="golive-button"
+              type="button"
+              aria-label="开始直播"
+              onClick={startLiveFromPrelive}
+            >
               GO LIVE
             </button>
           </div>
@@ -2189,8 +2563,10 @@ function App() {
           )}
         </section>
 
-        <aside className="genie-panel panel">
-          {view === 'live' ? (
+        <aside className={`genie-panel panel mode-${liveRightRailMode}`}>
+          {isGenieChatOpen ? (
+            renderGenieChatPanel()
+          ) : view === 'live' ? (
             <>
               <div className="live-genie-heading">
                 <span><i />GENIE · READY TO ASSIST</span>
@@ -2199,7 +2575,7 @@ function App() {
                     {liveRightRailMode === 'canvas-config'
                       ? '组件配置'
                       : liveRightRailMode === 'components'
-                        ? `${atomicRecalledComponents.length} 个组件`
+                        ? `${liveComponentCount} 个组件`
                         : `${visibleSuggestionQueue.length} 条建议`}
                   </b>
                   <span className="suggestion-sync-status">
@@ -2208,7 +2584,11 @@ function App() {
                       ? '上下文已同步'
                       : liveRightRailMode === 'components'
                         ? '输入交互中'
-                        : '实时监测'}
+                        : demoStrategy === 'normal'
+                          ? normalAiAnalysisStatus === 'loading'
+                            ? 'AI 正在分析'
+                            : 'AI 每 15 秒分析'
+                          : '场景实时监测'}
                   </span>
                 </div>
               </div>
@@ -2247,10 +2627,14 @@ function App() {
                 <section className="generated-suggestions" aria-label="实时生成建议">
                 <div className="generated-suggestions-title">
                   <span>改进建议</span>
-                  <small>阈值触发 · 评论分析不超过 3 秒</small>
+                  <small>
+                    {demoStrategy === 'normal'
+                      ? 'AI 综合画面 · 指标 · 评论'
+                      : '典型场景规则'}
+                  </small>
                 </div>
                 <div className="generated-suggestion-list" role="list">
-                  {visibleSuggestionQueue.map((suggestion) => {
+                  {[...visibleSuggestionQueue].reverse().map((suggestion) => {
                     const presentation = getSuggestionPresentation(suggestion)
                     return (
                     <article
@@ -2266,8 +2650,15 @@ function App() {
                       key={suggestion.queueId}
                       role="listitem"
                     >
-                      <b className="suggestion-action-title">{presentation.title}</b>
-                      <span className="suggestion-item-description">{presentation.reason}</span>
+                      <div className="suggestion-card-heading">
+                        <b className="suggestion-action-title">{presentation.title}</b>
+                        {suggestion.analysisSource === 'ai' && (
+                          <span className="suggestion-ai-badge">AI 分析</span>
+                        )}
+                      </div>
+                      <small className="suggestion-item-description">
+                        {presentation.reason}
+                      </small>
                     </article>
                     )
                   })}
@@ -2292,7 +2683,7 @@ function App() {
                       ? '选择需要的操作组件'
                       : '全部建议的可操作组件'}
                   </b>
-                  <small>{atomicRecalledComponents.length} 个待应用</small>
+                  <small>{liveComponentCount} 个待应用</small>
                 </div>
                 <div className="recalled-component-list">
                   {atomicRecalledComponents.map((component) => (
@@ -2319,7 +2710,31 @@ function App() {
                       />
                     </div>
                   ))}
-                  {atomicRecalledComponents.length === 0 && (
+                  {liveRightRailMode === 'overview' &&
+                    aiSuggestionComponents.map((component) => (
+                      <div
+                        className="recalled-component-item agent-recalled-component"
+                        key={component.componentId}
+                      >
+                        <WidgetRenderer
+                          spec={component.widgetSpec}
+                          applied={applied}
+                          isPreviewing={isSuggestionPreview}
+                          onPreview={() => previewSuggestion(component.widgetSpec)}
+                          onApply={() => applySuggestion(
+                            component.widgetSpec,
+                            component.suggestion,
+                            component.componentId,
+                            component.widgetIndex,
+                          )}
+                          onUndo={() => undoSuggestion(component.widgetSpec)}
+                          onAudioChange={updateAudioPreview}
+                          onVisualChange={updateVisualPreview}
+                          onCameraEffectsChange={updateCameraEffectsPreview}
+                        />
+                      </div>
+                    ))}
+                  {liveComponentCount === 0 && (
                     <div className="component-empty-state">
                       <LayoutTemplate size={18} />
                       <span>暂无待应用组件</span>
@@ -2353,19 +2768,7 @@ function App() {
                   {canvasWidgetsAvailable && selectedCanvasWidget && (
                     renderCanvasWidgetPanel(selectedCanvasWidget)
                   )}
-                  {agentWidgetSpec ? (
-                    <WidgetRenderer
-                      spec={agentWidgetSpec}
-                      applied={applied}
-                      isPreviewing={isSuggestionPreview}
-                      onPreview={() => previewSuggestion(agentWidgetSpec)}
-                      onApply={() => applySuggestion(agentWidgetSpec)}
-                      onUndo={() => undoSuggestion(agentWidgetSpec)}
-                      onAudioChange={updateAudioPreview}
-                      onVisualChange={updateVisualPreview}
-                      onCameraEffectsChange={updateCameraEffectsPreview}
-                    />
-                  ) : completedPreliveTasks.length === preliveTasks.length && !exitingPreliveTask ? (
+                  {completedPreliveTasks.length === preliveTasks.length && !exitingPreliveTask ? (
                     <div className="prelive-tasks-complete" role="status">
                       <Check size={20} />
                       <b>全部准备任务已完成</b>
@@ -2427,30 +2830,6 @@ function App() {
               </section>
             </>
           )}
-          {chatMessages.length > 0 && <div className="genie-conversation" aria-live="polite">
-            {chatMessages.map((message, index) => (
-              <article key={`${message.role}-${index}`} className={`chat-message ${message.role}`}>
-                <div className="chat-message-meta">
-                  <span>{message.role === 'assistant' ? 'Genie' : '你'}</span>
-                  <small>{message.role === 'assistant' ? '直播助手' : '刚刚'}</small>
-                </div>
-                <p>{message.text}</p>
-              </article>
-            ))}
-          </div>}
-          {genieRequestStatus === 'loading' && (
-            <div className="genie-request-state is-loading" role="status">
-              <LoaderCircle size={14} className="loading-icon" />
-              <span>Genie 正在分析直播状态…</span>
-              <button type="button" onClick={cancelGenieRequest}><CircleStop size={13} />取消</button>
-            </div>
-          )}
-          {genieError && genieRequestStatus !== 'loading' && (
-            <div className="genie-request-state is-error" role="alert">
-              <span>{genieError}</span>
-              <button type="button" onClick={retryGenieRequest}><RotateCcw size={13} />重试</button>
-            </div>
-          )}
           <form
             className="genie-composer"
             ref={genieComposerRef}
@@ -2462,12 +2841,12 @@ function App() {
                 onChange={(event) => {
                   const value = event.target.value
                   setGenieInput(value)
-                  if (view === 'live') {
-                    setInputAtomicComponents(recallAtomicComponents({
-                      source: 'input',
-                      text: value,
-                    }).componentIds)
-                    setRightRailSource(value.trim() ? 'input' : 'trigger')
+                  setInputAtomicComponents([])
+                  setRightRailSource(value.trim() ? 'input' : 'trigger')
+                  if (value.trim()) {
+                    setAgentWidgetSpec(null)
+                    setApplied(false)
+                    setIsGenieChatOpen(true)
                   }
                   activateGenieInputMode()
                 }}

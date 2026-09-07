@@ -179,6 +179,26 @@ describe('parseGenieContent', () => {
 })
 
 describe('askGenie', () => {
+  it('sends the current preview frame with the prompt', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: '画面分析完成。' } }],
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await askGenie('分析当前画面', {
+      imageDataUrl: 'data:image/jpeg;base64,ZmFrZS1mcmFtZQ==',
+    })
+
+    const request = fetchMock.mock.calls[0][1] as RequestInit
+    expect(JSON.parse(String(request.body))).toEqual({
+      prompt: '分析当前画面',
+      imageDataUrl: 'data:image/jpeg;base64,ZmFrZS1mcmFtZQ==',
+    })
+  })
+
   it('aborts a request after its timeout', async () => {
     vi.useFakeTimers()
     vi.stubGlobal('fetch', vi.fn((_: RequestInfo | URL, init?: RequestInit) => new Promise((_, reject) => {

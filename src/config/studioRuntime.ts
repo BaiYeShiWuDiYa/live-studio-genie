@@ -22,6 +22,8 @@ export const studioRuntimeConfig = {
     viewerGrowthPerTick: 3,
   },
   suggestion: {
+    /** 正常模式检查监控、评论和画面变化的周期，单位为毫秒。 */
+    normalDetectionIntervalMs: 15_000,
     /** 右侧 Genie 建议队列同步周期，单位为毫秒。 */
     syncIntervalMs: 60_000,
     /** 指标趋势变化达到该值时触发即时更新。 */

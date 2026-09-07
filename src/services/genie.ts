@@ -29,6 +29,7 @@ type AskGenieOptions = {
   signal?: AbortSignal
   timeoutMs?: number
   instruction?: string
+  imageDataUrl?: string
   cameraEffects?: CameraEffects
   recommendedCameraEffects?: CameraEffects
 }
@@ -321,7 +322,12 @@ export async function askGenie(
     const response = await fetch('/api/genie/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({
+        prompt,
+        ...(options.imageDataUrl
+          ? { imageDataUrl: options.imageDataUrl }
+          : {}),
+      }),
       signal: controller.signal,
     })
     const payload = await response.json() as ModelResponse

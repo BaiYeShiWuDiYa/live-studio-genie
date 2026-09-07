@@ -41,6 +41,7 @@ export interface LiveSuggestion {
   action: string
   metric: string
   widget: WidgetSpec
+  analysisSource?: 'rules' | 'ai'
 }
 
 export interface LiveDiagnostics {

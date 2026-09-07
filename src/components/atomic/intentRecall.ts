@@ -61,7 +61,7 @@ const intentPatterns: ReadonlyArray<{
   pattern: RegExp
   componentIds: readonly AtomicComponentId[]
 }> = [
-  { pattern: /暗|曝光|亮度|补光|冷光|暖光/, componentIds: ['lighting'] },
+  { pattern: /暗|调亮|变亮|曝光|亮度|补光|冷光|暖光/, componentIds: ['lighting'] },
   { pattern: /偏色|白平衡|饱和度|颜色失真|色彩|色温|肤色发红|肤色发黄/, componentIds: ['color-adjustment'] },
   { pattern: /声音|音量|麦克风|话筒|噪声|降噪|听不清|音效/, componentIds: ['microphone'] },
   { pattern: /美颜|磨皮|美白|瘦脸|大眼|皮肤/, componentIds: ['beauty'] },
@@ -123,20 +123,26 @@ export function recallAtomicComponents(
 
   const normalized = normalize(request.text ?? '')
   if (normalized) {
+    let matchedIntentPattern = false
     intentPatterns.forEach(({ pattern, componentIds }) => {
       if (!pattern.test(normalized)) return
+      matchedIntentPattern = true
       componentIds.forEach((id, index) => add(id, 0.92 - index * 0.04))
     })
 
-    fewShots.forEach((example) => {
-      const candidateInputs = [example.input, ...(example.aliases ?? [])]
-      const similarity = Math.max(...candidateInputs.map((input) =>
-        tokenSimilarity(normalized, normalize(input)),
-      ))
-      if (similarity < 0.22) return
-      matchedExamples.push(example.input)
-      example.componentIds.forEach((id) => add(id, Math.min(0.95, 0.62 + similarity)))
-    })
+    if (!matchedIntentPattern) {
+      fewShots.forEach((example) => {
+        const candidateInputs = [example.input, ...(example.aliases ?? [])]
+        const similarity = Math.max(...candidateInputs.map((input) =>
+          tokenSimilarity(normalized, normalize(input)),
+        ))
+        if (similarity < 0.22) return
+        matchedExamples.push(example.input)
+        example.componentIds.forEach((id) =>
+          add(id, Math.min(0.95, 0.62 + similarity)),
+        )
+      })
+    }
   }
 
   const componentIds = [...scores.entries()]

@@ -606,6 +606,31 @@ git diff --check
 
 Result: 19 test files and 114 tests passed. Production build completed with the existing large-chunk warning.
 
+### Normal Mode Right Rail And Chat UX
+
+- Replaced normal-mode immediate updates with one 15-second delta detector covering monitoring data, comments, and visual metrics.
+- Inserted new suggestion copy at the top while appending matching components to the bottom of the component list.
+- Transformed the entire right rail into a dedicated chat workspace as soon as the user enters a prompt, with an explicit return-to-workbench action.
+- Kept AI replies, loading/error feedback, intent-matched atomic components, and model-generated widgets inside the chat workspace.
+- Prioritized explicit intent keywords over loose few-shot matches to prevent unrelated component recall.
+- Kept local response fallback for unavailable model requests while using the server-side `.env` credential proxy for normal model interactions.
+- Deferred component recall until after submission and combined the Prompt, current rendered camera frame, live metrics, and AI response.
+- Upgraded normal-mode 15-second updates to authenticated AI analysis with `NO_ACTION` suppression, one active AI suggestion at a time, and direct rendering of the model-selected widget.
+- Added validated JPEG frame forwarding through the server proxy without exposing the model credential to the browser.
+- Standardized suggestion cards as title plus supporting copy and reduced the LIVE Chat comment-to-input gap.
+- Added regression coverage for the detection interval, stable snapshots, and independent update sources.
+
+Validation:
+
+```bash
+npm test
+npm run build
+npm run lint
+git diff --check
+```
+
+Result: 19 test files and 120 tests passed. Browser regression verified zero pre-submit components, post-submit model recall, multimodal endpoint support, normal-mode AI analysis status, AI-authored suggestion copy, model-selected widgets, and restoration of the original workbench.
+
 ## Next
 
 1. Add eyebrow controls and face-shape deformation.

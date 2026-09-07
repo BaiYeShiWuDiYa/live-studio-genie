@@ -18,6 +18,15 @@ describe('atomic component intent recall', () => {
     expect(result.componentIds).toContain('audience-poll')
   })
 
+  it('prefers an explicit lighting intent over loosely similar few-shots', () => {
+    const result = recallAtomicComponents({
+      source: 'input',
+      text: '帮我把画面调亮一点',
+    })
+
+    expect(result.componentIds).toEqual(['lighting'])
+  })
+
   it('recalls components from monitoring signals', () => {
     const result = recallAtomicComponents({
       source: 'monitor',
