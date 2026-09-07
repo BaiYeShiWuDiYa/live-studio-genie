@@ -105,7 +105,7 @@ type AppView = 'onboarding' | 'prelive' | 'live'
 type Scene = StudioScene
 type StreamKind = 'music' | 'chat' | 'game' | 'show'
 type PreliveTask = 'layout' | 'visual' | 'content'
-type PreliveLayout = 'portrait' | 'three-quarter' | 'stage'
+type PreliveLayout = 'portrait' | 'three-quarter' | 'stage' | 'game-vertical' | 'game-landscape'
 type GoalKind = StreamGoalKind
 
 const stageBackgrounds = [
@@ -177,6 +177,7 @@ const chatLayoutTaskDetail = '已为你默认全屏摄像头画布（单人竖�
 const musicLayoutTaskDetail = '根据你的表演形式，选择适合的画面布局'
 const defaultChatText = 'Good things will happen today ❤️'
 const defaultGoalTitle = 'follower goal'
+const defaultGameGoalTitle = '本场互动目标'
 const fallbackGoalTitle = '今日互动目标'
 const textSizeBounds = { min: 12, max: 28 }
 const textColorOptions = [
@@ -188,6 +189,10 @@ const textColorOptions = [
   { id: 'purple', label: '紫色', value: '#c9a6ff' },
 ] as const
 type CanvasWidgetKind = 'text' | 'goal'
+
+function getPreviewModeForLayout(layout: PreliveLayout): PreviewMode {
+  return layout === 'stage' || layout === 'game-landscape' ? 'studio' : 'mobile'
+}
 
 const emptyAudienceSnapshot: AudienceSnapshot = {
   comments: [],
@@ -264,6 +269,7 @@ function App() {
   const [selectedCanvasWidget, setSelectedCanvasWidget] = useState<CanvasWidgetKind | null>(null)
   const [chatTextOffset, setChatTextOffset] = useState<WidgetOffset>({ x: 0, y: 0 })
   const [chatGoalOffset, setChatGoalOffset] = useState<WidgetOffset>({ x: 0, y: 0 })
+  const [gameCameraOffset, setGameCameraOffset] = useState<WidgetOffset>({ x: 0, y: 0 })
   const [hostComments, setHostComments] = useState<AudienceComment[]>([])
   const readyScore = Math.round(20 + completedPreliveTasks.length * (80 / preliveTasks.length))
   const [genieInput, setGenieInput] = useState('')
@@ -678,8 +684,13 @@ function App() {
     setPreliveAnnouncement(`今晚 20:00 · ${finalTopic}`)
     const chatCompanion = theme === 'chat'
     setIsChatCompanion(chatCompanion)
-    setPreliveLayout(theme === 'show' ? 'stage' : 'portrait')
-    setPreviewMode(theme === 'show' ? 'studio' : 'mobile')
+    const initialLayout: PreliveLayout = theme === 'show'
+      ? 'stage'
+      : theme === 'game'
+        ? 'game-landscape'
+        : 'portrait'
+    setPreliveLayout(initialLayout)
+    setPreviewMode(getPreviewModeForLayout(initialLayout))
     setCompletedPreliveTasks([])
     setPreliveTaskIndex(0)
     setChatTextEnabled(true)
@@ -688,7 +699,7 @@ function App() {
     setChatTextStyle(defaultCanvasTextStyle)
     setChatGoalEnabled(true)
     setChatGoalKind('follower')
-    setChatGoalTitle(defaultGoalTitle)
+    setChatGoalTitle(theme === 'game' ? defaultGameGoalTitle : defaultGoalTitle)
     setChatGoalTarget(goalKindOptions.find((option) => option.id === 'follower')?.target ?? 60000)
     setMusicBackgroundId(stageBackgrounds[0].id)
     setCustomStageBackground(null)
@@ -696,6 +707,7 @@ function App() {
     setSelectedCanvasWidget(null)
     setChatTextOffset({ x: 0, y: 0 })
     setChatGoalOffset({ x: 0, y: 0 })
+    setGameCameraOffset({ x: 0, y: 0 })
     applyCameraEffects(applyCameraEffectPreset('natural'))
     setView('prelive')
   }
@@ -724,14 +736,19 @@ function App() {
     setStreamTopic(savedConfig.topic)
     setPreliveAnnouncement(`今晚 20:00 · ${savedConfig.topic}`)
     setIsChatCompanion(savedConfig.isChatCompanion)
-    setPreliveLayout(savedConfig.layout)
-    setPreviewMode(savedConfig.layout === 'stage' ? 'studio' : 'mobile')
+    const restoredLayout: PreliveLayout = theme === 'game'
+      && savedConfig.layout !== 'game-vertical'
+      && savedConfig.layout !== 'game-landscape'
+      ? 'game-landscape'
+      : savedConfig.layout
+    setPreliveLayout(restoredLayout)
+    setPreviewMode(getPreviewModeForLayout(restoredLayout))
     setChatTextEnabled(savedConfig.chatTextEnabled)
     setChatTextValue(savedConfig.chatTextValue || defaultChatText)
     setChatTextDraft(savedConfig.chatTextValue || defaultChatText)
     setChatGoalEnabled(savedConfig.chatGoalEnabled)
     setChatGoalKind(savedConfig.chatGoalKind ?? 'follower')
-    setChatGoalTitle(savedConfig.chatGoalTitle || defaultGoalTitle)
+    setChatGoalTitle(savedConfig.chatGoalTitle || (theme === 'game' ? defaultGameGoalTitle : defaultGoalTitle))
     const restoredGoalKind = savedConfig.chatGoalKind ?? 'follower'
     setChatGoalTarget(
       savedConfig.chatGoalTarget
@@ -741,6 +758,7 @@ function App() {
     setChatTextStyle({ ...defaultCanvasTextStyle, ...savedConfig.chatTextStyle })
     setChatTextOffset(savedConfig.chatTextOffset ?? { x: 0, y: 0 })
     setChatGoalOffset(savedConfig.chatGoalOffset ?? { x: 0, y: 0 })
+    setGameCameraOffset(savedConfig.gameCameraOffset ?? { x: 0, y: 0 })
     setCustomStageBackground(null)
     setMusicBackgroundId(savedConfig.musicBackgroundId || stageBackgrounds[0].id)
     setStageBackgroundUploadError('')
@@ -782,9 +800,15 @@ function App() {
     ?? null
   const canvasWidgetsAvailable = streamType === 'chat'
     || streamType === 'music'
+    || streamType === 'game'
     || streamType === 'show'
   const bandLayoutActive = (streamType === 'music' && preliveLayout === 'three-quarter')
     || (streamType === 'show' && preliveLayout === 'stage')
+  const gameLayout = streamType === 'game'
+    ? preliveLayout === 'game-vertical'
+      ? 'vertical'
+      : 'landscape'
+    : null
 
   const renderCanvasWidgetPanel = (selectedWidget: CanvasWidgetKind | null) => (
     <CanvasWidgetPanel
@@ -1068,6 +1092,7 @@ function App() {
         chatTextStyle,
         chatTextOffset,
         chatGoalOffset,
+        gameCameraOffset,
         musicBackgroundId,
         completedTaskIds: completedPreliveTasks,
       },
@@ -1465,7 +1490,7 @@ function App() {
               </div>
             </div>
           )}
-          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} strategy={strategyCommentState === 'issue' ? demoStrategy : 'normal'} liveAdjustment={liveAdjustment} previewMode={previewMode} isPreviewing={isSuggestionPreview} audience={audienceSnapshot} isLive={view === 'live'} preliveTitle={streamTopic} preliveLayout={preliveLayout} stageBackgroundUrl={stageBackgroundUrl} bandLayout={bandLayoutActive} chatWidgets={canvasWidgetsAvailable ? {
+          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} strategy={strategyCommentState === 'issue' ? demoStrategy : 'normal'} liveAdjustment={liveAdjustment} previewMode={previewMode} isPreviewing={isSuggestionPreview} audience={audienceSnapshot} isLive={view === 'live'} preliveTitle={streamTopic} preliveLayout={preliveLayout} stageBackgroundUrl={stageBackgroundUrl} bandLayout={bandLayoutActive} gameLayout={gameLayout} gameCameraOffset={gameCameraOffset} onGameCameraOffsetChange={setGameCameraOffset} chatWidgets={canvasWidgetsAvailable ? {
             text: chatTextEnabled ? chatTextValue : '',
             goalVisible: chatGoalEnabled,
             goal: { label: chatGoalTitle, current: 0, target: chatGoalTarget },
@@ -1675,7 +1700,7 @@ function App() {
                       onUploadStageBackground={uploadStageBackground}
                       onLayoutChange={(layout) => {
                         setPreliveLayout(layout)
-                        setPreviewMode(layout === 'stage' ? 'studio' : 'mobile')
+                        setPreviewMode(getPreviewModeForLayout(layout))
                       }}
                       onCameraEffectsChange={applyCameraEffects}
                       onTitleChange={setStreamTopic}
@@ -1842,7 +1867,7 @@ type ChatCanvasWidgets = {
   onGoalOffsetChange: (offset: WidgetOffset) => void
 }
 
-function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, isPk, applied, scene, strategy, liveAdjustment, previewMode, isPreviewing, audience, isLive, preliveTitle, preliveLayout, stageBackgroundUrl, bandLayout, chatWidgets }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; displayStream: MediaStream | null; layoutEditing: boolean; isPk: boolean; applied: boolean; scene: Scene; strategy: AudienceStrategyId; liveAdjustment: LiveAdjustment | null; previewMode: PreviewMode; isPreviewing: boolean; audience: AudienceSnapshot; isLive: boolean; preliveTitle: string; preliveLayout: PreliveLayout; stageBackgroundUrl: string | null; bandLayout: boolean; chatWidgets: ChatCanvasWidgets | null }) {
+function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, isPk, applied, scene, strategy, liveAdjustment, previewMode, isPreviewing, audience, isLive, preliveTitle, preliveLayout, stageBackgroundUrl, bandLayout, gameLayout, gameCameraOffset, onGameCameraOffsetChange, chatWidgets }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; displayStream: MediaStream | null; layoutEditing: boolean; isPk: boolean; applied: boolean; scene: Scene; strategy: AudienceStrategyId; liveAdjustment: LiveAdjustment | null; previewMode: PreviewMode; isPreviewing: boolean; audience: AudienceSnapshot; isLive: boolean; preliveTitle: string; preliveLayout: PreliveLayout; stageBackgroundUrl: string | null; bandLayout: boolean; gameLayout: 'vertical' | 'landscape' | null; gameCameraOffset: WidgetOffset; onGameCameraOffsetChange: (offset: WidgetOffset) => void; chatWidgets: ChatCanvasWidgets | null }) {
   const displayVideoRef = useRef<HTMLVideoElement>(null)
   const visualSettings = useStudioStore((state) => state.visualSettings)
   const previewStyle = {
@@ -1860,7 +1885,17 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
     }
   }, [displayStream])
 
-  return <div style={previewStyle} className={`live-stage ${applied ? 'applied' : ''} ${isPreviewing ? 'previewing' : ''} ${isPk ? 'pk-stage' : ''} scene-${scene} ${previewMode === 'studio' ? 'studio-preview' : 'mobile-preview'} ${bandLayout ? 'stage-band-layout' : ''} ${bandLayout && preliveLayout === 'stage' ? 'band-layout-wide' : ''} ${!isLive ? `prelive-${preliveLayout}` : ''}`}>
+  const renderCameraContent = () => cameraEnabled
+    ? <>
+        <video ref={videoRef} autoPlay muted playsInline className="camera-feed" />
+        <CameraEffectsCanvas videoRef={videoRef} />
+      </>
+    : <DemoHost />
+  const renderGameScreen = () => displayStream
+    ? <video ref={displayVideoRef} autoPlay muted playsInline className="screen-feed" />
+    : <DemoGameScreen />
+
+  return <div style={previewStyle} className={`live-stage ${applied ? 'applied' : ''} ${isPreviewing ? 'previewing' : ''} ${isPk ? 'pk-stage' : ''} scene-${scene} ${previewMode === 'studio' ? 'studio-preview' : 'mobile-preview'} ${bandLayout ? 'stage-band-layout' : ''} ${bandLayout && preliveLayout === 'stage' ? 'band-layout-wide' : ''} ${gameLayout ? `game-layout game-${gameLayout}-layout` : ''} ${!isLive ? `prelive-${preliveLayout}` : ''}`}>
     <div className="stage-glow" />
     <div className="scan-lines" />
     <div
@@ -1878,21 +1913,37 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
           aria-hidden="true"
         />
       )}
-      {displayStream
+      {gameLayout === 'vertical'
+        ? <>
+            <div className="game-camera-source">{renderCameraContent()}</div>
+            <div className="game-screen-source">{renderGameScreen()}</div>
+          </>
+        : gameLayout === 'landscape'
+          ? <>
+              <div className="game-screen-source">{renderGameScreen()}</div>
+              <EditableCameraLayer
+                videoRef={videoRef}
+                editing={false}
+                draggable
+                position={gameCameraOffset}
+                onPositionChange={onGameCameraOffsetChange}
+                className="game-camera-overlay"
+              >
+                {renderCameraContent()}
+              </EditableCameraLayer>
+            </>
+        : displayStream
         ? <>
             <video ref={displayVideoRef} autoPlay muted playsInline className="screen-feed" />
             {cameraEnabled && <EditableCameraLayer videoRef={videoRef} editing={layoutEditing} />}
           </>
         : cameraEnabled
-          ? <div className="camera-source">
-              <video ref={videoRef} autoPlay muted playsInline className="camera-feed" />
-              <CameraEffectsCanvas videoRef={videoRef} />
-            </div>
+          ? <div className="camera-source">{renderCameraContent()}</div>
           : <DemoHost />}
       {previewMode === 'studio' && <div className="studio-guides"><i /><i /><i /></div>}
       <div className="stage-label"><span />{isLive ? 'LIVE' : '林小满'}</div>
       {!isPk && isLive && <><div className="viewer-bubble"><Users size={14} />{audience.viewerCount.toLocaleString()}</div><div className="stage-duration">00:42:18</div></>}
-      {!isLive && <div className="prelive-stage-summary"><span>开播预览</span><b>{preliveTitle || '未填写直播标题'}</b><small>{preliveLayout === 'portrait' ? '全屏摄像头 · 单人竖屏 9:16' : preliveLayout === 'three-quarter' ? '3/5 摄像头 · 舞台背景' : '秀场舞台 · 中央 3/5 摄像头'}</small></div>}
+      {!isLive && <div className="prelive-stage-summary"><span>开播预览</span><b>{preliveTitle || '未填写直播标题'}</b><small>{preliveLayout === 'portrait' ? '全屏摄像头 · 单人竖屏 9:16' : preliveLayout === 'three-quarter' ? '3/5 摄像头 · 舞台背景' : preliveLayout === 'game-vertical' ? '竖屏摄像头 · 游戏投屏' : preliveLayout === 'game-landscape' ? '横屏投屏 · 悬浮摄像头' : '秀场舞台 · 中央 3/5 摄像头'}</small></div>}
       {applied && <div className="applied-badge"><Check size={13} />方案已应用</div>}
       {strategy === 'dim-light' && <div className="stage-hint"><Lightbulb size={14} />环境偏暗</div>}
       {strategy === 'network-lag' && <div className="stage-hint"><WifiOff size={14} />网络波动</div>}
@@ -1912,9 +1963,10 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
           />
           {chatWidgets.goalVisible && (
             <CanvasGoalRing
-              label={chatWidgets.goal.label.trim() || fallbackGoalTitle}
+              label={chatWidgets.goal.label.trim() || (gameLayout ? defaultGameGoalTitle : fallbackGoalTitle)}
               current={chatWidgets.goal.current}
               target={chatWidgets.goal.target}
+              variant={gameLayout ? 'progress-bar' : 'ring'}
               selected={chatWidgets.selectedWidget === 'goal'}
               onSelect={() => chatWidgets.onSelectWidget('goal')}
               offset={chatWidgets.goalOffset}
@@ -1933,6 +1985,18 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
 
 function DemoHost() {
   return <div className="demo-host"><div className="light-rays" /><div className="host-hair" /><div className="host-face"><i /><i /><b /></div><div className="host-body" /><div className="host-necklace" /></div>
+}
+
+function DemoGameScreen() {
+  return (
+    <div className="game-demo-screen" aria-label="游戏投屏预览">
+      <div className="game-demo-hud"><i /><span>LIVE MATCH</span><b>02:46</b></div>
+      <div className="game-demo-terrain" />
+      <div className="game-demo-player" />
+      <div className="game-demo-map"><i /><i /><i /></div>
+      <div className="game-demo-controls"><i /><i /><i /></div>
+    </div>
+  )
 }
 
 function DemoOpponent() {
@@ -2245,6 +2309,7 @@ function PreliveTaskCard({
 }) {
   const isChatLayout = isChatCompanion && task.id === 'layout'
   const isMusicLayout = streamType === 'music' && task.id === 'layout'
+  const isGameLayout = streamType === 'game' && task.id === 'layout'
   const isShowLayout = streamType === 'show' && task.id === 'layout'
   const cardTitle = isChatLayout
     ? chatLayoutTaskTitle
@@ -2253,6 +2318,8 @@ function PreliveTaskCard({
       : task.title
   const cardDetail = isChatLayout
     ? chatLayoutTaskDetail
+    : isGameLayout
+      ? '根据你的游戏内容和互动方式，选择适合的画面布局'
     : isMusicLayout || isShowLayout
       ? musicLayoutTaskDetail
       : task.detail
@@ -2330,6 +2397,20 @@ function PreliveTaskCard({
             <button type="button" className={`task-choice ${layout === 'three-quarter' ? 'selected' : ''}`} onClick={() => onLayoutChange('three-quarter')}><LayoutTemplate size={15} /><span><b>3/5 摄像头布局</b><small>中央摄像头约占 3/5，上下露出舞台氛围背景</small></span></button>
           </div>
           {layout === 'three-quarter' && renderStageBackgroundPicker('背景图铺满整体画布，上下露出区域展示舞台氛围')}
+        </div>
+      ) : isGameLayout ? (
+        <div className="game-layout-picker">
+          <div className="task-choice-row">
+            <button type="button" className={`task-choice ${layout === 'game-vertical' ? 'selected' : ''}`} onClick={() => onLayoutChange('game-vertical')}>
+              <Camera size={15} />
+              <span><b>竖屏摄像头 + 游戏投屏</b><small>上方突出主播，下方完整展示游戏内容</small><small>适用场景：手游直播、需要频繁与观众互动</small></span>
+            </button>
+            <button type="button" className={`task-choice game-layout-recommended ${layout === 'game-landscape' ? 'selected' : ''}`} onClick={() => onLayoutChange('game-landscape')}>
+              <LayoutTemplate size={15} />
+              <span><b>横屏投屏 + 悬浮摄像头</b><small>全屏呈现游戏画面，主播实时陪伴互动</small></span>
+              <em>推荐</em>
+            </button>
+          </div>
         </div>
       ) : isShowLayout ? (
         <div className="music-layout-picker">

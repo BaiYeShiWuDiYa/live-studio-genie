@@ -1,6 +1,6 @@
 export type StreamThemeId = 'chat' | 'music' | 'game' | 'show'
 
-export type StreamLayout = 'portrait' | 'three-quarter' | 'stage'
+export type StreamLayout = 'portrait' | 'three-quarter' | 'stage' | 'game-vertical' | 'game-landscape'
 
 export type StreamGoalKind = 'like' | 'follower' | 'gift'
 
@@ -75,6 +75,7 @@ export type SavedLiveConfig = {
   chatTextStyle?: SavedTextStyle
   chatTextOffset?: SavedWidgetOffset
   chatGoalOffset?: SavedWidgetOffset
+  gameCameraOffset?: SavedWidgetOffset
   musicBackgroundId?: string
   completedTaskIds: string[]
 }
@@ -152,10 +153,11 @@ function normalizeConfig(raw: unknown): LastLiveConfig | null {
       topic: savedRecord.topic,
       isChatCompanion: savedRecord.isChatCompanion === true,
       layout: savedRecord.layout === 'stage'
-        ? 'stage'
-        : savedRecord.layout === 'three-quarter'
-          ? 'three-quarter'
-          : 'portrait',
+        || savedRecord.layout === 'three-quarter'
+        || savedRecord.layout === 'game-vertical'
+        || savedRecord.layout === 'game-landscape'
+        ? savedRecord.layout
+        : 'portrait',
       chatTextEnabled: savedRecord.chatTextEnabled === true,
       chatTextValue: typeof savedRecord.chatTextValue === 'string' ? savedRecord.chatTextValue : '',
       chatGoalEnabled: savedRecord.chatGoalEnabled === true,
@@ -178,6 +180,7 @@ function normalizeConfig(raw: unknown): LastLiveConfig | null {
       chatTextStyle: normalizeTextStyle(savedRecord.chatTextStyle),
       chatTextOffset: normalizeOffset(savedRecord.chatTextOffset),
       chatGoalOffset: normalizeOffset(savedRecord.chatGoalOffset),
+      gameCameraOffset: normalizeOffset(savedRecord.gameCameraOffset),
       completedTaskIds: Array.isArray(savedRecord.completedTaskIds)
         ? savedRecord.completedTaskIds.filter((id): id is string => typeof id === 'string')
         : [],

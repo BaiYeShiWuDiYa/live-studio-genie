@@ -1064,6 +1064,21 @@
   background: #173438;
   color: #c7f5ef;
 }
+.game-layout-recommended {
+  position: relative;
+}
+.game-layout-recommended em {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(113, 226, 207, 0.18);
+  color: #91eee1;
+  font-size: 9px;
+  font-style: normal;
+  line-height: 1;
+}
 .chat-goal-config {
   display: grid;
   gap: 8px;
@@ -3266,6 +3281,25 @@
 
 .live-app .stage-band-layout.band-layout-wide .host-stage {
   width: min(88%, 940px);
+}
+
+.live-app .game-layout .host-stage {
+  max-height: 100%;
+  border-radius: 12px;
+}
+
+.live-app .game-landscape-layout .host-stage {
+  width: min(100%, calc((100vh - clamp(32px, 3.12vw, 64px)) * 16 / 9));
+  height: auto;
+  aspect-ratio: 16 / 9;
+  align-self: center;
+}
+
+.live-app .game-vertical-layout .host-stage {
+  width: min(100%, calc((100vh - clamp(32px, 3.12vw, 64px)) * 9 / 16));
+  height: auto;
+  aspect-ratio: 9 / 16;
+  align-self: center;
 }
 
 .live-app .floating-comments {

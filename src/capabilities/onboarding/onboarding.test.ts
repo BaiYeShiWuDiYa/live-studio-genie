@@ -105,6 +105,30 @@ describe('last live config persistence', () => {
     expect(loadLastLiveConfig(storage)).toEqual(config)
   })
 
+  it('persists game layout and floating camera position', () => {
+    const storage = createMemoryStorage()
+    const config: LastLiveConfig = {
+      theme: 'game',
+      themeName: '游戏直播',
+      lastLiveTime: '2026-09-08T12:00:00.000Z',
+      savedConfig: {
+        topic: '今晚游戏挑战',
+        isChatCompanion: false,
+        layout: 'game-landscape',
+        chatTextEnabled: false,
+        chatTextValue: '',
+        chatGoalEnabled: true,
+        chatGoalTitle: '本场互动目标',
+        chatGoalTarget: 60000,
+        chatGoalOffset: { x: 18, y: -10 },
+        gameCameraOffset: { x: 24, y: -16 },
+        completedTaskIds: ['layout'],
+      },
+    }
+    saveLastLiveConfig(config, storage)
+    expect(loadLastLiveConfig(storage)).toEqual(config)
+  })
+
   it('returns null when no history exists', () => {
     expect(loadLastLiveConfig(createMemoryStorage())).toBeNull()
   })

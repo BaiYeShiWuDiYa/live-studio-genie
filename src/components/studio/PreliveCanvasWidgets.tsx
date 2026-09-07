@@ -122,6 +122,7 @@ interface CanvasGoalRingProps {
   label: string
   current: number
   target: number
+  variant?: 'ring' | 'progress-bar'
   selected: boolean
   onSelect: () => void
   offset: WidgetOffset
@@ -132,6 +133,7 @@ export function CanvasGoalRing({
   label,
   current,
   target,
+  variant = 'ring',
   selected,
   onSelect,
   offset,
@@ -143,6 +145,38 @@ export function CanvasGoalRing({
   const circumference = 2 * Math.PI * radius
   const trackArc = circumference * 0.75
   const filled = (progress / 100) * trackArc
+
+  if (variant === 'progress-bar') {
+    return (
+      <DraggableWidget
+        className="canvas-goal-ring canvas-goal-progress"
+        ariaLabel="画布目标源"
+        selected={selected}
+        offset={offset}
+        onSelect={onSelect}
+        onOffsetChange={onOffsetChange}
+      >
+        <div className="goal-progress-panel">
+          <div className="goal-progress-heading">
+            <span>{label}</span>
+            <b>{current.toLocaleString()}/{target.toLocaleString()}</b>
+          </div>
+          <div
+            className="goal-progress-track"
+            role="progressbar"
+            aria-label={label}
+            aria-valuemin={0}
+            aria-valuemax={target}
+            aria-valuenow={Math.min(current, target)}
+            aria-valuetext={`${progress}%`}
+          >
+            <i style={{ width: `${progress}%` }} />
+            <span>{progress}%</span>
+          </div>
+        </div>
+      </DraggableWidget>
+    )
+  }
 
   return (
     <DraggableWidget
