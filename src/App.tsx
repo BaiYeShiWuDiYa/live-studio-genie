@@ -136,7 +136,7 @@ import { LiveCanvasWidget } from './components/studio/LiveCanvasWidget'
 import { LivePoll } from './components/studio/LivePoll'
 import { PostLiveReview } from './components/studio/PostLiveReview'
 import { LiveWishes } from './components/studio/LiveWishes'
-import { CanvasGoalRing, CanvasTextSource } from './components/studio/PreliveCanvasWidgets'
+import { CanvasCustomWidget, CanvasGoalRing, CanvasTextSource } from './components/studio/PreliveCanvasWidgets'
 import {
   defaultCanvasTextStyle,
   type CanvasTextStyle,
@@ -163,7 +163,6 @@ type StreamKind = 'music' | 'chat' | 'game' | 'show'
 type PreliveTask = 'layout' | 'visual' | 'content'
 type PreliveLayout = 'portrait' | 'three-quarter' | 'stage' | 'game-vertical' | 'game-landscape'
 type GoalKind = StreamGoalKind
-type ChatTopicId = 'daily-life' | 'emotional-support' | 'hobby-sharing' | 'interactive-games'
 
 const stageBackgrounds = [
   { id: 'warm-stage', name: '暖光舞台', url: '/stage-backgrounds/warm-stage.svg' },
@@ -225,32 +224,9 @@ const preliveTasks: Array<{ id: PreliveTask; title: string; detail: string; acti
   { id: 'content', title: '直播信息与内容', detail: '选择聊天主题，并完善开播前 15 分钟的内容脚本。', action: '保存内容方案', priority: '建议优化' },
 ]
 
-const chatTopicRecommendations: Record<ChatTopicId, { label: string; detail: string; script: string }> = {
-  'daily-life': {
-    label: '日常闲聊',
-    detail: '轻松破冰，适合陪伴型直播',
-    script: '0-3 分钟：欢迎新进直播间的朋友，分享今天最想聊的一件小事，邀请大家在评论区报到。\n\n3-7 分钟：围绕「今天过得怎么样」展开，读 2-3 条评论并自然追问。\n\n7-11 分钟：分享一个生活小技巧或趣事，邀请观众说说自己的经历。\n\n11-15 分钟：总结高频话题，预告下一段会继续聊的内容，并引导关注。',
-  },
-  'emotional-support': {
-    label: '情绪陪伴',
-    detail: '温和交流，营造安全感',
-    script: '0-3 分钟：用温和语气欢迎大家，邀请观众用一个词形容此刻的心情。\n\n3-7 分钟：选择评论区的情绪关键词回应，分享一个让自己放松的小方法。\n\n7-11 分钟：发起「今天想给自己一句什么话」的互动，耐心读出观众留言。\n\n11-15 分钟：做简短收束和积极鼓励，预告接下来会继续陪大家聊聊。',
-  },
-  'hobby-sharing': {
-    label: '兴趣分享',
-    detail: '围绕共同爱好展开交流',
-    script: '0-3 分钟：介绍今天的兴趣话题，邀请观众在评论区说说自己的入坑经历。\n\n3-7 分钟：分享一个个人体验或实用建议，向评论区提一个具体问题。\n\n7-11 分钟：挑选 2-3 条留言延展讨论，比较不同做法或偏好。\n\n11-15 分钟：整理观众推荐清单，预告下一段将深入聊的方向。',
-  },
-  'interactive-games': {
-    label: '互动小游戏',
-    detail: '快速调动评论区参与',
-    script: '0-3 分钟：欢迎观众并说明第一轮小游戏规则，邀请大家在评论区输入答案。\n\n3-7 分钟：公布有趣回答，发起第二轮二选一或默契挑战。\n\n7-11 分钟：根据评论区选择延续游戏，及时回应高参与观众。\n\n11-15 分钟：公布本轮互动结果，邀请大家关注并预告下一轮玩法。',
-  },
-}
-
-function getCustomTopicRecommendation(topic: string): { label: string; detail: string; script: string } {
+function getCustomTopicRecommendation(topic: string): { label: string; detail: string; script: string } | null {
   const normalizedTopic = topic.trim()
-  if (!normalizedTopic) return chatTopicRecommendations['daily-life']
+  if (!normalizedTopic) return null
 
   const isEmotionalTopic = /情绪|治愈|焦虑|压力|关系|陪伴|心情/.test(normalizedTopic)
   const isInteractiveTopic = /游戏|挑战|测试|投票|问答|二选一|互动/.test(normalizedTopic)
@@ -270,6 +246,37 @@ function getCustomTopicRecommendation(topic: string): { label: string; detail: s
   }
 }
 
+function getLiveTitleRecommendations(streamType: StreamKind, topic: string): string[] {
+  const subject = (topic.trim() || getStreamTheme(streamType).defaultTopic).slice(0, 14)
+
+  if (streamType === 'music') {
+    return [
+      `${subject}｜今晚音乐现场`,
+      `正在热唱：${subject}`,
+      `点歌时间｜${subject}`,
+    ]
+  }
+  if (streamType === 'game') {
+    return [
+      `${subject}｜今晚开战`,
+      `一起挑战${subject}`,
+      `实时对战｜${subject}`,
+    ]
+  }
+  if (streamType === 'show') {
+    return [
+      `${subject}｜今晚舞台见`,
+      `高能才艺现场｜${subject}`,
+      `一起解锁${subject}`,
+    ]
+  }
+  return [
+    `${subject}｜今晚一起聊聊`,
+    `正在热聊：${subject}`,
+    `评论区见｜${subject}`,
+  ]
+}
+
 const chatLayoutTaskTitle = '选择直播布局'
 const showLayoutTaskTitle = '直播布局调整'
 const chatLayoutTaskDetail = '已为你默认全屏摄像头画布（单人竖屏 · 9:16），可勾选画布小组件并在画布中拖动位置'
@@ -287,7 +294,68 @@ const textColorOptions = [
   { id: 'teal', label: '青色', value: '#7ee7d5' },
   { id: 'purple', label: '紫色', value: '#c9a6ff' },
 ] as const
-type CanvasWidgetKind = 'text' | 'goal'
+type CanvasWidgetKind = 'text' | 'goal' | 'custom'
+type CustomWidgetSize = 'compact' | 'regular' | 'large'
+type LeaderboardType = 'likes' | 'gifts'
+type LeaderboardEntry = {
+  id: string
+  name: string
+  value: number
+  avatarTone: string
+}
+type CustomCanvasWidget = {
+  prompt: string
+  title: string
+  detail: string
+  color: string
+  size: CustomWidgetSize
+  kind: 'banner' | 'leaderboard'
+  leaderboardType?: LeaderboardType
+  entries?: LeaderboardEntry[]
+}
+
+function createCustomCanvasWidget(prompt: string): CustomCanvasWidget | null {
+  const normalized = prompt.trim()
+  if (!normalized) return null
+  const createLeaderboard = (type: LeaderboardType): CustomCanvasWidget => ({
+    prompt: normalized,
+    title: type === 'likes' ? 'Top likers' : 'Top gifters',
+    detail: type === 'likes' ? '点赞榜' : '送礼榜',
+    color: type === 'likes' ? '#ff5c82' : '#f4b95f',
+    size: 'large',
+    kind: 'leaderboard',
+    leaderboardType: type,
+    entries: type === 'likes'
+      ? [
+          { id: 'like-1', name: 'Margaret', value: 200, avatarTone: '#c26b58' },
+          { id: 'like-2', name: 'kiiikko', value: 197, avatarTone: '#b29e86' },
+          { id: 'like-3', name: 'LunaDeam', value: 168, avatarTone: '#926d5c' },
+        ]
+      : [
+          { id: 'gift-1', name: 'Margaret', value: 520, avatarTone: '#c26b58' },
+          { id: 'gift-2', name: 'kiiikko', value: 300, avatarTone: '#b29e86' },
+          { id: 'gift-3', name: 'LunaDeam', value: 168, avatarTone: '#926d5c' },
+        ],
+  })
+
+  if (/点赞(?:榜|榜单|排行(?:榜)?|排名)|赞榜|like(?:\s*(?:榜|排行|ranking))?|top\s*likes?/i.test(normalized)) {
+    return createLeaderboard('likes')
+  }
+  if (/送礼(?:榜|榜单|排行(?:榜)?|排名)|礼物(?:榜|榜单|排行(?:榜)?|排名)|gift(?:\s*(?:榜|排行|ranking))?|top\s*gifters?/i.test(normalized)) {
+    return createLeaderboard('gifts')
+  }
+
+  if (/关注|点赞|订阅|助力/.test(normalized)) {
+    return { prompt: normalized, title: '点个关注，一起聊聊', detail: '你的关注是今天的直播动力', color: '#ff5c82', size: 'regular', kind: 'banner' }
+  }
+  if (/福利|抽奖|限时|倒计时/.test(normalized)) {
+    return { prompt: normalized, title: '限时互动福利', detail: '参与评论互动，解锁本场惊喜', color: '#f4b95f', size: 'regular', kind: 'banner' }
+  }
+  if (/提问|问答|话题|聊天/.test(normalized)) {
+    return { prompt: normalized, title: '评论区聊聊', detail: normalized.slice(0, 28), color: '#6edbc0', size: 'regular', kind: 'banner' }
+  }
+  return { prompt: normalized, title: normalized.slice(0, 16), detail: '点击评论区，一起参与互动', color: '#78aaff', size: 'regular', kind: 'banner' }
+}
 type LiveCanvasComponentId = Extract<
   AtomicComponentId,
   'live-goal' | 'audience-poll' | 'audience-wishes'
@@ -410,9 +478,6 @@ function App() {
   const [lastLiveConfig, setLastLiveConfig] = useState<LastLiveConfig | null>(() =>
     loadLastLiveConfig(),
   )
-  const [selectedEntryCategory, setSelectedEntryCategory] = useState<StreamThemeId | 'other' | null>(
-    () => lastLiveConfig?.theme ?? null,
-  )
   const [scene, setScene] = useState<Scene>('quality')
   const [demoStrategy, setDemoStrategy] = useState<AudienceStrategyId>('normal')
   const [strategyRevision, setStrategyRevision] = useState(0)
@@ -425,12 +490,10 @@ function App() {
   const [completedPreliveTasks, setCompletedPreliveTasks] = useState<PreliveTask[]>([])
   const [exitingPreliveTask, setExitingPreliveTask] = useState<PreliveTask | null>(null)
   const [preliveLayout, setPreliveLayout] = useState<PreliveLayout>('portrait')
-  const [preliveScript, setPreliveScript] = useState(
-    chatTopicRecommendations['daily-life'].script,
-  )
+  const [preliveScript, setPreliveScript] = useState('')
   const [preliveHostBio, setPreliveHostBio] = useState('音乐聊天主播，用轻松歌单陪大家结束一天。')
-  const [selectedChatTopic, setSelectedChatTopic] = useState<ChatTopicId>('daily-life')
   const [customChatTopic, setCustomChatTopic] = useState('')
+  const [titleRecommendationContext, setTitleRecommendationContext] = useState('晚间唱歌聊天')
   const [preliveCoverApplied, setPreliveCoverApplied] = useState(false)
   const prelivePollEnabled = true
   const prelivePollQuestion = '下一首唱什么？'
@@ -456,8 +519,15 @@ function App() {
   >(defaultLiveComponentOffsets)
   const [chatTextOffset, setChatTextOffset] = useState<WidgetOffset>({ x: 0, y: 0 })
   const [chatGoalOffset, setChatGoalOffset] = useState<WidgetOffset>({ x: 0, y: 0 })
+  const [customWidgetPrompt, setCustomWidgetPrompt] = useState('')
+  const [customCanvasWidget, setCustomCanvasWidget] = useState<CustomCanvasWidget | null>(null)
+  const [customWidgetOffset, setCustomWidgetOffset] = useState<WidgetOffset>({ x: 0, y: 0 })
   const [gameCameraOffset, setGameCameraOffset] = useState<WidgetOffset>({ x: 0, y: 0 })
   const [hostComments, setHostComments] = useState<AudienceComment[]>([])
+  const titleRecommendations = useMemo(
+    () => getLiveTitleRecommendations(streamType, customChatTopic || titleRecommendationContext),
+    [customChatTopic, streamType, titleRecommendationContext],
+  )
   const readyScore = Math.round(20 + completedPreliveTasks.length * (80 / preliveTasks.length))
   const [restoredChatSession] = useState(loadGenieChatSession)
   const [genieInput, setGenieInput] = useState('')
@@ -1371,6 +1441,7 @@ function App() {
     const finalTopic = topic?.trim() || getStreamTheme(theme).defaultTopic
     setStreamType(theme)
     setStreamTopic(finalTopic)
+    setTitleRecommendationContext(finalTopic)
     const chatCompanion = theme === 'chat'
     setIsChatCompanion(chatCompanion)
     const initialLayout: PreliveLayout = theme === 'show'
@@ -1383,9 +1454,8 @@ function App() {
     setCompletedPreliveTasks([])
     setExitingPreliveTask(null)
     setPreliveTaskIndex(0)
-    setSelectedChatTopic('daily-life')
     setCustomChatTopic('')
-    setPreliveScript(chatTopicRecommendations['daily-life'].script)
+    setPreliveScript('')
     setChatTextEnabled(true)
     setChatTextDraft(defaultChatText)
     setChatTextValue(defaultChatText)
@@ -1400,25 +1470,18 @@ function App() {
     setSelectedCanvasWidget(null)
     setChatTextOffset({ x: 0, y: 0 })
     setChatGoalOffset({ x: 0, y: 0 })
+    setCustomWidgetPrompt('')
+    setCustomCanvasWidget(null)
+    setCustomWidgetOffset({ x: 0, y: 0 })
     setGameCameraOffset({ x: 0, y: 0 })
     applyCameraEffects(applyCameraEffectPreset('natural'))
     setView('prelive')
-  }
-
-  const selectEntryTheme = (theme: StreamThemeId | 'other') => {
-    setSelectedEntryCategory(theme)
-  }
-
-  const startFromSelectedTheme = () => {
-    if (!selectedEntryCategory || selectedEntryCategory === 'other') return
-    beginPrelive(selectedEntryCategory)
   }
 
   const submitOnboardingInput = () => {
     const description = onboardingInput.trim()
     if (!description) return
     const theme = recognizeStreamTheme(description)
-    setSelectedEntryCategory(theme)
     beginPrelive(theme, description)
   }
 
@@ -1427,6 +1490,7 @@ function App() {
     const { theme, savedConfig } = lastLiveConfig
     setStreamType(theme)
     setStreamTopic(savedConfig.topic)
+    setTitleRecommendationContext(savedConfig.topic)
     setIsChatCompanion(savedConfig.isChatCompanion)
     const restoredLayout: PreliveLayout = theme === 'game'
       && savedConfig.layout !== 'game-vertical'
@@ -1459,7 +1523,6 @@ function App() {
     setCompletedPreliveTasks(preliveTasks.map((task) => task.id))
     setExitingPreliveTask(null)
     setPreliveTaskIndex(0)
-    setSelectedEntryCategory(theme)
     setView('prelive')
   }
 
@@ -1560,6 +1623,16 @@ function App() {
       onGoalTitleChange={setChatGoalTitle}
       goalTarget={chatGoalTarget}
       onGoalTargetChange={setChatGoalTarget}
+      customWidgetPrompt={customWidgetPrompt}
+      onCustomWidgetPromptChange={setCustomWidgetPrompt}
+      customWidget={customCanvasWidget}
+      onCustomWidgetChange={setCustomCanvasWidget}
+      onGenerateCustomWidget={() => {
+        const widget = createCustomCanvasWidget(customWidgetPrompt)
+        if (!widget) return
+        setCustomCanvasWidget(widget)
+        setSelectedCanvasWidget('custom')
+      }}
     />
   )
 
@@ -2549,57 +2622,34 @@ function App() {
         </header>
         <section className="welcome-card">
           <div className="genie-beacon" aria-hidden="true"><div><Sparkles size={26} fill="currentColor" /></div></div>
-          <span className="eyebrow"><i />LIVE STUDIO GENIE</span>
-          <h1>陪伴你的<span>直播旅程</span></h1>
-          <p>今天想播什么？告诉我，我来帮你准备。</p>
-          <div className="stream-options" role="list" aria-label="直播主题">
-            {STREAM_THEMES.filter((theme) => theme.id !== 'show').map((theme) => (
-              <StreamOption
-                key={theme.id}
-                icon={themeIcon(theme.id)}
-                label={theme.name}
-                active={selectedEntryCategory === theme.id}
-                onClick={() => selectEntryTheme(theme.id)}
-              />
-            ))}
-            <StreamOption
-              icon={<Sparkles />}
-              label="其他"
-              active={selectedEntryCategory === 'other'}
-              onClick={() => selectEntryTheme('other')}
-            />
+          <div className="welcome-title-row">
+            <span className="eyebrow"><i />LIVE STUDIO GENIE</span>
+            <h1>陪伴你的<span>直播旅程</span></h1>
           </div>
+          <p className="onboarding-primary-prompt">今天想播什么？</p>
+          <p className="onboarding-supporting-copy">告诉我，我来帮你准备。</p>
+          <div className="recommended-theme-tags" role="list" aria-label="推荐直播方案">
+            {STREAM_THEMES.filter((theme) => theme.id !== 'show').map((theme) => (
+              <button
+                type="button"
+                key={theme.id}
+                className="recommended-theme-tag"
+                onClick={() => beginPrelive(theme.id)}
+              >
+                {themeIcon(theme.id)}{theme.name}
+              </button>
+            ))}
+          </div>
+          <form className="theme-input" onSubmit={(event) => { event.preventDefault(); submitOnboardingInput() }}>
+            <WandSparkles size={17} />
+            <input value={onboardingInput} onChange={(event) => setOnboardingInput(event.target.value)} placeholder="用一句话描述你今天的直播..." aria-label="本场主题" autoFocus />
+            <button type="submit" aria-label="识别主题并开始准备" disabled={!onboardingInput.trim()}>开始准备 <ArrowLeft size={16} className="arrow-forward" /></button>
+          </form>
           {lastLiveConfig && (
-            <button type="button" className="history-restore-card" onClick={restoreLastLiveConfig}>
-              <span className="history-restore-icon"><History size={17} /></span>
-              <span className="history-restore-body">
-                <b>沿用历史直播设置</b>
-                <small>点击恢复主播上场保存的直播配置</small>
-              </span>
-              <span className="history-restore-meta">
-                <em>{lastLiveConfig.themeName}</em>
-                {lastLiveConfig.lastLiveTime && (
-                  <i>{formatLastLiveTime(lastLiveConfig.lastLiveTime)}</i>
-                )}
-              </span>
-              <ArrowLeft size={15} className="arrow-forward" />
-            </button>
-          )}
-          {selectedEntryCategory === 'other' && (
-            <form className="theme-input" onSubmit={(event) => { event.preventDefault(); submitOnboardingInput() }}>
-              <WandSparkles size={17} />
-              <input value={onboardingInput} onChange={(event) => setOnboardingInput(event.target.value)} placeholder="用一句话描述你今天的直播..." aria-label="本场主题" autoFocus />
-              <button type="submit" aria-label="识别主题并开始准备" disabled={!onboardingInput.trim()}>确认 <ArrowLeft size={16} className="arrow-forward" /></button>
-            </form>
-          )}
-          {selectedEntryCategory !== 'other' && (
-            <button
-              type="button"
-              className="onboarding-start-button"
-              disabled={!selectedEntryCategory}
-              onClick={startFromSelectedTheme}
-            >
-              <Sparkles size={16} />开始准备
+            <button type="button" className="history-restore-link" onClick={restoreLastLiveConfig}>
+              <History size={13} />
+              <span>沿用上次直播设置</span>
+              <small>{lastLiveConfig.themeName}{lastLiveConfig.lastLiveTime ? ` · ${formatLastLiveTime(lastLiveConfig.lastLiveTime)}` : ''}</small>
             </button>
           )}
         </section>
@@ -2805,6 +2855,9 @@ function App() {
             onGoalOffsetChange: setChatGoalOffset,
             onDeleteText: () => deleteCanvasWidget('text'),
             onDeleteGoal: () => deleteCanvasWidget('goal'),
+            customWidget: customCanvasWidget,
+            customWidgetOffset,
+            onCustomWidgetOffsetChange: setCustomWidgetOffset,
           } : null} />
           {(cameraError || displayError || backgroundMusicError) && <p className="camera-warning">{displayError || cameraError || backgroundMusicError}</p>}
           <div className="stage-controls">
@@ -3059,14 +3112,13 @@ function App() {
                     >
                       <PreliveTaskCard
                       task={preliveTasks[preliveTaskIndex]}
-                      taskIndex={preliveTaskIndex}
                       completed={false}
                       layout={preliveLayout}
                       streamType={streamType}
                       title={streamTopic}
+                      titleRecommendations={titleRecommendations}
                       script={preliveScript}
                       hostBio={preliveHostBio}
-                      selectedChatTopic={selectedChatTopic}
                       customChatTopic={customChatTopic}
                       isChatCompanion={isChatCompanion}
                       canvasWidgetPanel={
@@ -3087,12 +3139,16 @@ function App() {
                       onTitleChange={setStreamTopic}
                       onScriptChange={setPreliveScript}
                       onHostBioChange={setPreliveHostBio}
-                      onChatTopicChange={(topic) => {
-                        setSelectedChatTopic(topic)
-                        setCustomChatTopic('')
-                        setPreliveScript(chatTopicRecommendations[topic].script)
+                      onCustomChatTopicChange={(topic) => {
+                        setCustomChatTopic(topic)
+                        setPreliveScript('')
                       }}
-                      onCustomChatTopicChange={setCustomChatTopic}
+                      onGenerateCustomChatTopic={(topic) => {
+                        const recommendation = getCustomTopicRecommendation(topic)
+                        if (!recommendation) return
+                        setPreliveScript(recommendation.script)
+                        setStreamTopic(getLiveTitleRecommendations(streamType, topic || titleRecommendationContext)[0])
+                      }}
                       coverApplied={preliveCoverApplied}
                       onCoverAppliedChange={setPreliveCoverApplied}
                       onVisualChange={updateVisualPreview}
@@ -3161,10 +3217,6 @@ function App() {
       )}
     </main>
   )
-}
-
-function StreamOption({ icon, label, active, onClick }: { icon: ReactNode; label: string; active: boolean; onClick: () => void }) {
-  return <button type="button" className={`stream-option ${active ? 'active' : ''}`} onClick={onClick}>{icon}<span>{label}</span>{active && <Check size={14} />}</button>
 }
 
 function themeIcon(theme: StreamThemeId) {
@@ -3270,6 +3322,9 @@ type ChatCanvasWidgets = {
   onGoalOffsetChange: (offset: WidgetOffset) => void
   onDeleteText: () => void
   onDeleteGoal: () => void
+  customWidget: CustomCanvasWidget | null
+  customWidgetOffset: WidgetOffset
+  onCustomWidgetOffsetChange: (offset: WidgetOffset) => void
 }
 
 function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, isPk, applied, scene, strategy, liveAdjustment, previewMode, liveStageMode, isPreviewing, audience, isLive, preliveTitle, preliveLayout, stageBackgroundUrl, bandLayout, gameLayout, gameCameraOffset, onGameCameraOffsetChange, selectedLiveComponent, liveComponentOffsets, onLiveComponentOffsetChange, onSelectLiveComponent, onDeleteLiveComponent, chatWidgets }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; displayStream: MediaStream | null; layoutEditing: boolean; isPk: boolean; applied: boolean; scene: Scene; strategy: AudienceStrategyId; liveAdjustment: LiveAdjustment | null; previewMode: PreviewMode; liveStageMode: LiveStageMode; isPreviewing: boolean; audience: AudienceSnapshot; isLive: boolean; preliveTitle: string; preliveLayout: PreliveLayout; stageBackgroundUrl: string | null; bandLayout: boolean; gameLayout: 'vertical' | 'landscape' | null; gameCameraOffset: WidgetOffset; onGameCameraOffsetChange: (offset: WidgetOffset) => void; selectedLiveComponent: LiveCanvasComponentId | null; liveComponentOffsets: Record<LiveCanvasComponentId, WidgetOffset>; onLiveComponentOffsetChange: (component: LiveCanvasComponentId, offset: WidgetOffset) => void; onSelectLiveComponent: (component: LiveCanvasComponentId | null) => void; onDeleteLiveComponent: (component: LiveCanvasComponentId) => void; chatWidgets: ChatCanvasWidgets | null }) {
@@ -3454,6 +3509,16 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
               editable={!showAudiencePreview || isLive}
             />
           )}
+          {chatWidgets.customWidget && (
+            <CanvasCustomWidget
+              widget={chatWidgets.customWidget}
+              selected={chatWidgets.selectedWidget === 'custom'}
+              onSelect={() => chatWidgets.onSelectWidget('custom')}
+              offset={chatWidgets.customWidgetOffset}
+              onOffsetChange={chatWidgets.onCustomWidgetOffsetChange}
+              editable={!showAudiencePreview}
+            />
+          )}
         </>
       )}
     </div>
@@ -3556,6 +3621,11 @@ function CanvasWidgetPanel({
   onGoalTitleChange,
   goalTarget,
   onGoalTargetChange,
+  customWidgetPrompt,
+  onCustomWidgetPromptChange,
+  customWidget,
+  onCustomWidgetChange,
+  onGenerateCustomWidget,
 }: {
   selectedWidget: CanvasWidgetKind | null
   onSelectWidget: (widget: CanvasWidgetKind | null) => void
@@ -3574,6 +3644,11 @@ function CanvasWidgetPanel({
   onGoalTitleChange: (title: string) => void
   goalTarget: number
   onGoalTargetChange: (target: number) => void
+  customWidgetPrompt: string
+  onCustomWidgetPromptChange: (prompt: string) => void
+  customWidget: CustomCanvasWidget | null
+  onCustomWidgetChange: (widget: CustomCanvasWidget | null) => void
+  onGenerateCustomWidget: () => void
 }) {
   if (selectedWidget === 'text') {
     const stepFontSize = (delta: number) => {
@@ -3691,6 +3766,43 @@ function CanvasWidgetPanel({
     )
   }
 
+  if (selectedWidget === 'custom' && customWidget) {
+    return (
+      <div className="recommendation-card canvas-widget-card">
+        <div className="prelive-task-meta">
+          <span className="card-kicker">自定义画布组件</span>
+          <button type="button" className="canvas-widget-back" onClick={() => onSelectWidget(null)}>返回组件列表</button>
+        </div>
+        <h2>组件参数设置</h2>
+        <label className="widget-editor-field">
+          <span>主文案</span>
+          <input value={customWidget.title} maxLength={24} onChange={(event) => onCustomWidgetChange({ ...customWidget, title: event.target.value })} />
+        </label>
+        <label className="widget-editor-field">
+          <span>辅助文案</span>
+          <input value={customWidget.detail} maxLength={40} onChange={(event) => onCustomWidgetChange({ ...customWidget, detail: event.target.value })} />
+        </label>
+        <div className="widget-style-row">
+          <span className="widget-style-label">强调色</span>
+          <div className="widget-swatch-row" role="group" aria-label="组件强调色">
+            {['#ff5c82', '#f4b95f', '#6edbc0', '#78aaff'].map((color) => (
+              <button type="button" key={color} className={`widget-swatch ${customWidget.color === color ? 'selected' : ''}`} aria-pressed={customWidget.color === color} style={{ backgroundColor: color }} onClick={() => onCustomWidgetChange({ ...customWidget, color })} />
+            ))}
+          </div>
+        </div>
+        <div className="widget-style-row">
+          <span className="widget-style-label">尺寸</span>
+          <div className="widget-segmented" role="group" aria-label="组件尺寸">
+            {([['compact', '小'], ['regular', '中'], ['large', '大']] as const).map(([size, label]) => (
+              <button type="button" key={size} className={customWidget.size === size ? 'selected' : ''} aria-pressed={customWidget.size === size} onClick={() => onCustomWidgetChange({ ...customWidget, size })}>{label}</button>
+            ))}
+          </div>
+        </div>
+        <small className="chat-widget-tip">参数调整会实时同步到画布，也可在画布中拖动组件调整位置</small>
+      </div>
+    )
+  }
+
   if (selectedWidget === 'goal') {
     const clampTarget = (value: number) => Math.min(999000, Math.max(1000, Math.round(value / 1000) * 1000))
     return (
@@ -3788,10 +3900,16 @@ function CanvasWidgetPanel({
 
   return (
     <div className="recommendation-card canvas-widget-card canvas-widget-list-card prelive-interaction-widget-panel">
-      <h2>互动组件</h2>
-      <p>选择需要展示在直播画面中的互动内容</p>
+      <h2>画布小组件</h2>
       {renderWidgetRow('text', <Type size={15} />, '文字源', '画面中的装饰文字，可编辑内容与样式', textEnabled, onTextEnabledChange)}
       {renderWidgetRow('goal', <Target size={15} />, '目标源', '展示直播目标进度，鼓励观众互动', goalEnabled, onGoalEnabledChange)}
+      <div className="custom-widget-generator">
+        <label>
+          <span>自定义组件</span>
+          <input value={customWidgetPrompt} maxLength={60} placeholder="例如：生成一个限时福利提醒组件" onChange={(event) => onCustomWidgetPromptChange(event.target.value)} />
+        </label>
+        <button type="button" disabled={!customWidgetPrompt.trim()} onClick={onGenerateCustomWidget}>生成组件</button>
+      </div>
       <small className="chat-widget-tip">勾选后在画布中展示；点击列表项或画布中的组件即可编辑，拖动可调整位置</small>
     </div>
   )
@@ -3799,14 +3917,13 @@ function CanvasWidgetPanel({
 
 function PreliveTaskCard({
   task,
-  taskIndex,
   completed,
   layout,
   streamType,
   title,
+  titleRecommendations,
   script,
   hostBio,
-  selectedChatTopic,
   customChatTopic,
   coverApplied,
   isChatCompanion,
@@ -3821,8 +3938,8 @@ function PreliveTaskCard({
   onTitleChange,
   onScriptChange,
   onHostBioChange,
-  onChatTopicChange,
   onCustomChatTopicChange,
+  onGenerateCustomChatTopic,
   onCoverAppliedChange,
   onVisualChange,
   onAudioChange,
@@ -3830,14 +3947,13 @@ function PreliveTaskCard({
   onSkip,
 }: {
   task: typeof preliveTasks[number]
-  taskIndex: number
   completed: boolean
   layout: PreliveLayout
   streamType: StreamKind
   title: string
+  titleRecommendations: string[]
   script: string
   hostBio: string
-  selectedChatTopic: ChatTopicId
   customChatTopic: string
   coverApplied: boolean
   isChatCompanion: boolean
@@ -3852,14 +3968,17 @@ function PreliveTaskCard({
   onTitleChange: (title: string) => void
   onScriptChange: (script: string) => void
   onHostBioChange: (bio: string) => void
-  onChatTopicChange: (topic: ChatTopicId) => void
   onCustomChatTopicChange: (topic: string) => void
+  onGenerateCustomChatTopic: (topic: string) => void
   onCoverAppliedChange: (applied: boolean) => void
   onVisualChange: (property: keyof VisualSettings, percentage: number) => void
   onAudioChange: (property: keyof AudioSettings, value: number) => void
   onApply: () => void
   onSkip: () => void
 }) {
+  const scriptGenerationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [isGeneratingScript, setIsGeneratingScript] = useState(false)
+  const [generatedTopic, setGeneratedTopic] = useState('')
   const isChatLayout = isChatCompanion && task.id === 'layout'
   const isMusicLayout = streamType === 'music' && task.id === 'layout'
   const isGameLayout = streamType === 'game' && task.id === 'layout'
@@ -3876,9 +3995,7 @@ function PreliveTaskCard({
     : isMusicLayout || isShowLayout
       ? musicLayoutTaskDetail
       : task.detail
-  const scriptRecommendation = customChatTopic.trim()
-    ? getCustomTopicRecommendation(customChatTopic)
-    : chatTopicRecommendations[selectedChatTopic]
+  const scriptRecommendation = getCustomTopicRecommendation(generatedTopic)
   const canApply = task.id !== 'content'
     ? true
     : [
@@ -3886,6 +4003,38 @@ function PreliveTaskCard({
         title,
         script,
       ].every((value) => value.trim().length > 0)
+
+  useEffect(() => () => {
+    if (scriptGenerationTimeoutRef.current !== null) {
+      clearTimeout(scriptGenerationTimeoutRef.current)
+    }
+  }, [])
+
+  const requestScriptGeneration = () => {
+    const topic = customChatTopic.trim()
+    if (!topic) return
+
+    if (scriptGenerationTimeoutRef.current !== null) {
+      clearTimeout(scriptGenerationTimeoutRef.current)
+    }
+    setIsGeneratingScript(true)
+    scriptGenerationTimeoutRef.current = setTimeout(() => {
+      onGenerateCustomChatTopic(topic)
+      setGeneratedTopic(topic)
+      setIsGeneratingScript(false)
+      scriptGenerationTimeoutRef.current = null
+    }, 450)
+  }
+
+  const updateCustomChatTopic = (topic: string) => {
+    if (scriptGenerationTimeoutRef.current !== null) {
+      clearTimeout(scriptGenerationTimeoutRef.current)
+      scriptGenerationTimeoutRef.current = null
+    }
+    setIsGeneratingScript(false)
+    setGeneratedTopic('')
+    onCustomChatTopicChange(topic)
+  }
 
   const renderStageBackgroundPicker = (detailText: string) => (
     <div className="stage-background-picker">
@@ -3929,7 +4078,6 @@ function PreliveTaskCard({
 
   return <div className="recommendation-card prelive-task-card">
     <div className="prelive-task-meta">
-      <span className="card-kicker">{task.priority} · 任务 {taskIndex + 1} / {preliveTasks.length}</span>
       {completed && <em><Check size={11} />已完成</em>}
     </div>
     <h2>{cardTitle}</h2>
@@ -4001,6 +4149,21 @@ function PreliveTaskCard({
         <div className="prelive-form-section">
           <b>直播内容</b>
           <label><span>直播标题</span><input value={title} maxLength={30} onChange={(event) => onTitleChange(event.target.value)} /></label>
+          <div className="title-recommendations" role="group" aria-label="直播标题推荐">
+            <span>智能标题推荐</span>
+            <div>
+              {titleRecommendations.map((recommendation) => (
+                <button
+                  type="button"
+                  key={recommendation}
+                  className={title === recommendation ? 'selected' : ''}
+                  onClick={() => onTitleChange(recommendation)}
+                >
+                  {recommendation}
+                </button>
+              ))}
+            </div>
+          </div>
           <label><span>主播简介</span><textarea value={hostBio} maxLength={100} rows={3} onChange={(event) => onHostBioChange(event.target.value)} /></label>
         </div>
         <div className="prelive-cover-suggestion">
@@ -4010,41 +4173,46 @@ function PreliveTaskCard({
           </button>
         </div>
         <div className="prelive-form-section">
-          <b>选择聊天主题</b>
-          <small>选择预设主题，或输入自定义话题获取实时脚本建议。</small>
-          <div className="chat-topic-grid" role="group" aria-label="聊天主题">
-            {(Object.entries(chatTopicRecommendations) as Array<[ChatTopicId, typeof chatTopicRecommendations[ChatTopicId]]>).map(([topic, recommendation]) => (
-              <button
-                type="button"
-                key={topic}
-                className={`chat-topic-option ${!customChatTopic && selectedChatTopic === topic ? 'selected' : ''}`}
-                aria-pressed={!customChatTopic && selectedChatTopic === topic}
-                onClick={() => onChatTopicChange(topic)}
-              >
-                <b>{recommendation.label}</b>
-                <small>{recommendation.detail}</small>
-              </button>
-            ))}
-          </div>
+          <b>直播脚本建议</b>
+          <small>完成输入后按回车或在输入框内右键，生成前 15 分钟互动脚本。</small>
           <label className="custom-chat-topic-input">
             <span>自定义聊天主题</span>
             <input
               value={customChatTopic}
               maxLength={40}
               placeholder="例如：第一次独自旅行的故事"
-              onChange={(event) => onCustomChatTopicChange(event.target.value)}
+              onChange={(event) => updateCustomChatTopic(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter') return
+                event.preventDefault()
+                requestScriptGeneration()
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                requestScriptGeneration()
+              }}
             />
           </label>
-          <div className="smart-script-recommendation" aria-live="polite">
-            <div>
-              <span>智能脚本建议</span>
-              <b>{scriptRecommendation.label}</b>
-              <small>{scriptRecommendation.detail}</small>
+          {isGeneratingScript ? (
+            <div className="smart-script-recommendation is-generating" role="status" aria-live="polite">
+              <div>
+                <span>正在生成互动脚本</span>
+                <small>正在根据「{customChatTopic.trim()}」整理互动方案...</small>
+              </div>
             </div>
-            <button type="button" onClick={() => onScriptChange(scriptRecommendation.script)}>应用建议</button>
-          </div>
+          ) : scriptRecommendation ? (
+            <div className="smart-script-recommendation" aria-live="polite">
+              <div>
+                <span>已自动生成智能脚本</span>
+                <b>{scriptRecommendation.label}</b>
+                <small>{scriptRecommendation.detail}</small>
+              </div>
+            </div>
+          ) : (
+            <small className="custom-chat-topic-hint">输入完成后按回车或在输入框内右键，即可生成脚本。</small>
+          )}
         </div>
-        <label><span>前 15 分钟内容脚本</span><textarea value={script} maxLength={1000} rows={11} onChange={(event) => onScriptChange(event.target.value)} /></label>
+        <label><span>互动脚本</span><textarea value={script} maxLength={1000} rows={11} onChange={(event) => onScriptChange(event.target.value)} /></label>
         <small>{title.length} / 30 · {script.length} / 1000</small>
       </div>
     )}

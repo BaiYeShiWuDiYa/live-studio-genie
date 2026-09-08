@@ -277,3 +277,69 @@ export function CanvasGoalRing({
     </DraggableWidget>
   )
 }
+
+interface CanvasCustomWidgetProps {
+  widget: {
+    title: string
+    detail: string
+    color: string
+    size: 'compact' | 'regular' | 'large'
+    kind: 'banner' | 'leaderboard'
+    leaderboardType?: 'likes' | 'gifts'
+    entries?: Array<{
+      id: string
+      name: string
+      value: number
+      avatarTone: string
+    }>
+  }
+  selected: boolean
+  onSelect: () => void
+  offset: WidgetOffset
+  onOffsetChange: (offset: WidgetOffset) => void
+  editable?: boolean
+}
+
+export function CanvasCustomWidget({
+  widget,
+  selected,
+  onSelect,
+  offset,
+  onOffsetChange,
+  editable = true,
+}: CanvasCustomWidgetProps) {
+  const isLeaderboard = widget.kind === 'leaderboard'
+
+  return (
+    <DraggableWidget
+      className={`canvas-custom-widget ${isLeaderboard ? 'canvas-leaderboard-widget' : ''} size-${widget.size}`}
+      ariaLabel={isLeaderboard ? `${widget.detail}组件` : '自定义画布组件'}
+      selected={editable && selected}
+      editable={editable}
+      offset={offset}
+      onSelect={onSelect}
+      onOffsetChange={onOffsetChange}
+      style={{ ['--custom-widget-color' as string]: widget.color }}
+    >
+      {isLeaderboard ? (
+        <>
+          <b className="leaderboard-title">{widget.title}</b>
+          <div className="leaderboard-list">
+            {(widget.entries ?? []).map((entry, index) => (
+              <div className="leaderboard-row" key={entry.id}>
+                <strong>{index + 1}</strong>
+                <i style={{ backgroundColor: entry.avatarTone }}>{entry.name.slice(0, 1)}</i>
+                <span><b>{entry.name}</b><small>{widget.leaderboardType === 'likes' ? '♥' : '◆'} {entry.value}</small></span>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
+          <b>{widget.title}</b>
+          <span>{widget.detail}</span>
+        </>
+      )}
+    </DraggableWidget>
+  )
+}
