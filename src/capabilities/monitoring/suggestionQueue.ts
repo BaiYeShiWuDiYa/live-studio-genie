@@ -10,6 +10,13 @@ export interface QueuedSuggestion extends LiveSuggestion {
   widgets: WidgetSpec[]
 }
 
+export function getWidgetUiType(type: WidgetSpec['type']): string {
+  if (type === 'audience-poll') return 'audience-poll'
+  if (type === 'live-goal') return 'live-goal'
+  if (type === 'audio-adjustment') return 'microphone'
+  return `widget:${type}`
+}
+
 export function keepLatestUniqueBy<T>(
   items: readonly T[],
   getKey: (item: T) => string,
@@ -37,13 +44,23 @@ export function appendNewSuggestions(
       )
       .map((suggestion) => suggestion.signalId),
   )
-  const additions = incoming
-    .filter((suggestion) =>
-      suggestion.tone !== 'good' &&
-      !queuedSignalIds.has(suggestion.signalId) &&
-      !dismissedSignalIds.has(suggestion.signalId),
-    )
-    .map((suggestion, index) => ({
+  const queuedWidgetTypes = new Set(
+    queue.flatMap((suggestion) =>
+      suggestion.widgets.map((widget) => getWidgetUiType(widget.type)),
+    ),
+  )
+  const additions: QueuedSuggestion[] = []
+  incoming.forEach((suggestion, index) => {
+    const widgetType = getWidgetUiType(suggestion.widget.type)
+    if (
+      suggestion.tone === 'good' ||
+      queuedSignalIds.has(suggestion.signalId) ||
+      queuedWidgetTypes.has(widgetType) ||
+      dismissedSignalIds.has(suggestion.signalId)
+    ) {
+      return
+    }
+    additions.push({
       ...suggestion,
       queueId: `${suggestion.signalId}-${addedAt}-${index}`,
       addedAt,
@@ -51,7 +68,10 @@ export function appendNewSuggestions(
       source: 'monitor' as const,
       triggerKey: `monitor:${suggestion.signalId}`,
       widgets: [suggestion.widget],
-    }))
+    })
+    queuedSignalIds.add(suggestion.signalId)
+    queuedWidgetTypes.add(widgetType)
+  })
 
   return additions.length > 0 ? [...queue, ...additions] : queue
 }
@@ -70,17 +90,26 @@ export function appendTriggeredSuggestion(
   )
   if (incoming.tone === 'good' || alreadyQueued) return queue
 
+  const queuedSuggestion: QueuedSuggestion = {
+    ...incoming,
+    queueId: `${source}-${triggerKey}-${addedAt}`,
+    addedAt,
+    isNew: true,
+    source,
+    triggerKey,
+    widgets: [incoming.widget],
+  }
+  const widgetType = getWidgetUiType(incoming.widget.type)
+  const duplicateIndex = queue.findIndex((suggestion) =>
+    suggestion.widgets.some(
+      (widget) => getWidgetUiType(widget.type) === widgetType,
+    ),
+  )
+  if (duplicateIndex < 0) return [...queue, queuedSuggestion]
+
   return [
-    ...queue,
-    {
-      ...incoming,
-      queueId: `${source}-${triggerKey}-${addedAt}`,
-      addedAt,
-      isNew: true,
-      source,
-      triggerKey,
-      widgets: [incoming.widget],
-    },
+    ...queue.filter((_, index) => index !== duplicateIndex),
+    queuedSuggestion,
   ]
 }
 

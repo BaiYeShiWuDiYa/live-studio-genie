@@ -228,9 +228,6 @@ export function buildLiveDiagnostics({
     }),
   ]
 
-  const goodSignals = [...signals]
-    .sort((left, right) => right.trend - left.trend || right.score - left.score)
-    .slice(0, 2)
   const rankedImprovements = [...signals]
     .sort((left, right) => left.trend - right.trend || left.score - right.score)
   const primarySignal = signals.find(
@@ -252,6 +249,11 @@ export function buildLiveDiagnostics({
       (signal) => signal.id !== thresholdTriggeredSignal?.id,
     ),
   ].slice(0, 2)
+  const improvementIds = new Set(improvements.map((signal) => signal.id))
+  const goodSignals = [...signals]
+    .filter((signal) => !improvementIds.has(signal.id))
+    .sort((left, right) => right.trend - left.trend || right.score - left.score)
+    .slice(0, 2)
   const suggestions = improvements
     .map((signal) => createSuggestion(
       signal,

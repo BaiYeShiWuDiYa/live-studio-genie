@@ -195,6 +195,8 @@ describe('live diagnostics', () => {
       severity: 96,
     })
     expect(result.suggestions[0].action).toContain('观众心愿')
+    expect(result.goodSignals.map((signal) => signal.id))
+      .not.toContain('comments')
   })
 
   it('turns color cast and cluttered background into targeted diagnoses', () => {

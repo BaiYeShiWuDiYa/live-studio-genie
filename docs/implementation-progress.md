@@ -668,6 +668,34 @@ Validation: 21 test files and 142 tests passed, with production build, lint, and
 - Added gift-engagement analysis and LIVE Goal generation so normal mode can surface more than adjustment and poll components.
 - Kept positive windows non-actionable to prevent continuous suggestion spam.
 
+
+### 直播链路与建议体验修复
+
+- 移除 GO LIVE 时自动发布投票的硬编码逻辑，仅继承播前真实配置的画布状态。
+- 返回直播前设置时保留任务完成状态，但不再重复显示 GO LIVE 完成弹窗。
+- 保留 Genie 历史消息，同时让新直播默认进入实时建议工作台。
+- 拆分直播时钟与评论事件时钟，根据每分钟评论数动态生成带轻微波动的评论间隔。
+- 评论窗口改为按事件逐条追加，切换演示策略时保留已出现的评论和真实发生时间。
+- 将同类型推荐组件去重前移到建议队列，跨监控、评论和 AI 来源只保留最新活动建议。
+- 为 AI 生成的投票和 LIVE Goal 增加可编辑字段，预览与应用使用编辑后的参数。
+- 投票支持 2～4 个选项增删；投票和 LIVE Goal 使用本地草稿及字段校验，无效输入不会覆盖有效配置。
+- 每张 Widget 独立维护预览、应用、撤回和刷新状态，避免多张卡片同步切换按钮状态。
+- 实时建议工作台增加历史对话入口，新直播仍默认保持 Overview。
+- 排除优秀指标和改进指标的重复项，修复活跃评论场景下的 React 重复 key 警告。
+
+验证：
+
+```bash
+npm run test
+npm run build
+npm run lint
+git diff --check
+```
+
+结果：21 个测试文件、147 项测试通过；浏览器已验证开播无自动投票、返回播前无弹层、历史对话不自动打开、评论节奏切换和 AI Widget 编辑。
+
+本轮补充改动通过 147 项现有单元测试、生产构建、Lint（0 warning）和 `git diff --check`；按演示阶段要求未新增或执行 UI 自动化测试。
+
 ## Next
 
 1. Add eyebrow controls and face-shape deformation.

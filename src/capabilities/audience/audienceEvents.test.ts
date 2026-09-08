@@ -3,6 +3,7 @@ import {
   analyzeAudienceComment,
   analyzeCommentKeywords,
   audienceEventSchema,
+  getAudienceCommentIntervalMs,
   mockAudienceEventAdapter,
   resolveAudienceStrategy,
 } from './audienceEvents'
@@ -105,11 +106,46 @@ describe('audience events', () => {
 
     expect(snapshot.comments[latestCommentIndex].occurredAt).toBe(now)
     expect(snapshot.comments[latestCommentIndex - 1].occurredAt).toBe(
-      now - studioRuntimeConfig.audience.refreshIntervalMs,
+      now - Math.round(60_000 / snapshot.commentsPerMinute),
     )
     expect(snapshot.gifts[1].occurredAt).toBe(
       now - studioRuntimeConfig.audience.previousGiftOffsetMs,
     )
+  })
+
+  it('derives visibly different comment intervals from scene density', () => {
+    const coldInterval = getAudienceCommentIntervalMs(14, 0)
+    const normalInterval = getAudienceCommentIntervalMs(42, 0)
+    const activeInterval = getAudienceCommentIntervalMs(82, 0)
+
+    expect(coldInterval).toBeGreaterThan(normalInterval)
+    expect(normalInterval).toBeGreaterThan(activeInterval)
+    expect(activeInterval).toBeGreaterThanOrEqual(
+      studioRuntimeConfig.audience.minimumCommentIntervalMs,
+    )
+    expect(coldInterval).toBeLessThanOrEqual(
+      studioRuntimeConfig.audience.maximumCommentIntervalMs,
+    )
+  })
+
+  it('keeps audience metrics tied to elapsed time instead of comment count', () => {
+    const startedAt = 1_700_000_000_000
+    const latestCommentAt = startedAt + 58_000
+    const snapshot = mockAudienceEventAdapter.getStrategySnapshot(
+      'active-comments',
+      false,
+      5,
+      'issue',
+      startedAt,
+      60,
+      latestCommentAt,
+    )
+
+    expect(snapshot.viewerCount).toBe(
+      studioRuntimeConfig.audience.initialViewerCount +
+      60 * studioRuntimeConfig.audience.viewerGrowthPerTick,
+    )
+    expect(snapshot.comments.at(-1)?.occurredAt).toBe(latestCommentAt)
   })
 
   it('keeps existing comments and appends the newest comment at the bottom', () => {

@@ -19,18 +19,29 @@ const suggestion = (
   tone,
   action: `${signalId} action.`,
   metric: `${signalId} -20%`,
-  widget: {
-    version: '1.0',
-    type: 'audience-poll',
-    title: `${signalId} widget`,
-    detail: `${signalId} detail`,
-    actionLabel: '应用',
-    props: {
-      question: '下一步做什么？',
-      options: ['A', 'B'],
-      durationSeconds: 45,
-    },
-  },
+  widget: signalId === 'retention'
+    ? {
+        version: '1.0',
+        type: 'visual-adjustment',
+        title: `${signalId} widget`,
+        detail: `${signalId} detail`,
+        actionLabel: '应用',
+        props: {
+          settings: { brightness: 1, contrast: 1, warmth: 0 },
+        },
+      }
+    : {
+        version: '1.0',
+        type: 'audience-poll',
+        title: `${signalId} widget`,
+        detail: `${signalId} detail`,
+        actionLabel: '应用',
+        props: {
+          question: '下一步做什么？',
+          options: ['A', 'B'],
+          durationSeconds: 45,
+        },
+      },
 })
 
 describe('suggestion queue', () => {
@@ -79,7 +90,7 @@ describe('suggestion queue', () => {
     expect(result).toEqual([])
   })
 
-  it('keeps comment and monitor triggers independent for the same signal', () => {
+  it('replaces an active duplicate component from another source', () => {
     const monitorQueue = appendNewSuggestions(
       [],
       [suggestion('comments')],
@@ -101,12 +112,21 @@ describe('suggestion queue', () => {
       300,
     )
 
-    expect(withCommentInsight).toHaveLength(2)
-    expect(withCommentInsight.map((item) => item.source)).toEqual([
-      'monitor',
-      'comment',
-    ])
+    expect(withCommentInsight).toHaveLength(1)
+    expect(withCommentInsight[0].source).toBe('comment')
     expect(duplicateCommentInsight).toBe(withCommentInsight)
+  })
+
+  it('deduplicates UI types within one monitoring batch', () => {
+    const result = appendNewSuggestions(
+      [],
+      [suggestion('comments'), suggestion('gifts')],
+      new Set(),
+      100,
+    )
+
+    expect(result).toHaveLength(1)
+    expect(result[0].signalId).toBe('comments')
   })
 
   it('marks a selected suggestion as seen without changing other items', () => {

@@ -2,6 +2,12 @@ export const studioRuntimeConfig = {
   audience: {
     /** 直播间 Mock 数据刷新周期，单位为毫秒。 */
     refreshIntervalMs: 1000,
+    /** 评论生成的最短间隔，避免活跃场景出现不可读的高速刷屏。 */
+    minimumCommentIntervalMs: 550,
+    /** 评论生成的最长间隔，避免转冷场景长时间没有演示反馈。 */
+    maximumCommentIntervalMs: 4_500,
+    /** 评论间隔的确定性波动系数，使 Mock 节奏更接近真实直播间。 */
+    commentIntervalJitter: [0.88, 1.08, 0.96, 1.14, 0.92] as const,
     /** 开播后保持正常评论的预热时长，单位为毫秒。 */
     strategyWarmupDurationMs: 15_000,
     /** 接纳策略建议后展示正向反馈评论的时长，单位为毫秒。 */

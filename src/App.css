@@ -1,4 +1,4 @@
-.app-shell {
+﻿.app-shell {
   min-height: 100vh;
   background:
     radial-gradient(circle at 45% 0%, rgba(45, 103, 150, 0.12), transparent 31%),
@@ -1558,6 +1558,54 @@
   gap: 6px;
   margin: 0;
 }
+
+.widget-inline-editor {
+  display: grid;
+  gap: 8px;
+}
+
+.widget-option-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 27px;
+  align-items: end;
+  gap: 6px;
+}
+
+.widget-option-remove,
+.widget-option-add {
+  border: 1px solid rgba(140, 179, 191, 0.24);
+  background: rgba(15, 30, 39, 0.72);
+  color: #a9c4c5;
+}
+
+.widget-option-remove {
+  width: 27px;
+  height: 35px;
+  padding: 0;
+}
+
+.widget-option-add {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 28px;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  font-size: 10px;
+}
+
+.widget-option-remove:disabled,
+.widget-option-add:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.widget-editor-error {
+  color: #ff9ea9;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
 .widget-editor-field > span {
   color: #9aa5b5;
   font-size: 10px;
@@ -1857,6 +1905,25 @@
     inset 0 1px rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(14px);
   animation: golive-dialog-in 420ms cubic-bezier(0.22, 1.32, 0.36, 1) both;
+}
+.golive-dialog-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #9c929d;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.golive-dialog-close:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #f7eff4;
 }
 .golive-dialog::before,
 .golive-dialog::after {
@@ -3727,7 +3794,7 @@
   position: absolute;
   z-index: 12;
   right: 12px;
-  bottom: 12px;
+  bottom: clamp(84px, 7vw, 118px);
   left: 12px;
   padding: 7px;
   flex-wrap: nowrap;
@@ -3769,10 +3836,6 @@
 .prelive-live-mode .live-stage {
   height: auto;
   flex: 1;
-}
-
-.prelive-live-mode .stage-controls {
-  bottom: clamp(84px, 7vw, 118px);
 }
 
 .audience-preview-overlay {
@@ -4049,6 +4112,21 @@
 .prelive-go-live-button,
 .prelive-go-live-button * {
   color: #fff !important;
+}
+
+.prelive-go-live-bar.is-live-session {
+  border-color: rgba(112, 221, 185, 0.38);
+  background:
+    linear-gradient(120deg, rgba(31, 65, 59, 0.92), rgba(35, 38, 45, 0.94));
+}
+
+.prelive-go-live-bar.is-live-session .score-track i {
+  background: linear-gradient(90deg, #46c99d, #78e3c1);
+}
+
+.end-live-bottom-button {
+  background: linear-gradient(105deg, #d9345b, #f04a70);
+  box-shadow: 0 8px 22px rgba(217, 52, 91, 0.24);
 }
 
 .live-app .control-button,
@@ -4976,7 +5054,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   margin-bottom: clamp(7px, 0.7vw, 14px);
+}
+
+.generated-suggestions-title > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
 }
 
 .generated-suggestions-title span {
@@ -4988,6 +5073,38 @@
 .generated-suggestions-title small {
   color: #837982;
   font-size: clamp(7px, 0.54vw, 11px);
+}
+
+.suggestion-history-button {
+  min-width: 0;
+  min-height: 27px;
+  padding: 4px 7px;
+  border: 1px solid rgba(110, 231, 195, 0.2);
+  background: rgba(16, 34, 40, 0.72);
+  color: #a7c8c2;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.suggestion-history-button:hover {
+  border-color: rgba(110, 231, 195, 0.44);
+  color: #d4fff1;
+}
+
+.suggestion-history-button b {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: rgba(110, 231, 195, 0.14);
+  color: #8ff0d4;
+  display: inline-grid;
+  place-items: center;
+  font-size: 8px;
 }
 
 .generated-suggestion-list {

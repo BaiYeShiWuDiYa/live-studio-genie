@@ -91,6 +91,8 @@ export interface AudienceEventAdapter {
     tick: number,
     phase?: AudienceCommentPhase,
     startedAt?: number,
+    elapsedSeconds?: number,
+    latestCommentAt?: number,
   ) => AudienceSnapshot
 }
 
@@ -267,12 +269,30 @@ export function resolveAudienceStrategy(
     : selectedStrategy
 }
 
+export function getAudienceCommentIntervalMs(
+  commentsPerMinute: number,
+  tick: number,
+): number {
+  const config = studioRuntimeConfig.audience
+  const baseInterval = 60_000 / Math.max(1, commentsPerMinute)
+  const jitter = config.commentIntervalJitter[
+    Math.abs(tick) % config.commentIntervalJitter.length
+  ]
+  return Math.round(Math.min(
+    config.maximumCommentIntervalMs,
+    Math.max(config.minimumCommentIntervalMs, baseInterval * jitter),
+  ))
+}
+
 function buildSnapshot(
   strategyId: AudienceStrategyId,
   applied: boolean,
   tick: number,
   phase: AudienceCommentPhase = 'issue',
   startedAt = 0,
+  elapsedSeconds = tick,
+  latestCommentAt =
+    startedAt + elapsedSeconds * studioRuntimeConfig.audience.refreshIntervalMs,
 ): AudienceSnapshot {
   const config = studioRuntimeConfig.audience
   const strategy = getAudienceStrategy(strategyId)
@@ -282,7 +302,11 @@ function buildSnapshot(
   const sourceComments = phase === 'recovery'
     ? audienceRecoveryCommentsByStrategy[strategyId] ?? audienceCommentsByStrategy.normal
     : audienceCommentsByStrategy[strategyId]
-  const currentEventTime = startedAt + tick * config.refreshIntervalMs
+  const currentEventTime =
+    startedAt + elapsedSeconds * config.refreshIntervalMs
+  const averageCommentIntervalMs = Math.round(
+    60_000 / Math.max(1, metricsStrategy.audienceMetrics.commentsPerMinute),
+  )
   const comments = Array.from({ length: config.visibleCommentCount }, (_, index): AudienceComment => {
     const eventTick = tick - (config.visibleCommentCount - 1 - index)
     const sourceIndex = (
@@ -306,28 +330,31 @@ function buildSnapshot(
       ),
       occurredAt: Math.max(
         0,
-        currentEventTime -
-          (config.visibleCommentCount - 1 - index) * config.refreshIntervalMs,
+        latestCommentAt -
+          (config.visibleCommentCount - 1 - index) *
+            averageCommentIntervalMs,
       ),
     }
   })
 
   const normalGifts: AudienceGift[] = [{
-    id: `gift-rose-${tick}`,
+    id: `gift-rose-${elapsedSeconds}`,
     type: 'gift',
-    userName: audienceUserNames[(tick + 2) % audienceUserNames.length],
+    userName: audienceUserNames[(elapsedSeconds + 2) % audienceUserNames.length],
     giftName: 'Rose',
-    count: 2 + (tick * 3) % 7,
+    count: 2 + (elapsedSeconds * 3) % 7,
     icon: '🌹',
     occurredAt: currentEventTime,
   }]
-  if (tick % 4 !== 1) {
+  if (elapsedSeconds % 4 !== 1) {
     normalGifts.push({
-      id: `gift-heart-${tick}`,
+      id: `gift-heart-${elapsedSeconds}`,
       type: 'gift',
-      userName: audienceUserNames[(tick + 5) % audienceUserNames.length],
+      userName: audienceUserNames[
+        (elapsedSeconds + 5) % audienceUserNames.length
+      ],
       giftName: 'Heart',
-      count: 6 + (tick * 5) % 9,
+      count: 6 + (elapsedSeconds * 5) % 9,
       icon: '💗',
       occurredAt: Math.max(
         0,
@@ -335,11 +362,13 @@ function buildSnapshot(
       ),
     })
   }
-  if (tick > 0 && tick % 9 === 0) {
+  if (elapsedSeconds > 0 && elapsedSeconds % 9 === 0) {
     normalGifts.push({
-      id: `gift-galaxy-${tick}`,
+      id: `gift-galaxy-${elapsedSeconds}`,
       type: 'gift',
-      userName: audienceUserNames[(tick + 8) % audienceUserNames.length],
+      userName: audienceUserNames[
+        (elapsedSeconds + 8) % audienceUserNames.length
+      ],
       giftName: 'Galaxy',
       count: 1,
       icon: '🌌',
@@ -352,7 +381,7 @@ function buildSnapshot(
   const gifts = metricsStrategy.audienceMetrics.giftLevel === 'reduced'
     ? [{
         ...normalGifts[0],
-        id: `gift-low-${tick}`,
+        id: `gift-low-${elapsedSeconds}`,
         count: 1,
         occurredAt: Math.max(
           0,
@@ -361,11 +390,15 @@ function buildSnapshot(
       }]
     : normalGifts
   const viewerCount = strategyId === 'entrant-drop' && phase === 'issue'
-    ? Math.max(820, config.initialViewerCount - tick * 3)
-    : config.initialViewerCount + tick * config.viewerGrowthPerTick
-  const normalCommentVariation = [0, 3, -2, 5, -1, 2, -4][tick % 7]
-  const normalEntrantVariation = [0, 2, -3, 4, -1, 3, -2][tick % 7]
-  const normalRetentionVariation = [0, 1, -2, 2, -1, 3, -1][tick % 7]
+    ? Math.max(820, config.initialViewerCount - elapsedSeconds * 3)
+    : config.initialViewerCount +
+      elapsedSeconds * config.viewerGrowthPerTick
+  const normalCommentVariation =
+    [0, 3, -2, 5, -1, 2, -4][elapsedSeconds % 7]
+  const normalEntrantVariation =
+    [0, 2, -3, 4, -1, 3, -2][elapsedSeconds % 7]
+  const normalRetentionVariation =
+    [0, 1, -2, 2, -1, 3, -1][elapsedSeconds % 7]
   const useNormalVariation = strategyId === 'normal' && phase === 'issue'
 
   return {

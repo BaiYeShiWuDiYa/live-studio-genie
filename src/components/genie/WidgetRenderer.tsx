@@ -7,10 +7,12 @@ import {
   Heart,
   House,
   Music2,
+  Plus,
   RadioTower,
   RefreshCw,
   RotateCcw,
   Sparkles,
+  X,
 } from 'lucide-react'
 import { useState, type ComponentType } from 'react'
 import { widgetSpecSchema, type WidgetSpec } from '../../agent/widgets/widgetSpec'
@@ -41,6 +43,7 @@ interface WidgetRendererProps {
   onApply: () => void
   onUndo: () => void
   onRefresh: () => void
+  onSpecChange: (spec: WidgetSpec) => void
   onAudioChange: (property: keyof AudioSettings, value: number) => void
   onVisualChange: (property: keyof VisualSettings, percentage: number) => void
   onCameraEffectsChange: (settings: CameraEffects) => void
@@ -50,6 +53,7 @@ interface WidgetBodyProps {
   spec: WidgetSpec
   applied: boolean
   isPreviewing: boolean
+  onSpecChange?: WidgetRendererProps['onSpecChange']
   onAudioChange: WidgetRendererProps['onAudioChange']
   onVisualChange: WidgetRendererProps['onVisualChange']
   onCameraEffectsChange: WidgetRendererProps['onCameraEffectsChange']
@@ -85,9 +89,11 @@ export function WidgetRenderer(props: WidgetRendererProps) {
       <h2>{spec.title}</h2>
       <p>{spec.detail}</p>
       <WidgetBody
+        key={`${spec.type}:${spec.title}:${spec.detail}`}
         spec={spec}
         applied={props.applied}
         isPreviewing={props.isPreviewing}
+        onSpecChange={props.onSpecChange}
         onAudioChange={props.onAudioChange}
         onVisualChange={props.onVisualChange}
         onCameraEffectsChange={props.onCameraEffectsChange}
@@ -385,13 +391,137 @@ function VisualAdjustmentWidget({ spec, applied, isPreviewing, onVisualChange }:
   )
 }
 
-function AudiencePollWidget({ spec }: WidgetBodyProps) {
+function AudiencePollWidget({ spec, applied, onSpecChange }: WidgetBodyProps) {
+  const pollProps = spec.type === 'audience-poll'
+    ? spec.props
+    : { question: '', options: ['', ''], durationSeconds: 15 }
+  const [question, setQuestion] = useState(pollProps.question)
+  const [options, setOptions] = useState([...pollProps.options])
+  const [duration, setDuration] = useState(String(pollProps.durationSeconds))
+
   if (spec.type !== 'audience-poll') return null
+
+  const updateDraft = (
+    nextQuestion: string,
+    nextOptions: string[],
+    nextDuration: string,
+  ) => {
+    setQuestion(nextQuestion)
+    setOptions(nextOptions)
+    setDuration(nextDuration)
+    const durationSeconds = Number(nextDuration)
+    if (
+      !nextQuestion.trim() ||
+      nextOptions.some((option) => !option.trim()) ||
+      !Number.isInteger(durationSeconds) ||
+      durationSeconds < 15 ||
+      durationSeconds > 180
+    ) {
+      return
+    }
+    onSpecChange?.({
+      ...spec,
+      props: {
+        question: nextQuestion.trim(),
+        options: nextOptions.map((option) => option.trim()),
+        durationSeconds,
+      },
+    })
+  }
+  const isValid = question.trim() &&
+    options.every((option) => option.trim()) &&
+    Number.isInteger(Number(duration)) &&
+    Number(duration) >= 15 &&
+    Number(duration) <= 180
+
   return (
-    <div className="interaction-widget">
-      <div><Gift size={17} /><span>点歌投票</span></div>
-      <p>{spec.props.question} {spec.props.options.map((option, index) => `${index + 1} ${option}`).join(' / ')}</p>
-      <small>展示 {spec.props.durationSeconds} 秒 · 评论即可参与</small>
+    <div className="widget-inline-editor">
+      <div className="interaction-widget">
+        <div><Gift size={17} /><span>点歌投票</span></div>
+        <p>{question || '请输入投票问题'} {options.map((option, index) => `${index + 1} ${option || '待填写'}`).join(' / ')}</p>
+        <small>展示 {duration || '--'} 秒 · 评论即可参与</small>
+      </div>
+      <label className="widget-editor-field">
+        <span>投票问题</span>
+        <input
+          aria-label="投票问题"
+          maxLength={60}
+          value={question}
+          disabled={applied}
+          onChange={(event) =>
+            updateDraft(event.target.value, options, duration)}
+        />
+      </label>
+      {options.map((option, index) => (
+        <div className="widget-option-editor" key={index}>
+          <label className="widget-editor-field">
+            <span>选项 {index + 1}</span>
+            <input
+              aria-label={`投票选项 ${index + 1}`}
+              maxLength={24}
+              value={option}
+              disabled={applied}
+              onChange={(event) =>
+                updateDraft(
+                  question,
+                  options.map((current, optionIndex) =>
+                    optionIndex === index ? event.target.value : current,
+                  ),
+                  duration,
+                )}
+            />
+          </label>
+          {options.length > 2 && (
+            <button
+              type="button"
+              className="widget-option-remove"
+              aria-label={`删除投票选项 ${index + 1}`}
+              title="删除选项"
+              disabled={applied}
+              onClick={() => updateDraft(
+                question,
+                options.filter((_, optionIndex) => optionIndex !== index),
+                duration,
+              )}
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
+      ))}
+      {options.length < 4 && (
+        <button
+          type="button"
+          className="widget-option-add"
+          disabled={applied}
+          onClick={() => updateDraft(
+            question,
+            [...options, `选项 ${options.length + 1}`],
+            duration,
+          )}
+        >
+          <Plus size={13} />
+          添加选项
+        </button>
+      )}
+      <label className="widget-editor-field">
+        <span>展示时长（秒）</span>
+        <input
+          aria-label="投票展示时长"
+          type="number"
+          min={15}
+          max={180}
+          value={duration}
+          disabled={applied}
+          onChange={(event) =>
+            updateDraft(question, options, event.target.value)}
+        />
+      </label>
+      {!isValid && (
+        <small className="widget-editor-error">
+          请填写完整内容，展示时长需为 15～180 秒。
+        </small>
+      )}
     </div>
   )
 }
@@ -414,15 +544,79 @@ function AudioAdjustmentWidget({ spec, applied, isPreviewing, onAudioChange }: W
   )
 }
 
-function LiveGoalWidget({ spec }: WidgetBodyProps) {
+function LiveGoalWidget({ spec, applied, onSpecChange }: WidgetBodyProps) {
+  const goalProps = spec.type === 'live-goal'
+    ? spec.props
+    : { label: '', target: 1, current: 0, supporters: 0 }
+  const [label, setLabel] = useState(goalProps.label)
+  const [target, setTarget] = useState(String(goalProps.target))
+
   if (spec.type !== 'live-goal') return null
-  const progress = Math.min(100, Math.round((spec.props.current / spec.props.target) * 100))
+
+  const updateDraft = (nextLabel: string, nextTarget: string) => {
+    setLabel(nextLabel)
+    setTarget(nextTarget)
+    const targetValue = Number(nextTarget)
+    if (
+      !nextLabel.trim() ||
+      !Number.isInteger(targetValue) ||
+      targetValue < 1
+    ) {
+      return
+    }
+    onSpecChange?.({
+      ...spec,
+      props: {
+        ...spec.props,
+        label: nextLabel.trim(),
+        target: targetValue,
+        current: Math.min(spec.props.current, targetValue),
+      },
+    })
+  }
+  const targetValue = Math.max(1, Number(target) || 1)
+  const progress = Math.min(
+    100,
+    Math.round((spec.props.current / targetValue) * 100),
+  )
+  const isValid = label.trim() &&
+    Number.isInteger(Number(target)) &&
+    Number(target) >= 1
+
   return (
-    <div className="goal-widget">
-      <span>{spec.props.label}</span>
-      <strong>再差 {(spec.props.target - spec.props.current).toLocaleString()} 分达成</strong>
-      <div><i style={{ width: `${progress}%` }} /></div>
-      <small>已获得 {spec.props.supporters} 位观众响应</small>
+    <div className="widget-inline-editor">
+      <div className="goal-widget">
+        <span>{label || '请输入目标名称'}</span>
+        <strong>再差 {Math.max(0, targetValue - spec.props.current).toLocaleString()} 分达成</strong>
+        <div><i style={{ width: `${progress}%` }} /></div>
+        <small>已获得 {spec.props.supporters} 位观众响应</small>
+      </div>
+      <label className="widget-editor-field">
+        <span>目标名称</span>
+        <input
+          aria-label="LIVE Goal 名称"
+          maxLength={40}
+          value={label}
+          disabled={applied}
+          onChange={(event) => updateDraft(event.target.value, target)}
+        />
+      </label>
+      <label className="widget-editor-field">
+        <span>目标值</span>
+        <input
+          aria-label="LIVE Goal 目标值"
+          type="number"
+          min={1}
+          value={target}
+          disabled={applied}
+          onChange={(event) => updateDraft(label, event.target.value)}
+        />
+      </label>
+      {!isValid && (
+        <small className="widget-editor-error">
+          请填写目标名称，并设置大于 0 的整数目标。
+        </small>
+      )}
     </div>
   )
 }
