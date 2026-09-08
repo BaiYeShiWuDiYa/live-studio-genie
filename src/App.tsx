@@ -388,6 +388,31 @@ function getAtomicUiType(componentId: AtomicComponentId): string {
   return `atomic:${componentId}`
 }
 
+function getActiveWidgetCooldownTypes(
+  cooldowns: Map<string, number>,
+  now = Date.now(),
+): Set<string> {
+  const activeTypes = new Set<string>()
+  cooldowns.forEach((expiresAt, widgetType) => {
+    if (expiresAt > now) {
+      activeTypes.add(widgetType)
+    } else {
+      cooldowns.delete(widgetType)
+    }
+  })
+  return activeTypes
+}
+
+function startWidgetSuggestionCooldown(
+  cooldowns: Map<string, number>,
+  widgetType: string,
+): void {
+  cooldowns.set(
+    widgetType,
+    Date.now() + studioRuntimeConfig.suggestion.appliedWidgetCooldownMs,
+  )
+}
+
 function getPreviewModeForLayout(layout: PreliveLayout): PreviewMode {
   return layout === 'stage' || layout === 'game-landscape' ? 'studio' : 'mobile'
 }
@@ -804,6 +829,7 @@ function App() {
     useRef<NormalModeDetectionSnapshot | null>(null)
   const strategyActivatedRef = useRef(false)
   const dismissedSignalIdsRef = useRef(new Set<LiveSuggestion['signalId']>())
+  const widgetSuggestionCooldownsRef = useRef(new Map<string, number>())
   const removalTimeoutsRef = useRef(new Map<string, number>())
   const suggestionComponents = keepLatestUniqueBy(
     suggestionQueue.flatMap((suggestion) =>
@@ -999,6 +1025,7 @@ function App() {
       changedSuggestions,
       dismissedSignalIdsRef.current,
       now,
+      getActiveWidgetCooldownTypes(widgetSuggestionCooldownsRef.current, now),
     )
     if (nextQueue === currentQueue) return
 
@@ -1069,6 +1096,12 @@ function App() {
 
       const availableCandidates = candidates.filter((candidate) => {
         if (
+          getActiveWidgetCooldownTypes(widgetSuggestionCooldownsRef.current)
+            .has(getWidgetUiType(candidate.suggestion.widget.type))
+        ) {
+          return false
+        }
+        if (
           dismissedSignalIdsRef.current.has(candidate.suggestion.signalId)
         ) {
           return false
@@ -1132,6 +1165,8 @@ function App() {
             analyzedSuggestion,
             selected.source,
             selected.triggerKey,
+            Date.now(),
+            getActiveWidgetCooldownTypes(widgetSuggestionCooldownsRef.current),
           )
           if (nextQueue !== currentQueue) {
             suggestionQueueRef.current = nextQueue
@@ -1160,6 +1195,8 @@ function App() {
             latestNormalAiSuggestionRef.current,
             selected.source,
             selected.triggerKey,
+            Date.now(),
+            getActiveWidgetCooldownTypes(widgetSuggestionCooldownsRef.current),
           )
           if (nextQueue !== currentQueue) {
             suggestionQueueRef.current = nextQueue
@@ -1257,6 +1294,8 @@ function App() {
       currentQueue,
       strategySuggestions,
       dismissedSignalIdsRef.current,
+      Date.now(),
+      getActiveWidgetCooldownTypes(widgetSuggestionCooldownsRef.current),
     )
     if (nextQueue !== currentQueue) {
       suggestionQueueRef.current = nextQueue
@@ -1289,7 +1328,13 @@ function App() {
         }
       })
       setSuggestionQueue((queue) =>
-        appendNewSuggestions(queue, incoming, dismissedSignalIdsRef.current),
+        appendNewSuggestions(
+          queue,
+          incoming,
+          dismissedSignalIdsRef.current,
+          Date.now(),
+          getActiveWidgetCooldownTypes(widgetSuggestionCooldownsRef.current),
+        ),
       )
 
       do {
@@ -1545,6 +1590,7 @@ function App() {
     removalTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId))
     removalTimeoutsRef.current.clear()
     dismissedSignalIdsRef.current.clear()
+    widgetSuggestionCooldownsRef.current.clear()
     lastMetricUpdateAtRef.current = 0
     previousDiagnosticsRef.current = null
     strategyActivatedRef.current = false
@@ -1982,6 +2028,10 @@ function App() {
     componentId?: string,
     widgetIndex = -1,
   ) => {
+    startWidgetSuggestionCooldown(
+      widgetSuggestionCooldownsRef.current,
+      getWidgetUiType(widgetSpec.type),
+    )
     beginStrategyRecovery(suggestion)
     setApplied(true)
     const finishApplication = () => {
@@ -2175,6 +2225,7 @@ function App() {
     removalTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId))
     removalTimeoutsRef.current.clear()
     dismissedSignalIdsRef.current.clear()
+    widgetSuggestionCooldownsRef.current.clear()
     lastMetricUpdateAtRef.current = 0
     previousDiagnosticsRef.current = null
     strategyActivatedRef.current = false

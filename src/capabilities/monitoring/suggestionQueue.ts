@@ -35,6 +35,7 @@ export function appendNewSuggestions(
   incoming: LiveSuggestion[],
   dismissedSignalIds: ReadonlySet<LiveSuggestion['signalId']>,
   addedAt = Date.now(),
+  blockedWidgetTypes: ReadonlySet<string> = new Set(),
 ): QueuedSuggestion[] {
   const queuedSignalIds = new Set(
     queue
@@ -56,6 +57,7 @@ export function appendNewSuggestions(
       suggestion.tone === 'good' ||
       queuedSignalIds.has(suggestion.signalId) ||
       queuedWidgetTypes.has(widgetType) ||
+      blockedWidgetTypes.has(widgetType) ||
       dismissedSignalIds.has(suggestion.signalId)
     ) {
       return
@@ -82,6 +84,7 @@ export function appendTriggeredSuggestion(
   source: QueuedSuggestion['source'],
   triggerKey: string,
   addedAt = Date.now(),
+  blockedWidgetTypes: ReadonlySet<string> = new Set(),
 ): QueuedSuggestion[] {
   const alreadyQueued = queue.some((suggestion) =>
     suggestion.source === source &&
@@ -89,6 +92,9 @@ export function appendTriggeredSuggestion(
     suggestion.widgets.length > 0,
   )
   if (incoming.tone === 'good' || alreadyQueued) return queue
+  if (blockedWidgetTypes.has(getWidgetUiType(incoming.widget.type))) {
+    return queue
+  }
 
   const queuedSuggestion: QueuedSuggestion = {
     ...incoming,
@@ -106,11 +112,7 @@ export function appendTriggeredSuggestion(
     ),
   )
   if (duplicateIndex < 0) return [...queue, queuedSuggestion]
-
-  return [
-    ...queue.filter((_, index) => index !== duplicateIndex),
-    queuedSuggestion,
-  ]
+  return queue
 }
 
 export function markSuggestionSeen(

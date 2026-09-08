@@ -90,7 +90,29 @@ describe('suggestion queue', () => {
     expect(result).toEqual([])
   })
 
-  it('replaces an active duplicate component from another source', () => {
+  it('blocks suggestions whose widget type is in an application cooldown', () => {
+    const blockedWidgetTypes = new Set(['audience-poll'])
+    const monitored = appendNewSuggestions(
+      [],
+      [suggestion('comments')],
+      new Set(),
+      100,
+      blockedWidgetTypes,
+    )
+    const triggered = appendTriggeredSuggestion(
+      [],
+      suggestion('comments'),
+      'comment',
+      'request',
+      100,
+      blockedWidgetTypes,
+    )
+
+    expect(monitored).toEqual([])
+    expect(triggered).toEqual([])
+  })
+
+  it('preserves an active component when another source returns the same UI type', () => {
     const monitorQueue = appendNewSuggestions(
       [],
       [suggestion('comments')],
@@ -112,9 +134,10 @@ describe('suggestion queue', () => {
       300,
     )
 
+    expect(withCommentInsight).toBe(monitorQueue)
     expect(withCommentInsight).toHaveLength(1)
-    expect(withCommentInsight[0].source).toBe('comment')
-    expect(duplicateCommentInsight).toBe(withCommentInsight)
+    expect(withCommentInsight[0].source).toBe('monitor')
+    expect(duplicateCommentInsight).toBe(monitorQueue)
   })
 
   it('deduplicates UI types within one monitoring batch', () => {

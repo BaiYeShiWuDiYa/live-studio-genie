@@ -40,6 +40,8 @@ export const studioRuntimeConfig = {
     commentAnalysisDelayMs: 1_200,
     /** 同类评论洞察再次触发的最短间隔。 */
     commentCategoryCooldownMs: 8_000,
+    /** 采纳组件后，同类型建议再次出现前的最短等待时间。 */
+    appliedWidgetCooldownMs: 10_000,
     /** 停止输入后自动恢复建议视图的等待时间。 */
     inputModeIdleMs: 1_800,
   },
