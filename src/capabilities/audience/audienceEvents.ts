@@ -15,10 +15,30 @@ const audienceEventBaseSchema = z.object({
   occurredAt: z.number().int().nonnegative(),
 })
 
+const commentCategorySchema = z.enum([
+  'audio',
+  'visual',
+  'network',
+  'request',
+  'positive',
+  'none',
+])
+
+export const audienceCommentAnalysisSchema = z.object({
+  category: commentCategorySchema,
+  sentiment: z.enum(['positive', 'neutral', 'negative']),
+  confidence: z.number().min(0).max(1),
+  actionable: z.boolean(),
+  triggerMode: z.enum(['immediate', 'aggregate', 'none']),
+  keywords: z.array(z.string()),
+})
+
 export const audienceEventSchema = z.discriminatedUnion('type', [
   audienceEventBaseSchema.extend({
     type: z.literal('comment'),
     text: z.string().min(1).max(120),
+    source: z.enum(['viewer', 'host']),
+    analysis: audienceCommentAnalysisSchema,
   }),
   audienceEventBaseSchema.extend({
     type: z.literal('gift'),
@@ -37,9 +57,14 @@ export type AudienceGift = Extract<AudienceEvent, { type: 'gift' }>
 export type AudienceCommentPhase = 'issue' | 'recovery'
 
 export interface CommentInsight {
-  category: 'audio' | 'visual' | 'network' | 'request' | 'positive' | 'none'
+  category: z.infer<typeof commentCategorySchema>
   label: string
   count: number
+  confidence: number
+  priority: 'high' | 'medium' | 'low'
+  shouldTrigger: boolean
+  latestCommentId: string | null
+  sampleTexts: string[]
 }
 
 export interface AudienceSnapshot {
@@ -104,21 +129,131 @@ const keywordGroups: Array<{
 ]
 
 export function analyzeCommentKeywords(
-  comments: Pick<AudienceComment, 'text'>[],
+  comments: Array<Pick<AudienceComment, 'text'> & Partial<
+    Pick<AudienceComment, 'id' | 'source' | 'analysis'>
+  >>,
 ): CommentInsight {
+  const analyzedComments = comments
+    .filter((comment) => comment.source !== 'host')
+    .map((comment) => ({
+      ...comment,
+      analysis: comment.analysis ?? analyzeAudienceComment(comment.text),
+    }))
   const ranked = keywordGroups
     .map((group) => ({
       category: group.category,
       label: group.label,
-      count: comments.reduce((total, comment) => (
-        total + (group.words.some((word) => comment.text.includes(word)) ? 1 : 0)
-      ), 0),
+      comments: analyzedComments.filter(
+        (comment) => comment.analysis.category === group.category,
+      ),
     }))
-    .sort((left, right) => right.count - left.count)
+    .map((group) => ({
+      ...group,
+      count: group.comments.length,
+      confidence: group.comments.length === 0
+        ? 0
+        : group.comments.reduce(
+          (total, comment) => total + comment.analysis.confidence,
+          0,
+        ) / group.comments.length,
+    }))
+    .sort((left, right) =>
+      right.count - left.count || right.confidence - left.confidence)
 
-  return ranked[0]?.count
-    ? ranked[0]
-    : { category: 'none', label: '暂无集中反馈', count: 0 }
+  const dominant = ranked[0]
+  if (!dominant?.count) {
+    return {
+      category: 'none',
+      label: '暂无集中反馈',
+      count: 0,
+      confidence: 0,
+      priority: 'low',
+      shouldTrigger: false,
+      latestCommentId: comments.at(-1)?.id ?? null,
+      sampleTexts: [],
+    }
+  }
+
+  const hasImmediateComment = dominant.comments.some(
+    (comment) => comment.analysis.triggerMode === 'immediate',
+  )
+  const actionableCount = dominant.comments.filter(
+    (comment) => comment.analysis.actionable,
+  ).length
+  const shouldTrigger =
+    dominant.category !== 'positive' &&
+    dominant.category !== 'none' &&
+    dominant.confidence >= 0.55 &&
+    (hasImmediateComment || actionableCount >= 2)
+
+  return {
+    category: dominant.category,
+    label: dominant.label,
+    count: dominant.count,
+    confidence: Number(dominant.confidence.toFixed(2)),
+    priority: hasImmediateComment
+      ? 'high'
+      : shouldTrigger
+        ? 'medium'
+        : 'low',
+    shouldTrigger,
+    latestCommentId: dominant.comments.at(-1)?.id ?? null,
+    sampleTexts: dominant.comments.slice(-3).map((comment) => comment.text),
+  }
+}
+
+export function analyzeAudienceComment(
+  text: string,
+  source: AudienceComment['source'] = 'viewer',
+): AudienceComment['analysis'] {
+  if (source === 'host') {
+    return {
+      category: 'none',
+      sentiment: 'neutral',
+      confidence: 1,
+      actionable: false,
+      triggerMode: 'none',
+      keywords: [],
+    }
+  }
+
+  const matchedGroup = keywordGroups
+    .map((group) => ({
+      ...group,
+      keywords: group.words.filter((word) => text.includes(word)),
+    }))
+    .sort((left, right) => right.keywords.length - left.keywords.length)[0]
+  if (!matchedGroup?.keywords.length) {
+    return {
+      category: 'none',
+      sentiment: 'neutral',
+      confidence: 0.2,
+      actionable: false,
+      triggerMode: 'none',
+      keywords: [],
+    }
+  }
+
+  const urgent = /听不清|没声音|卡死|掉线|太暗|看不清|严重|一直/.test(text)
+  const actionable =
+    matchedGroup.category !== 'positive' &&
+    matchedGroup.category !== 'none'
+  return {
+    category: matchedGroup.category,
+    sentiment: matchedGroup.category === 'positive'
+      ? 'positive'
+      : actionable
+        ? 'negative'
+        : 'neutral',
+    confidence: Math.min(0.98, 0.58 + matchedGroup.keywords.length * 0.12),
+    actionable,
+    triggerMode: actionable
+      ? urgent
+        ? 'immediate'
+        : 'aggregate'
+      : 'none',
+    keywords: matchedGroup.keywords,
+  }
 }
 
 export function resolveAudienceStrategy(
@@ -158,9 +293,15 @@ function buildSnapshot(
       id: `comment-${strategyId}-${phase}-${eventTick}`,
       type: 'comment',
       userName: audienceUserNames[userIndex],
+      source: 'viewer',
       text: phase === 'issue' && applied && strategyId === 'cold-comments' && index === config.visibleCommentCount - 1
         ? '选 2，来首炸场的'
         : sourceComments[sourceIndex],
+      analysis: analyzeAudienceComment(
+        phase === 'issue' && applied && strategyId === 'cold-comments' && index === config.visibleCommentCount - 1
+          ? '选 2，来首炸场的'
+          : sourceComments[sourceIndex],
+      ),
       occurredAt: Math.max(
         0,
         currentEventTime -
@@ -239,7 +380,16 @@ function buildSnapshot(
       metricsStrategy.audienceMetrics.newViewerRetention +
       (useNormalVariation ? normalRetentionVariation : 0),
     insight: phase === 'recovery'
-      ? { category: 'positive', label: '正向反馈', count: comments.length }
+      ? {
+          category: 'positive',
+          label: '正向反馈',
+          count: comments.length,
+          confidence: 1,
+          priority: 'low',
+          shouldTrigger: false,
+          latestCommentId: comments.at(-1)?.id ?? null,
+          sampleTexts: comments.slice(-3).map((comment) => comment.text),
+        }
       : analyzeCommentKeywords(comments),
   }
 }

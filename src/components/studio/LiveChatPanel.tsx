@@ -31,12 +31,14 @@ export function LiveChatPanel({
 }: LiveChatPanelProps) {
   const [draft, setDraft] = useState('')
   const commentListRef = useRef<HTMLDivElement>(null)
+  const stickToBottomRef = useRef(true)
   const comments = [...audience.comments, ...hostComments]
+    .sort((left, right) => left.occurredAt - right.occurredAt)
   const lastCommentId = comments.at(-1)?.id
 
   useEffect(() => {
     const list = commentListRef.current
-    if (list) {
+    if (list && stickToBottomRef.current) {
       list.scrollTop = list.scrollHeight
     }
   }, [lastCommentId, isLive])
@@ -121,16 +123,23 @@ export function LiveChatPanel({
             aria-label="实时评论列表"
             aria-live="polite"
             tabIndex={0}
+            onScroll={(event) => {
+              const list = event.currentTarget
+              stickToBottomRef.current =
+                list.scrollHeight - list.scrollTop - list.clientHeight < 24
+            }}
           >
-            {comments.map((comment, index) => (
-              <div className="prototype-comment" key={comment.id}>
-                <i className={`avatar avatar-${(index % 4) + 1}`}>{comment.userName.slice(0, 1)}</i>
-                <span><b>{comment.userName}:</b> {comment.text}</span>
-                <time dateTime={new Date(comment.occurredAt).toISOString()}>
-                  {chatTimeFormatter.format(comment.occurredAt)}
-                </time>
-              </div>
-            ))}
+            <div className="live-chat-comment-content">
+              {comments.map((comment, index) => (
+                <div className="prototype-comment" key={comment.id}>
+                  <i className={`avatar avatar-${(index % 4) + 1}`}>{comment.userName.slice(0, 1)}</i>
+                  <span><b>{comment.userName}:</b> {comment.text}</span>
+                  <time dateTime={new Date(comment.occurredAt).toISOString()}>
+                    {chatTimeFormatter.format(comment.occurredAt)}
+                  </time>
+                </div>
+              ))}
+            </div>
           </div>
         ) : (
           <div className="live-chat-empty live-chat-comment-empty">

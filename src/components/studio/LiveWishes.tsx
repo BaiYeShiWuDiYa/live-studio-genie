@@ -14,6 +14,7 @@ export function LiveWishes({ onSelect }: { onSelect?: () => void }) {
       aria-label="观众心愿组件"
       tabIndex={0}
       onPointerDown={(event) => {
+        if (!onSelect) return
         event.stopPropagation()
         select()
       }}

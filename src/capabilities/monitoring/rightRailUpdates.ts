@@ -27,6 +27,16 @@ export const rightRailUpdateConfig = {
     studioRuntimeConfig.suggestion.commentCategoryCooldownMs,
 } as const
 
+export function advanceFixedRateDeadline(
+  previousDeadline: number,
+  now: number,
+  intervalMs: number,
+): number {
+  let nextDeadline = previousDeadline + intervalMs
+  while (nextDeadline <= now) nextDeadline += intervalMs
+  return nextDeadline
+}
+
 export interface NormalModeDetectionSnapshot {
   monitoringFingerprint: string
   latestMonitoringUpdateAt: number
@@ -118,6 +128,7 @@ export function createNormalAiAnalysisPrompt(
     '如果需要建议，用 80 个汉字以内给出自然、具体、可执行的中文建议，并按协议返回一个最相关组件。',
     '返回的组件必须直接执行这条建议，不得返回与建议内容无关的组件。',
     `当前在线：${audience.viewerCount}，近一分钟进房：${audience.entrantsLastMinute}，10 秒留存：${audience.newViewerRetention}%，评论密度：${audience.commentsPerMinute}/min。`,
+    `评论洞察：${audience.insight.label}，优先级 ${audience.insight.priority}，置信度 ${Math.round(audience.insight.confidence * 100)}%，建议触发 ${audience.insight.shouldTrigger ? '是' : '否'}。`,
     `实时指标：\n${signalSummary}`,
     `最新评论：${recentComments}`,
     `本地诊断候选仅作事实参考，不得照抄：\n${candidateSummary || '无'}`,
@@ -185,7 +196,8 @@ export function createCommentInsightSuggestion(
   if (
     insight.count === 0 ||
     insight.category === 'none' ||
-    insight.category === 'positive'
+    insight.category === 'positive' ||
+    !insight.shouldTrigger
   ) {
     return null
   }

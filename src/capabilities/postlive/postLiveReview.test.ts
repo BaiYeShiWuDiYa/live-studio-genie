@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { AudienceSnapshot } from '../audience/audienceEvents'
+import {
+  analyzeAudienceComment,
+  type AudienceSnapshot,
+} from '../audience/audienceEvents'
 import {
   buildPostLiveAiPrompt,
   createPostLiveReport,
@@ -17,6 +20,8 @@ const audience: AudienceSnapshot = {
     type: 'comment',
     userName: `viewer-${index}`,
     text: '直播很好看',
+    source: 'viewer',
+    analysis: analyzeAudienceComment('直播很好看'),
     occurredAt: index,
   })),
   gifts: [{
@@ -32,7 +37,16 @@ const audience: AudienceSnapshot = {
   entrantsLastMinute: 19,
   commentsPerMinute: 14,
   newViewerRetention: 22,
-  insight: { category: 'positive', label: '正向反馈', count: 7 },
+  insight: {
+    category: 'positive',
+    label: '正向反馈',
+    count: 7,
+    confidence: 0.9,
+    priority: 'low',
+    shouldTrigger: false,
+    latestCommentId: 'comment-6',
+    sampleTexts: ['直播很好看'],
+  },
 }
 
 const emptyMonitoring = summarizeLiveSessionMetrics(

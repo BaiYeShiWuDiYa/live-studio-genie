@@ -29,6 +29,7 @@ export function LiveGoal({ onSelect }: { onSelect?: () => void }) {
       aria-label="LIVE goal 组件"
       tabIndex={0}
       onPointerDown={(event) => {
+        if (!onSelect) return
         event.stopPropagation()
         onSelect?.()
       }}

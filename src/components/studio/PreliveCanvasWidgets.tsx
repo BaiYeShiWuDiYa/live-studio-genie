@@ -1,4 +1,5 @@
 import { useRef, type CSSProperties, type ReactNode } from 'react'
+import { GripVertical, Trash2 } from 'lucide-react'
 import Moveable from 'react-moveable'
 import {
   type CanvasTextStyle,
@@ -14,6 +15,7 @@ interface DraggableWidgetProps {
   offset: WidgetOffset
   onSelect: () => void
   onOffsetChange: (offset: WidgetOffset) => void
+  onDelete?: () => void
   children: ReactNode
   style?: CSSProperties
 }
@@ -26,6 +28,7 @@ function DraggableWidget({
   offset,
   onSelect,
   onOffsetChange,
+  onDelete,
   children,
   style,
 }: DraggableWidgetProps) {
@@ -52,6 +55,35 @@ function DraggableWidget({
             }
           : undefined}
       >
+        {editable && selected && (
+          <div className="canvas-widget-toolbar">
+            <span
+              className="canvas-widget-drag"
+              title="拖拽组件即可移动"
+              aria-hidden="true"
+            >
+              <GripVertical size={13} />
+            </span>
+            {onDelete && (
+              <button
+                type="button"
+                aria-label={`删除${ariaLabel}`}
+                title="删除组件"
+                onPointerDown={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  onDelete()
+                }}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onDelete()
+                }}
+              >
+                <Trash2 size={13} />
+              </button>
+            )}
+          </div>
+        )}
         {children}
       </div>
       {selected && (
@@ -76,6 +108,7 @@ interface CanvasTextSourceProps {
   onSelect: () => void
   offset: WidgetOffset
   onOffsetChange: (offset: WidgetOffset) => void
+  onDelete?: () => void
   editable?: boolean
 }
 
@@ -86,6 +119,7 @@ export function CanvasTextSource({
   onSelect,
   offset,
   onOffsetChange,
+  onDelete,
   editable = true,
 }: CanvasTextSourceProps) {
   if (!text.trim()) return null
@@ -117,6 +151,7 @@ export function CanvasTextSource({
       offset={offset}
       onSelect={onSelect}
       onOffsetChange={onOffsetChange}
+      onDelete={onDelete}
       style={style}
     >
       <span className="canvas-text-gradient">{mainText}</span>
@@ -134,6 +169,7 @@ interface CanvasGoalRingProps {
   onSelect: () => void
   offset: WidgetOffset
   onOffsetChange: (offset: WidgetOffset) => void
+  onDelete?: () => void
   editable?: boolean
 }
 
@@ -146,6 +182,7 @@ export function CanvasGoalRing({
   onSelect,
   offset,
   onOffsetChange,
+  onDelete,
   editable = true,
 }: CanvasGoalRingProps) {
   const progress = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0
@@ -165,6 +202,7 @@ export function CanvasGoalRing({
         offset={offset}
         onSelect={onSelect}
         onOffsetChange={onOffsetChange}
+        onDelete={onDelete}
       >
         <div className="goal-progress-panel">
           <div className="goal-progress-heading">
@@ -197,6 +235,7 @@ export function CanvasGoalRing({
       offset={offset}
       onSelect={onSelect}
       onOffsetChange={onOffsetChange}
+      onDelete={onDelete}
     >
       <div className="canvas-goal-panel">
         <div className="goal-gauge">

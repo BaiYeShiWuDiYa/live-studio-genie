@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  analyzeAudienceComment,
   analyzeCommentKeywords,
   audienceEventSchema,
   mockAudienceEventAdapter,
@@ -25,6 +26,46 @@ describe('audience events', () => {
       category: 'audio',
       label: '声音反馈',
       count: 2,
+      shouldTrigger: true,
+    })
+  })
+
+  it('marks urgent viewer feedback for immediate AI analysis', () => {
+    const analysis = analyzeAudienceComment('一直听不清，麦克风声音太小')
+
+    expect(analysis).toMatchObject({
+      category: 'audio',
+      sentiment: 'negative',
+      actionable: true,
+      triggerMode: 'immediate',
+    })
+    expect(analysis.confidence).toBeGreaterThan(0.7)
+  })
+
+  it('does not treat host messages as AI suggestion signals', () => {
+    const analysis = analyzeAudienceComment('声音太小了', 'host')
+
+    expect(analysis).toMatchObject({
+      category: 'none',
+      actionable: false,
+      triggerMode: 'none',
+    })
+  })
+
+  it('requires aggregation for ordinary feedback but not urgent feedback', () => {
+    const ordinary = analyzeCommentKeywords([{ text: '可以点歌吗' }])
+    const urgent = analyzeCommentKeywords([{ text: '一直听不清声音' }])
+
+    expect(ordinary).toMatchObject({
+      category: 'request',
+      count: 1,
+      shouldTrigger: false,
+    })
+    expect(urgent).toMatchObject({
+      category: 'audio',
+      count: 1,
+      priority: 'high',
+      shouldTrigger: true,
     })
   })
 
@@ -39,6 +80,10 @@ describe('audience events', () => {
     expect(first.gifts).toHaveLength(2)
     expect(first.comments.every((event) => audienceEventSchema.safeParse(event).success))
       .toBe(true)
+    expect(first.comments.every((event) =>
+      event.source === 'viewer' &&
+      typeof event.analysis.confidence === 'number',
+    )).toBe(true)
     expect(first.gifts.every((event) => audienceEventSchema.safeParse(event).success))
       .toBe(true)
   })

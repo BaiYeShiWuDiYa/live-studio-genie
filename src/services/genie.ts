@@ -4,6 +4,7 @@ import {
   type CameraEffects,
   type FaceEffect,
 } from '../capabilities/video/cameraEffects'
+import { sanitizeUserFacingText } from '../capabilities/chat/userFacingText'
 
 export type GenieChatResult = {
   text: string
@@ -259,7 +260,7 @@ export function parseGenieContent(
   const match = content.match(/<widget>\s*([\s\S]*?)\s*<\/widget>/i)
   if (!match) {
     return {
-      text: content.trim(),
+      text: sanitizeUserFacingText(content),
       widget: createCameraEffectsFallback(
         instruction,
         cameraEffects,
@@ -268,7 +269,9 @@ export function parseGenieContent(
     }
   }
 
-  const text = content.replace(match[0], '').trim()
+  const text = sanitizeUserFacingText(
+    content.replace(/<widget>\s*[\s\S]*?\s*<\/widget>/gi, ' '),
+  )
   try {
     const hydratedWidget = hydrateCameraEffectsWidget(
       JSON.parse(match[1]),

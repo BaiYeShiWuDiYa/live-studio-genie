@@ -40,6 +40,7 @@ interface WidgetRendererProps {
   onPreview: () => void
   onApply: () => void
   onUndo: () => void
+  onRefresh: () => void
   onAudioChange: (property: keyof AudioSettings, value: number) => void
   onVisualChange: (property: keyof VisualSettings, percentage: number) => void
   onCameraEffectsChange: (settings: CameraEffects) => void
@@ -96,7 +97,7 @@ export function WidgetRenderer(props: WidgetRendererProps) {
       {props.applied && <Button className="primary-button full-button" color="primary" disabled><Check size={16} />已应用</Button>}
       {props.applied
         ? <button className="card-text-button" type="button" onClick={props.onUndo}><RotateCcw size={14} />撤回最近一次调整</button>
-        : <button className="card-text-button" type="button"><RefreshCw size={14} />换一组建议</button>}
+        : <button className="card-text-button" type="button" onClick={props.onRefresh}><RefreshCw size={14} />换一组建议</button>}
     </div>
   )
 }

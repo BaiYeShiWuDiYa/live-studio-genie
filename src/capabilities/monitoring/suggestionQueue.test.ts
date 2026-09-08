@@ -4,6 +4,7 @@ import type { LiveSuggestion } from './liveDiagnostics'
 import {
   appendNewSuggestions,
   appendTriggeredSuggestion,
+  keepLatestUniqueBy,
   markSuggestionSeen,
   removeSuggestionWidget,
 } from './suggestionQueue'
@@ -33,6 +34,16 @@ const suggestion = (
 })
 
 describe('suggestion queue', () => {
+  it('keeps only the latest item for each UI type', () => {
+    const result = keepLatestUniqueBy([
+      { id: 'poll-old', type: 'poll' },
+      { id: 'goal', type: 'goal' },
+      { id: 'poll-new', type: 'poll' },
+    ], (item) => item.type)
+
+    expect(result.map((item) => item.id)).toEqual(['goal', 'poll-new'])
+  })
+
   it('uses an exact one-minute synchronization interval', () => {
     expect(studioRuntimeConfig.suggestion.syncIntervalMs).toBe(60_000)
   })

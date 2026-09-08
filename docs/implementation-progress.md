@@ -608,17 +608,19 @@ Result: 19 test files and 114 tests passed. Production build completed with the 
 
 ### Normal Mode Right Rail And Chat UX
 
-- Replaced normal-mode immediate updates with one 15-second delta detector covering monitoring data, comments, and visual metrics.
+- Replaced normal-mode immediate updates with one 10-second delta detector covering monitoring data, comments, and visual metrics.
 - Inserted new suggestion copy at the top while appending matching components to the bottom of the component list.
 - Transformed the entire right rail into a dedicated chat workspace as soon as the user enters a prompt, with an explicit return-to-workbench action.
-- Kept AI replies, loading/error feedback, intent-matched atomic components, and model-generated widgets inside the chat workspace.
+- Kept AI replies, loading/error feedback, intent-matched atomic components, and model-generated widgets as inline chat messages without a separate component section.
 - Prioritized explicit intent keywords over loose few-shot matches to prevent unrelated component recall.
 - Kept local response fallback for unavailable model requests while using the server-side `.env` credential proxy for normal model interactions.
 - Deferred component recall until after submission and combined the Prompt, current rendered camera frame, live metrics, and AI response.
-- Upgraded normal-mode 15-second updates to authenticated AI analysis with `NO_ACTION` suppression, one active AI suggestion at a time, and direct rendering of the model-selected widget.
+- Upgraded normal-mode 10-second updates to authenticated AI analysis with `NO_ACTION` suppression, one active AI suggestion at a time, and direct rendering of the model-selected widget.
 - Added validated JPEG frame forwarding through the server proxy without exposing the model credential to the browser.
 - Standardized suggestion cards as title plus supporting copy and reduced the LIVE Chat comment-to-input gap.
 - Added regression coverage for the detection interval, stable snapshots, and independent update sources.
+- Made the left monitoring snapshot update every 10 seconds and expanded LIVE Chat comments to use all available vertical space while preserving user-controlled scrolling.
+- Added selectable, draggable, keyboard-movable, and removable LIVE goal, audience wishes, and poll overlays with synchronized right-rail detail panels.
 
 Validation:
 
@@ -629,7 +631,7 @@ npm run lint
 git diff --check
 ```
 
-Result: 19 test files and 120 tests passed. Browser regression verified zero pre-submit components, post-submit model recall, multimodal endpoint support, normal-mode AI analysis status, AI-authored suggestion copy, model-selected widgets, and restoration of the original workbench.
+Result: 21 test files and 133 tests passed. Browser regression verified full-height chat layout, sanitized natural-language replies, confirmed history clearing, structured comment triggers, shared pre-live/live chat, 5-second drift-corrected background analysis, persistent multi-turn components, bounded drag movement, and widget deletion.
 
 ## Next
 

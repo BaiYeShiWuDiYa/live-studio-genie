@@ -783,6 +783,109 @@
   opacity: 0.38;
 }
 
+.live-canvas-widget {
+  position: absolute;
+  z-index: 9;
+  max-width: calc(100% - 24px);
+  user-select: none;
+  touch-action: none;
+}
+
+.live-canvas-widget.widget-live-goal {
+  top: 62px;
+  right: 0;
+  left: 0;
+  width: min(330px, calc(100% - 34px));
+  margin-inline: auto;
+}
+
+.live-canvas-widget.widget-audience-poll {
+  right: 0;
+  bottom: 84px;
+  left: 0;
+  width: min(280px, calc(100% - 30px));
+  margin-inline: auto;
+}
+
+.live-canvas-widget.widget-audience-wishes {
+  top: 184px;
+  right: 14px;
+  width: min(210px, calc(100% - 28px));
+}
+
+.live-canvas-widget.is-selected {
+  outline: 1.5px dashed rgba(126, 240, 220, 0.95);
+  outline-offset: 5px;
+  border-radius: 10px;
+  cursor: grab;
+}
+
+.live-canvas-widget.is-selected:active {
+  cursor: grabbing;
+}
+
+.live-canvas-widget-select {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.live-canvas-widget-toolbar {
+  position: absolute;
+  z-index: 3;
+  top: -31px;
+  right: -6px;
+  display: flex;
+  gap: 4px;
+}
+
+.live-canvas-widget-toolbar button,
+.live-canvas-widget-toolbar span {
+  width: 27px;
+  height: 27px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(126, 240, 220, 0.48);
+  border-radius: 5px;
+  background: rgba(18, 28, 31, 0.96);
+  color: #a9eddb;
+}
+
+.live-canvas-widget-toolbar .live-canvas-widget-drag {
+  cursor: grab;
+  touch-action: none;
+  pointer-events: none;
+}
+
+.live-canvas-widget-toolbar .live-canvas-widget-drag:active {
+  cursor: grabbing;
+}
+
+.live-canvas-widget-toolbar .live-canvas-widget-delete {
+  border-color: rgba(245, 111, 132, 0.48);
+  color: #ff9bab;
+  cursor: pointer;
+}
+
+.live-canvas-widget > .live-goal-overlay,
+.live-canvas-widget > .live-poll,
+.live-canvas-widget > .live-wishes-overlay {
+  position: static;
+  inset: auto;
+  width: 100%;
+  max-width: none;
+  transform: none;
+  animation: none;
+}
+
 .live-goal-overlay {
   position: absolute;
   z-index: 6;
@@ -954,6 +1057,34 @@
   outline: 1.5px dashed rgba(126, 231, 213, 0.9);
   outline-offset: 6px;
   border-radius: 14px;
+}
+.canvas-widget-toolbar {
+  position: absolute;
+  z-index: 4;
+  top: -33px;
+  right: -7px;
+  display: flex;
+  gap: 4px;
+}
+.canvas-widget-toolbar > button,
+.canvas-widget-toolbar > span {
+  width: 27px;
+  height: 27px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(126, 240, 220, 0.48);
+  border-radius: 5px;
+  background: rgba(18, 28, 31, 0.96);
+  color: #a9eddb;
+}
+.canvas-widget-toolbar > .canvas-widget-drag {
+  cursor: grab;
+}
+.canvas-widget-toolbar > button:not(.canvas-widget-drag) {
+  border-color: rgba(245, 111, 132, 0.48);
+  color: #ff9bab;
+  cursor: pointer;
 }
 .canvas-text-source {
   top: 12%;

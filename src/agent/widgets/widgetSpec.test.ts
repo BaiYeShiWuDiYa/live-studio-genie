@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { getCameraEffectsWidgetSpec, getSceneWidgetSpec } from './sceneWidgets'
+import {
+  getAlternativeWidgetSpec,
+  getCameraEffectsWidgetSpec,
+  getSceneWidgetSpec,
+} from './sceneWidgets'
 import { widgetSpecSchema } from './widgetSpec'
 
 describe('widget specs', () => {
@@ -41,5 +45,41 @@ describe('widget specs', () => {
     })
 
     expect(result.success).toBe(false)
+  })
+
+  it('cycles every widget type to a different valid suggestion', () => {
+    const specs = [
+      getCameraEffectsWidgetSpec(),
+      getSceneWidgetSpec('quality'),
+      getSceneWidgetSpec('interaction'),
+      getSceneWidgetSpec('troubleshoot'),
+      getSceneWidgetSpec('pk'),
+    ]
+
+    specs.forEach((spec) => {
+      const alternative = getAlternativeWidgetSpec(spec)
+      expect(widgetSpecSchema.safeParse(alternative).success).toBe(true)
+      expect(alternative).not.toEqual(spec)
+    })
+  })
+
+  it('continues cycling poll suggestions instead of repeating one card', () => {
+    const first = getSceneWidgetSpec('interaction')
+    const second = getAlternativeWidgetSpec(first)
+    const third = getAlternativeWidgetSpec(second)
+
+    expect(second.type).toBe('audience-poll')
+    expect(third.type).toBe('audience-poll')
+    if (
+      first.type === 'audience-poll' &&
+      second.type === 'audience-poll' &&
+      third.type === 'audience-poll'
+    ) {
+      expect(new Set([
+        first.props.question,
+        second.props.question,
+        third.props.question,
+      ]).size).toBe(3)
+    }
   })
 })

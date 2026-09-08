@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type {
-  AudienceComment,
-  AudienceSnapshot,
-  CommentInsight,
+import {
+  analyzeAudienceComment,
+  type AudienceComment,
+  type AudienceSnapshot,
+  type CommentInsight,
 } from '../audience/audienceEvents'
 import {
+  advanceFixedRateDeadline,
   createAiAnalyzedSuggestion,
   createNormalAiAnalysisPrompt,
   createNormalModeDetectionSnapshot,
@@ -15,6 +17,7 @@ import {
   selectThresholdChangedSuggestions,
 } from './rightRailUpdates'
 import { audienceStrategies } from '../../config/audienceComments'
+import { studioRuntimeConfig } from '../../config/studioRuntime'
 import type {
   LiveDiagnostics,
   LiveSignal,
@@ -34,6 +37,21 @@ const signal = (
   trendLabel: `${trend}%`,
   tone,
   direction: trend >= 0 ? 'up' : 'down',
+})
+
+const commentInsight = (
+  category: CommentInsight['category'],
+  label: string,
+  count: number,
+): CommentInsight => ({
+  category,
+  label,
+  count,
+  confidence: count > 0 ? 0.9 : 0,
+  priority: category === 'positive' || category === 'none' ? 'low' : 'medium',
+  shouldTrigger: !['positive', 'none'].includes(category) && count >= 2,
+  latestCommentId: count > 0 ? 'comment-1' : null,
+  sampleTexts: [],
 })
 
 const suggestion = (
@@ -93,8 +111,14 @@ describe('right rail updates', () => {
     ).toEqual(['exposure', 'comments'])
   })
 
-  it('checks normal mode updates at an exact 15-second interval', () => {
-    expect(rightRailUpdateConfig.normalDetectionIntervalMs).toBe(15_000)
+  it('checks right-rail analysis at an exact 5-second interval', () => {
+    expect(rightRailUpdateConfig.normalDetectionIntervalMs).toBe(5_000)
+    expect(studioRuntimeConfig.monitoringDisplay.refreshIntervalMs).toBe(10_000)
+  })
+
+  it('keeps analysis deadlines aligned after a slow run', () => {
+    expect(advanceFixedRateDeadline(5_000, 6_200, 5_000)).toBe(10_000)
+    expect(advanceFixedRateDeadline(5_000, 16_200, 5_000)).toBe(20_000)
   })
 
   it('detects monitoring, comment, and visual changes independently', () => {
@@ -164,6 +188,8 @@ describe('right rail updates', () => {
         type: 'comment',
         userName: 'viewer',
         text: '画面有点暗',
+        source: 'viewer',
+        analysis: analyzeAudienceComment('画面有点暗'),
         occurredAt: 100,
       }],
       gifts: [],
@@ -171,7 +197,10 @@ describe('right rail updates', () => {
       entrantsLastMinute: 24,
       commentsPerMinute: 18,
       newViewerRetention: 42,
-      insight: { category: 'visual', label: '画面反馈', count: 1 },
+      insight: {
+        ...commentInsight('visual', '画面反馈', 1),
+        shouldTrigger: true,
+      },
     }
     const prompt = createNormalAiAnalysisPrompt(
       currentDiagnostics,
@@ -246,15 +275,15 @@ describe('right rail updates', () => {
     'maps %s comment feedback to the matching component',
     (category, widgetType) => {
       const insight: CommentInsight = {
-        category,
-        label: `${category} feedback`,
-        count: 3,
+        ...commentInsight(category, `${category} feedback`, 3),
       }
       const comments: AudienceComment[] = [{
         id: 'comment-1',
         type: 'comment',
         userName: 'viewer',
         text: '想听下一首歌',
+        source: 'viewer',
+        analysis: analyzeAudienceComment('想听下一首歌'),
         occurredAt: 100,
       }]
 
@@ -266,11 +295,11 @@ describe('right rail updates', () => {
 
   it('does not create suggestions for positive or empty feedback', () => {
     expect(createCommentInsightSuggestion(
-      { category: 'positive', label: '正向反馈', count: 3 },
+      commentInsight('positive', '正向反馈', 3),
       [],
     )).toBeNull()
     expect(createCommentInsightSuggestion(
-      { category: 'none', label: '暂无集中反馈', count: 0 },
+      commentInsight('none', '暂无集中反馈', 0),
       [],
     )).toBeNull()
   })

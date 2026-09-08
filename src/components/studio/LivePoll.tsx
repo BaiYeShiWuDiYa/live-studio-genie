@@ -37,6 +37,7 @@ export function LivePoll({ onSelect }: { onSelect?: () => void }) {
       aria-label="观众投票组件"
       tabIndex={0}
       onPointerDown={(event) => {
+        if (!onSelect) return
         event.stopPropagation()
         onSelect?.()
       }}

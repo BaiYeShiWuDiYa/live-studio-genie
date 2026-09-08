@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   mockAudienceEventAdapter,
+  type CommentInsight,
   type AudienceSnapshot,
 } from '../audience/audienceEvents'
 import { idleMediaMetric, type MediaMetric } from './types'
@@ -13,6 +14,21 @@ const metric = (score: number, value = `${score}`): MediaMetric => ({
   tone: score < 40 ? 'bad' : score < 65 ? 'warn' : 'good',
   status: 'ready',
   updatedAt: 1,
+})
+
+const insight = (
+  category: CommentInsight['category'],
+  label: string,
+  count: number,
+): CommentInsight => ({
+  category,
+  label,
+  count,
+  confidence: count > 0 ? 0.9 : 0,
+  priority: category === 'positive' || category === 'none' ? 'low' : 'medium',
+  shouldTrigger: !['positive', 'none'].includes(category) && count >= 2,
+  latestCommentId: count > 0 ? 'comment-latest' : null,
+  sampleTexts: [],
 })
 
 const audience = (patch: Partial<AudienceSnapshot> = {}): AudienceSnapshot => ({
@@ -30,7 +46,7 @@ const audience = (patch: Partial<AudienceSnapshot> = {}): AudienceSnapshot => ({
   entrantsLastMinute: 40,
   commentsPerMinute: 42,
   newViewerRetention: 52,
-  insight: { category: 'positive', label: '正向反馈', count: 2 },
+  insight: insight('positive', '正向反馈', 2),
   ...patch,
 })
 
@@ -44,7 +60,7 @@ describe('live diagnostics', () => {
   it('prioritizes a critical exposure problem and creates a matching visual widget', () => {
     const result = buildLiveDiagnostics({
       mediaMetrics: { ...mediaMetrics, brightness: metric(28, '28 / 100') },
-      audience: audience({ insight: { category: 'visual', label: '画面反馈', count: 3 } }),
+      audience: audience({ insight: insight('visual', '画面反馈', 3) }),
     })
 
     expect(result.primaryScene).toBe('quality')
@@ -72,7 +88,7 @@ describe('live diagnostics', () => {
 
   it('prioritizes audio feedback and moves on after the issue is resolved', () => {
     const noisyAudience = audience({
-      insight: { category: 'audio', label: '声音反馈', count: 4 },
+      insight: insight('audio', '声音反馈', 4),
     })
     const before = buildLiveDiagnostics({
       mediaMetrics,

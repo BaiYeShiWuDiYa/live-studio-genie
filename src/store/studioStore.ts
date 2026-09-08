@@ -88,6 +88,7 @@ interface StudioState {
   publishLiveGoal: (config: LiveGoalConfig) => void
   resetLiveGoalPreview: () => void
   undoLiveGoal: () => void
+  hideLiveGoal: () => void
   advanceLiveGoal: (amount: number) => void
   previewAudienceWishes: (config: AudienceWishesConfig) => void
   publishAudienceWishes: (config: AudienceWishesConfig) => void
@@ -286,6 +287,13 @@ export const useStudioStore = create<StudioState>((set) => ({
         committedLiveGoalState: restoredGoal,
         previousLiveGoalState: null,
       }
+    })
+  },
+  hideLiveGoal: () => {
+    set({
+      liveGoalState: hiddenLiveGoalState,
+      committedLiveGoalState: hiddenLiveGoalState,
+      previousLiveGoalState: null,
     })
   },
   advanceLiveGoal: (amount) => {

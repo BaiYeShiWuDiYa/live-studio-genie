@@ -32,6 +32,28 @@ describe('parseGenieContent', () => {
     expect(parseGenieContent('当前状态稳定。')).toEqual({ text: '当前状态稳定。' })
   })
 
+  it('removes malformed protocols and technical parameters from visible copy', () => {
+    const result = parseGenieContent(
+      '建议先提亮画面，曝光 +4、对比度 3。<widget>{\\"type\\":\\"visual-adjustment\\"}',
+    )
+
+    expect(result.text).toBe('建议先提亮画面，画面亮度适度调整、画面层次适度调整。')
+    expect(result.text).not.toMatch(/widget|visual-adjustment|[{}]/i)
+  })
+
+  it('drops technical identifier lines from plain responses', () => {
+    const result = parseGenieContent(
+      '我已经整理好画面建议。\nsettings: brightness=1.2\n请先预览整体效果。',
+    )
+
+    expect(result.text).toBe('我已经整理好画面建议。 请先预览整体效果。')
+  })
+
+  it('rewrites technical adjustment wording as natural language', () => {
+    expect(parseGenieContent('建议把曝光微提，再观察画面。').text)
+      .toBe('建议适当提亮画面，再观察画面。')
+  })
+
   it('normalizes explicit visual percentages from the user instruction', () => {
     const result = parseGenieContent(`已生成画面调节组件。
 <widget>
