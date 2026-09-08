@@ -9,11 +9,6 @@ import { sanitizeUserFacingText } from './userFacingText'
 export const GENIE_CHAT_SESSION_STORAGE_KEY =
   'live-studio-genie:chat-session'
 
-const chatMessageSchema = z.object({
-  role: z.enum(['user', 'assistant']),
-  text: z.string(),
-})
-
 const atomicComponentIdSchema = z.enum([
   'lighting',
   'color-adjustment',
@@ -30,11 +25,26 @@ const atomicComponentIdSchema = z.enum([
   'studio-template',
 ])
 
-const genieChatSessionSchema = z.object({
+const legacyChatMessageSchema = z.object({
+  role: z.enum(['user', 'assistant']),
+  text: z.string(),
+})
+
+const chatMessageSchema = legacyChatMessageSchema.extend({
+  atomicComponentIds: z.array(atomicComponentIdSchema).max(20).optional(),
+  widgets: z.array(widgetSpecSchema).max(20).optional(),
+})
+
+const legacyGenieChatSessionSchema = z.object({
   version: z.literal(1),
-  messages: z.array(chatMessageSchema).max(80),
+  messages: z.array(legacyChatMessageSchema).max(80),
   atomicComponentIds: z.array(atomicComponentIdSchema).max(20),
   widgets: z.array(widgetSpecSchema).max(20),
+})
+
+const genieChatSessionSchema = z.object({
+  version: z.literal(2),
+  messages: z.array(chatMessageSchema).max(80),
 })
 
 export type ChatMessage = z.infer<typeof chatMessageSchema>
@@ -69,17 +79,20 @@ export function loadGenieChatSession(
   try {
     const serialized = storage.getItem(GENIE_CHAT_SESSION_STORAGE_KEY)
     if (!serialized) return emptySession
-    const result = genieChatSessionSchema.safeParse(JSON.parse(serialized))
-    if (!result.success) return emptySession
+    const data = JSON.parse(serialized)
+    const result = genieChatSessionSchema.safeParse(data)
+    if (!result.success) {
+      const legacyResult = legacyGenieChatSessionSchema.safeParse(data)
+      if (!legacyResult.success) return emptySession
+      return migrateLegacySession(legacyResult.data)
+    }
+    const messages = sanitizeMessages(result.data.messages)
     return {
-      messages: result.data.messages.map((message) => ({
-        ...message,
-        text: message.role === 'assistant'
-          ? sanitizeUserFacingText(message.text)
-          : message.text,
-      })),
-      atomicComponentIds: result.data.atomicComponentIds,
-      widgets: result.data.widgets,
+      messages,
+      atomicComponentIds: Array.from(new Set(
+        messages.flatMap((message) => message.atomicComponentIds ?? []),
+      )),
+      widgets: messages.flatMap((message) => message.widgets ?? []),
     }
   } catch {
     return emptySession
@@ -96,10 +109,8 @@ export function saveGenieChatSession(
     storage.setItem(
       GENIE_CHAT_SESSION_STORAGE_KEY,
       JSON.stringify({
-        version: 1,
+        version: 2,
         messages: session.messages.slice(-80),
-        atomicComponentIds: session.atomicComponentIds.slice(-20),
-        widgets: session.widgets.slice(-20),
       }),
     )
   } catch {
@@ -114,5 +125,35 @@ export function clearGenieChatSession(
     storage?.removeItem(GENIE_CHAT_SESSION_STORAGE_KEY)
   } catch {
     // Clearing in-memory state remains sufficient when storage is unavailable.
+  }
+}
+
+function sanitizeMessages(messages: ChatMessage[]): ChatMessage[] {
+  return messages.map((message) => ({
+    ...message,
+    text: message.role === 'assistant'
+      ? sanitizeUserFacingText(message.text)
+      : message.text,
+  }))
+}
+
+function migrateLegacySession(
+  legacySession: z.infer<typeof legacyGenieChatSessionSchema>,
+): GenieChatSession {
+  const messages: ChatMessage[] = sanitizeMessages(legacySession.messages)
+  const assistantIndex = messages.findLastIndex(
+    (message) => message.role === 'assistant',
+  )
+  if (assistantIndex >= 0) {
+    messages[assistantIndex] = {
+      ...messages[assistantIndex],
+      atomicComponentIds: legacySession.atomicComponentIds,
+      widgets: legacySession.widgets,
+    }
+  }
+  return {
+    messages,
+    atomicComponentIds: legacySession.atomicComponentIds,
+    widgets: legacySession.widgets,
   }
 }

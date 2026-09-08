@@ -633,6 +633,25 @@ git diff --check
 
 Result: 21 test files and 133 tests passed. Browser regression verified full-height chat layout, sanitized natural-language replies, confirmed history clearing, structured comment triggers, shared pre-live/live chat, 5-second drift-corrected background analysis, persistent multi-turn components, bounded drag movement, and widget deletion.
 
+### Round-bound Genie Components
+
+- Extended each assistant message to own the atomic components and validated Widgets generated during that response.
+- Rendered each component group directly below its originating Genie reply instead of collecting all components after the latest message.
+- Upgraded local chat persistence to version 2 and preserved per-round associations across page reloads.
+- Added backward migration for version 1 sessions by attaching legacy unbound components to the latest assistant reply.
+- Kept component refresh scoped to the selected message and widget index.
+
+Validation:
+
+```bash
+npm test
+npm run build
+npm run lint
+git diff --check
+```
+
+Result: 21 test files and 138 tests passed. Browser regression verified two model-generated rounds, correct user/assistant/component ordering, and the same associations after a full page reload.
+
 ## Next
 
 1. Add eyebrow controls and face-shape deformation.

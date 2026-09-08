@@ -534,11 +534,16 @@ function App() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(
     restoredChatSession.messages,
   )
+  const { chatWidgetSpecs, inputAtomicComponents } = useMemo(() => ({
+    chatWidgetSpecs: chatMessages.flatMap(
+      (message) => message.widgets ?? [],
+    ),
+    inputAtomicComponents: Array.from(new Set(
+      chatMessages.flatMap((message) => message.atomicComponentIds ?? []),
+    )),
+  }), [chatMessages])
   const [agentWidgetSpec, setAgentWidgetSpec] = useState<WidgetSpec | null>(
     restoredChatSession.widgets.at(-1) ?? null,
-  )
-  const [chatWidgetSpecs, setChatWidgetSpecs] = useState<WidgetSpec[]>(
-    restoredChatSession.widgets,
   )
   const [showClearChatConfirm, setShowClearChatConfirm] = useState(false)
   const [genieError, setGenieError] = useState('')
@@ -564,9 +569,6 @@ function App() {
   const [backgroundMusicError, setBackgroundMusicError] = useState('')
   const [previewMode, setPreviewMode] = useState<PreviewMode>('mobile')
   const [liveStageMode, setLiveStageMode] = useState<LiveStageMode>('preview')
-  const [inputAtomicComponents, setInputAtomicComponents] = useState<
-    AtomicComponentId[]
-  >(restoredChatSession.atomicComponentIds)
   const [isGenieChatOpen, setIsGenieChatOpen] = useState(
     restoredChatSession.messages.length > 0 ||
     restoredChatSession.atomicComponentIds.length > 0 ||
@@ -1742,12 +1744,22 @@ function App() {
     setLiveAdjustment(null)
   }
 
-  const refreshChatWidget = (widgetIndex: number, widgetSpec: WidgetSpec) => {
+  const refreshChatWidget = (
+    messageIndex: number,
+    widgetIndex: number,
+    widgetSpec: WidgetSpec,
+  ) => {
     const nextWidget = getAlternativeWidgetSpec(widgetSpec)
     resetSuggestionPreview(widgetSpec)
-    setChatWidgetSpecs((widgets) =>
-      widgets.map((widget, index) =>
-        index === widgetIndex ? nextWidget : widget,
+    setChatMessages((messages) =>
+      messages.map((message, index) => index === messageIndex
+        ? {
+            ...message,
+            widgets: (message.widgets ?? []).map((widget, currentIndex) =>
+              currentIndex === widgetIndex ? nextWidget : widget,
+            ),
+          }
+        : message,
       ),
     )
     setAgentWidgetSpec(nextWidget)
@@ -2171,7 +2183,6 @@ function App() {
         ),
       })
       if (genieAbortRef.current !== controller) return
-      setChatMessages((messages) => [...messages, { role: 'assistant', text: result.text || '已生成可操作方案。' }])
       const broadRequest = /优化|检查|看看|建议|问题|调整一下/.test(
         request.question,
       )
@@ -2186,9 +2197,18 @@ function App() {
               .map((signal) => signal.id)
             : undefined,
         }).componentIds
-      setInputAtomicComponents((current) =>
-        Array.from(new Set([...current, ...analyzedComponents])),
-      )
+      const generatedWidgets = view !== 'onboarding' && result.widget
+        ? [result.widget]
+        : []
+      setChatMessages((messages) => [
+        ...messages,
+        {
+          role: 'assistant',
+          text: result.text || '已生成可操作方案。',
+          atomicComponentIds: analyzedComponents,
+          widgets: generatedWidgets,
+        },
+      ])
       setDismissedAtomicComponents((current) => {
         const next = new Set(current)
         analyzedComponents.forEach((id) => next.delete(`input-${id}`))
@@ -2196,7 +2216,6 @@ function App() {
       })
       if (view !== 'onboarding' && result.widget) {
         setAgentWidgetSpec(result.widget)
-        setChatWidgetSpecs((current) => [...current, result.widget!].slice(-20))
         setApplied(false)
         setIsSuggestionPreview(false)
         setLiveAdjustment(null)
@@ -2212,9 +2231,6 @@ function App() {
             .filter((signal) => signal.tone !== 'good')
             .map((signal) => signal.id),
         }).componentIds
-        setInputAtomicComponents((current) =>
-          Array.from(new Set([...current, ...fallbackComponents])),
-        )
         const componentNames = fallbackComponents
           .slice(0, 3)
           .map((componentId) => atomicComponentRegistry[componentId].name)
@@ -2223,7 +2239,11 @@ function App() {
           : '我已记录你的需求。当前没有必须调整的项目，建议继续观察画面、声音和互动数据。'
         setChatMessages((messages) => [
           ...messages,
-          { role: 'assistant', text: fallbackText },
+          {
+            role: 'assistant',
+            text: fallbackText,
+            atomicComponentIds: fallbackComponents,
+          },
         ])
         setGenieError('')
         setGenieRequestStatus('idle')
@@ -2445,8 +2465,6 @@ function App() {
     lastGenieRequestRef.current = null
     clearGenieChatSession()
     setChatMessages([])
-    setInputAtomicComponents([])
-    setChatWidgetSpecs([])
     setAgentWidgetSpec(null)
     setGenieInput('')
     setGenieError('')
@@ -2525,18 +2543,75 @@ function App() {
                   <small>发送后，Genie 会结合 Prompt 和当前直播画面召回组件。</small>
                 </div>
               )}
-              {chatMessages.map((message, index) => (
-                <article
-                  key={`${message.role}-${index}`}
-                  className={`chat-message ${message.role}`}
-                >
-                  <div className="chat-message-meta">
-                    <span>{message.role === 'assistant' ? 'Genie' : '你'}</span>
-                    <small>{message.role === 'assistant' ? '直播助手' : '刚刚'}</small>
-                  </div>
-                  <p>{message.text}</p>
-                </article>
-              ))}
+              {chatMessages.map((message, messageIndex) => {
+                const atomicComponents = message.atomicComponentIds ?? []
+                const widgets = message.widgets ?? []
+                const componentCount = atomicComponents.length + widgets.length
+                return (
+                  <article
+                    key={`${message.role}-${messageIndex}`}
+                    className={[
+                      'chat-message',
+                      message.role,
+                      componentCount > 0
+                        ? 'genie-chat-component-message'
+                        : '',
+                    ].filter(Boolean).join(' ')}
+                  >
+                    <div className="chat-message-meta">
+                      <span>{message.role === 'assistant' ? 'Genie' : '你'}</span>
+                      <small>{message.role === 'assistant' ? '直播助手' : '刚刚'}</small>
+                    </div>
+                    <p>{message.text}</p>
+                    {componentCount > 0 && (
+                      <div
+                        className="genie-chat-turn-components"
+                        aria-label={`本轮生成的可操作组件，共 ${componentCount} 个`}
+                      >
+                        <small>本轮可操作组件 · {componentCount}</small>
+                        <div className="recalled-component-list">
+                          {atomicComponents.map((componentId, componentIndex) => (
+                            <div
+                              className="recalled-component-item"
+                              key={`${messageIndex}-${componentId}-${componentIndex}`}
+                            >
+                              <AtomicRecallCard
+                                componentId={componentId}
+                                audience={audienceSnapshot}
+                                onApplied={() => setApplied(true)}
+                              />
+                            </div>
+                          ))}
+                          {widgets.map((widgetSpec, widgetIndex) => (
+                            <div
+                              className="recalled-component-item agent-recalled-component"
+                              key={`${messageIndex}-${widgetSpec.type}-${widgetSpec.title}-${widgetIndex}`}
+                            >
+                              <WidgetRenderer
+                                spec={widgetSpec}
+                                applied={applied}
+                                isPreviewing={isSuggestionPreview}
+                                onPreview={() => previewSuggestion(widgetSpec)}
+                                onApply={() => applySuggestion(widgetSpec)}
+                                onUndo={() => undoSuggestion(widgetSpec)}
+                                onRefresh={() =>
+                                  refreshChatWidget(
+                                    messageIndex,
+                                    widgetIndex,
+                                    widgetSpec,
+                                  )}
+                                onAudioChange={updateAudioPreview}
+                                onVisualChange={updateVisualPreview}
+                                onCameraEffectsChange={updateCameraEffectsPreview}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </article>
+                )
+              })}
               {genieRequestStatus === 'loading' && (
                 <div className="genie-request-state is-loading" role="status">
                   <LoaderCircle size={14} className="loading-icon" />
@@ -2557,51 +2632,6 @@ function App() {
                     <RotateCcw size={13} />重试
                   </button>
                 </div>
-              )}
-              {liveComponentCount > 0 && (
-                <article
-                  className="chat-message assistant genie-chat-component-message"
-                  aria-label="Genie 召回的可操作组件"
-                >
-                  <div className="chat-message-meta">
-                    <span>Genie</span>
-                    <small>可操作组件 · {liveComponentCount}</small>
-                  </div>
-                  <div className="recalled-component-list">
-                    {inputRecalledComponents.map((component) => (
-                      <div
-                        className={`recalled-component-item ${removingAtomicComponents.has(component.key) ? 'is-removing' : ''}`}
-                        key={component.key}
-                      >
-                        <AtomicRecallCard
-                          componentId={component.componentId}
-                          audience={audienceSnapshot}
-                          onApplied={() => setApplied(true)}
-                        />
-                      </div>
-                    ))}
-                    {chatWidgetComponents.map(({ widgetSpec, widgetIndex }) => (
-                      <div
-                        className="recalled-component-item agent-recalled-component"
-                        key={`${widgetSpec.type}-${widgetSpec.title}-${widgetIndex}`}
-                      >
-                        <WidgetRenderer
-                          spec={widgetSpec}
-                          applied={applied}
-                          isPreviewing={isSuggestionPreview}
-                          onPreview={() => previewSuggestion(widgetSpec)}
-                          onApply={() => applySuggestion(widgetSpec)}
-                          onUndo={() => undoSuggestion(widgetSpec)}
-                          onRefresh={() =>
-                            refreshChatWidget(widgetIndex, widgetSpec)}
-                          onAudioChange={updateAudioPreview}
-                          onVisualChange={updateVisualPreview}
-                          onCameraEffectsChange={updateCameraEffectsPreview}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </article>
               )}
               <div ref={genieChatMessageEndRef} aria-hidden="true" />
             </div>
