@@ -60,8 +60,8 @@ describe('atomic component intent recall', () => {
     }).componentIds).toEqual([])
   })
 
-  it('exports seven complete scenario few-shot training samples', () => {
-    expect(scenarioIntentFewShots).toHaveLength(7)
+  it('exports four complete scenario few-shot training samples', () => {
+    expect(scenarioIntentFewShots).toHaveLength(4)
     scenarioIntentFewShots.forEach((example) => {
       expect(example.sceneDescription).toBeTruthy()
       expect(example.input).toBeTruthy()
@@ -69,6 +69,26 @@ describe('atomic component intent recall', () => {
       expect(example.standardResponse).toMatch(/检测到/)
       expect(example.componentIds.length).toBeGreaterThan(0)
     })
+  })
+
+  it('recalls a speaking suggestion when comments turn cold', () => {
+    const result = recallAtomicComponents({
+      source: 'monitor',
+      signalIds: ['comments'],
+      strategyId: 'cold-comments',
+    })
+
+    expect(result.componentIds).toEqual(['speaking-suggestion'])
+  })
+
+  it('recalls audience wishes when comments are active', () => {
+    const result = recallAtomicComponents({
+      source: 'monitor',
+      signalIds: ['comments'],
+      strategyId: 'active-comments',
+    })
+
+    expect(result.componentIds).toEqual(['audience-wishes'])
   })
 
   it('supports external few-shot examples without changing recognition code', () => {

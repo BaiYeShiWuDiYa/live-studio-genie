@@ -11,6 +11,7 @@ export type AudienceStrategyId =
   | 'cluttered-background'
   | 'low-audio'
   | 'cold-comments'
+  | 'active-comments'
   | 'gift-drop'
   | 'entrant-drop'
 
@@ -35,6 +36,7 @@ export interface AudienceStrategyDefinition {
     criticalBelow: number
     simulatedValue: number
     unit: string
+    triggerDirection?: 'below' | 'above'
   }
   componentPriority: readonly AtomicComponentId[]
   recommendation: string
@@ -82,7 +84,7 @@ export const normalAudienceStrategy: AudienceStrategyDefinition = {
   },
 }
 
-/** “典型场景”选择器展示的七个问题场景及其完整模拟参数。 */
+/** 历史问题场景配置继续保留，用于兼容复盘与既有数据。 */
 export const audienceStrategies: readonly AudienceStrategyDefinition[] = [
   {
     id: 'dim-light',
@@ -236,15 +238,15 @@ export const audienceStrategies: readonly AudienceStrategyDefinition[] = [
       simulatedValue: 14,
       unit: '/min',
     },
-    componentPriority: ['audience-wishes'],
-    recommendation: '评论区有点安静，可以发起一个观众心愿，让大家用点歌或内容愿望轻松参与起来。',
+    componentPriority: ['speaking-suggestion'],
+    recommendation: '评论区有点安静，可以用一句低门槛口播主动抛出话题，引导观众用简单答案重新参与。',
     intent: {
       userUtterances: [
         '评论区太安静了，帮我活跃一下',
-        '设置一个观众心愿收集点歌',
+        '生成一句自然的口播话术',
         '大家都不说话，想增加互动',
       ],
-      standardResponse: '检测到评论量低于 16 条/分钟，已优先召回观众心愿，建议用点歌或内容愿望降低互动门槛。',
+      standardResponse: '检测到评论量低于 16 条/分钟，已生成口播建议，帮助主播用低门槛问题重新带动评论。',
     },
     resolutionSignals: ['comments'],
     audienceMetrics: {
@@ -330,14 +332,55 @@ export const audienceStrategies: readonly AudienceStrategyDefinition[] = [
   },
 ] as const
 
-/** 直播中场景菜单：正常场景始终置顶，后接七个典型问题场景。 */
+export const activeCommentsStrategy: AudienceStrategyDefinition = {
+  id: 'active-comments',
+  label: '评论区活跃',
+  description: '评论频率持续走高，观众主动点歌、提问和互动，适合进一步承接参与热度',
+  scene: 'interaction',
+  visualSettings: { brightness: 1, contrast: 1, warmth: 0 },
+  audioSettings: { microphoneGainDb: 0, backgroundMusicGainDb: 0 },
+  diagnostics: {},
+  primarySignal: 'comments',
+  monitoring: {
+    metricLabel: '每分钟评论数',
+    warningBelow: 60,
+    criticalBelow: 75,
+    simulatedValue: 82,
+    unit: '/min',
+    triggerDirection: 'above',
+  },
+  componentPriority: ['audience-wishes'],
+  recommendation: '评论区互动正在升温，可以展示观众心愿，集中承接大家想听、想看和想参与的内容。',
+  intent: {
+    userUtterances: [
+      '评论区现在很活跃，帮我接住互动',
+      '大家都在点歌，展示一下观众心愿',
+      '评论很多，帮我整理观众想看的内容',
+    ],
+    standardResponse: '检测到评论量高于 75 条/分钟，已优先召回观众心愿，用集中展示承接当前互动热度。',
+  },
+  resolutionSignals: ['comments'],
+  audienceMetrics: {
+    commentsPerMinute: 82,
+    entrantsLastMinute: 48,
+    newViewerRetention: 64,
+    giftLevel: 'normal',
+  },
+}
+
+/** 直播中场景菜单保留正常场景，并展示四个指定演示场景。 */
 export const audienceSceneOptions: readonly AudienceStrategyDefinition[] = [
   normalAudienceStrategy,
-  ...audienceStrategies,
+  audienceStrategies.find(({ id }) => id === 'dim-light')!,
+  audienceStrategies.find(({ id }) => id === 'low-audio')!,
+  audienceStrategies.find(({ id }) => id === 'cold-comments')!,
+  activeCommentsStrategy,
 ]
 
 const allAudienceStrategies: readonly AudienceStrategyDefinition[] = [
-  ...audienceSceneOptions,
+  normalAudienceStrategy,
+  ...audienceStrategies,
+  activeCommentsStrategy,
 ]
 
 /** 模拟评论使用的用户名池，按刷新序号循环取值。 */
@@ -357,22 +400,78 @@ export const audienceUserNames = [
 /** 各策略的评论池；开播预热阶段始终读取 normal。 */
 export const audienceCommentsByStrategy: Readonly<Record<AudienceStrategyId, readonly string[]>> = {
   normal: [
-    '主播晚上好呀',
-    '刚进来，今天准备唱什么歌？',
-    '晚上好，先来打个卡',
-    '今天的直播主题是什么？',
-    '主播今天状态不错',
-    '第一次进直播间，大家好',
-    '可以点歌吗？',
-    '今晚会播多久呀',
-    '这个直播间氛围好舒服',
-    '等一个开场曲',
-    '下班了来听会儿歌',
-    '主播能看到评论吗？',
-    '今天有互动环节吗',
+    '主播声音好像有点小',
+    '刚才那句话没听清',
+    '麦克风音量可以再大一点',
+    '人声听起来有点远',
+    '背景音乐快盖住声音了',
+    '声音忽大忽小的',
+    '耳机开最大还是听不清',
+    '麦克风是不是离得太远',
+    '人声可以再突出一点',
+    '主播检查一下音量',
+    '说话声音有点轻',
+    '现在声音不太清楚',
+    '主播脸上的画面有点暗',
+    '画面亮度可以提高一点',
+    '背景看起来有点暗',
+    '画面是不是欠曝了',
+    '脸部看不太清楚',
+    '镜头画面颜色有点沉',
+    '画面再亮一点会更好',
+    '背景和人物不太分明',
+    '画面细节有点看不清',
+    '补一点正面光试试',
+    '直播画面突然变暗了',
+    '整体画面有点灰',
+    '直播刚才有点卡',
+    '延迟好像变高了',
+    '弹幕显示有点延迟',
+    '直播一直卡顿',
+    '刚才是不是掉线了',
+    '声音断断续续有点卡',
+    '互动响应有点延迟',
+    '直播卡住了几秒',
+    '现在延迟还是很明显',
+    '刚刚又卡了一下',
+    '网络是不是不太稳定',
+    '直播有点卡，检查一下',
+    '下一首可以唱甜歌吗',
+    '想听一首轻快的歌',
+    '可以开放点歌吗',
+    '今晚准备唱哪些歌',
+    '大家想听经典老歌',
+    '下一段想听主播聊天',
+    '想听刚才提到的那首歌',
+    '可以唱一首节奏快的吗',
+    '点歌什么时候开始',
+    '想听主播的拿手歌',
+    '下一首歌让大家选吧',
+    '今天会唱到几点',
+    '今天有礼物目标吗',
+    '礼物助力还差多少',
+    '可以展示送礼榜单吗',
+    '想看看今天的贡献榜',
+    '送什么礼物可以助力',
+    '礼物进度在哪里看',
+    '大家一起帮主播助力',
+    '贡献榜现在谁是第一',
+    '可以设置一个礼物目标',
+    '今天的礼物榜好热闹',
+    '助力完成会有加唱吗',
+    '想看看本轮礼物进度',
+    '主播今天状态很好',
+    '这个直播间氛围很舒服',
+    '画面和声音都很清楚',
+    '这首歌真好听',
+    '很喜欢今天的内容',
+    '直播现在很流畅',
+    '主播加油',
+    '这个环节很好看',
+    '刚进来感觉很舒服',
+    '现在效果刚刚好',
     '朋友推荐我来的',
-    '先关注了，慢慢看',
-    '大家想听甜歌还是炸场？',
+    '先关注了慢慢看',
   ],
   'dim-light': [
     '画面是不是有点暗？',
@@ -449,6 +548,22 @@ export const audienceCommentsByStrategy: Readonly<Record<AudienceStrategyId, rea
     '今天能不能让观众选歌',
     '主播多看看弹幕',
     '等一个互动小游戏',
+  ],
+  'active-comments': [
+    '我想听一首轻快的歌',
+    '主播看看我的心愿',
+    '下一首可以唱甜歌吗',
+    '今天能不能多聊一会儿',
+    '想看主播挑战高音',
+    '大家都在点歌好热闹',
+    '可以把我们的心愿展示出来吗',
+    '我也来许一个愿',
+    '下一段想听经典老歌',
+    '评论区刷得好快',
+    '主播快看大家想听的歌',
+    '想看一个即兴互动',
+    '今晚的气氛太好了',
+    '再来一首不要停',
   ],
   'gift-drop': [
     '今天还没有礼物目标吗',
@@ -539,6 +654,16 @@ export const audienceRecoveryCommentsByStrategy: Readonly<
     '大家都开始投票了',
     '选项很清楚',
     '现在直播间气氛好多了',
+  ],
+  'active-comments': [
+    '看到我的心愿了',
+    '大家想听的内容都展示出来了',
+    '这个心愿墙很方便',
+    '主播快选一个实现吧',
+    '互动接得很及时',
+    '评论区更有参与感了',
+    '已经提交我的心愿',
+    '大家继续许愿',
   ],
   'gift-drop': [
     '礼物目标看到了',

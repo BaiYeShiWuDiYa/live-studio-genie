@@ -1407,6 +1407,7 @@ function App() {
     setStrategyRevision((revision) => revision + 1)
     setStrategyCommentState('issue')
     setStrategyWarmupComplete(true)
+    setNormalAiActivity('idle')
     setStrategyMenuOpen(false)
     setScene(strategy.scene)
     setDisplayDiagnostics(buildLiveDiagnostics({
@@ -3262,6 +3263,7 @@ function StrategyIcon({ strategyId }: { strategyId: AudienceStrategyId }) {
   if (strategyId === 'cluttered-background') return <PanelsTopLeft size={15} />
   if (strategyId === 'low-audio') return <Mic size={15} />
   if (strategyId === 'cold-comments') return <MessageCircle size={15} />
+  if (strategyId === 'active-comments') return <Users size={15} />
   if (strategyId === 'gift-drop') return <Gift size={15} />
   if (strategyId === 'entrant-drop') return <UserMinus size={15} />
   return <Activity size={15} />
@@ -3557,6 +3559,7 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
     {strategy === 'cluttered-background' && <div className="stage-hint"><PanelsTopLeft size={14} />背景干扰 72%</div>}
     {strategy === 'low-audio' && <div className="audio-meter"><AudioLines size={15} /><span>音频峰值偏低</span><i /><i /><i /><i /></div>}
     {strategy === 'cold-comments' && <div className="stage-hint"><MessageCircle size={14} />评论 14/min</div>}
+    {strategy === 'active-comments' && <div className="stage-hint"><Users size={14} />评论 82/min</div>}
     {strategy === 'gift-drop' && <div className="stage-hint"><Gift size={14} />礼物 -81%</div>}
     {strategy === 'entrant-drop' && <div className="stage-hint"><UserMinus size={14} />进房 8/min</div>}
     {isPk && <><div className="pk-versus">VS</div><div className="opponent-stage"><DemoOpponent /><div className="stage-label opponent"><span />陈妍</div></div><div className="pk-scorebar"><div><b>8,740</b><span>林小满</span></div><strong>01:18</strong><div><b>10,000</b><span>陈妍</span></div></div></>}

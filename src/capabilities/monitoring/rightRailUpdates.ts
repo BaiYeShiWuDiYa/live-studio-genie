@@ -276,6 +276,30 @@ export function createCommentInsightSuggestion(
     }
   }
 
+  if (insight.category === 'engagement') {
+    return {
+      signalId: 'gifts',
+      scene: 'pk',
+      severity: 82,
+      tone: 'warn',
+      metric,
+      action: '观众正在讨论礼物和助力进度，建议设置清晰的阶段目标承接互动。',
+      widget: {
+        version: '1.0',
+        type: 'live-goal',
+        title: '评论热点助力目标',
+        detail: '根据最新礼物互动反馈，展示一个容易理解和参与的阶段目标。',
+        actionLabel: '发布目标',
+        props: {
+          label: '本轮互动助力',
+          current: 860,
+          target: 3000,
+          supporters: 12,
+        },
+      },
+    }
+  }
+
   const latestRequest = comments
     .map((comment) => comment.text.trim())
     .filter(Boolean)

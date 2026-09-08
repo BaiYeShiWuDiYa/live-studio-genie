@@ -196,13 +196,28 @@ describe('audience events', () => {
     )).toBe(true)
   })
 
-  it('puts the normal scene first in the live scene menu', () => {
-    expect(audienceSceneOptions).toHaveLength(8)
-    expect(audienceSceneOptions[0]).toMatchObject({
-      id: 'normal',
-      label: '正常场景',
-    })
-    expect(audienceSceneOptions.slice(1)).toEqual(audienceStrategies)
+  it('keeps normal mode before the four requested live demo scenes', () => {
+    expect(audienceSceneOptions.map(({ label }) => label)).toEqual([
+      '正常场景',
+      '画面转暗',
+      '声音偏小',
+      '评论区转冷',
+      '评论区活跃',
+    ])
+  })
+
+  it('simulates a high comment rate for the active comment scene', () => {
+    const snapshot = mockAudienceEventAdapter.getStrategySnapshot(
+      'active-comments',
+      false,
+      20,
+    )
+
+    expect(snapshot.commentsPerMinute).toBe(82)
+    expect(snapshot.comments).toHaveLength(studioRuntimeConfig.audience.visibleCommentCount)
+    expect(snapshot.comments.every((comment) =>
+      audienceCommentsByStrategy['active-comments'].includes(comment.text),
+    )).toBe(true)
   })
 
   it('varies normal gifts and engagement metrics over time', () => {
@@ -226,6 +241,25 @@ describe('audience events', () => {
     expect(activeMoment.gifts.every((gift) =>
       audienceUserNames.some((userName) => userName === gift.userName),
     )).toBe(true)
+  })
+
+  it('cycles normal comments through distinct actionable themes', () => {
+    const categories = [11, 23, 35, 47, 59, 71].map((tick) =>
+      mockAudienceEventAdapter.getStrategySnapshot(
+        'normal',
+        false,
+        tick,
+      ).insight.category,
+    )
+
+    expect(categories).toEqual([
+      'audio',
+      'visual',
+      'network',
+      'request',
+      'engagement',
+      'positive',
+    ])
   })
 
   it('simulates reduced gifts and entrants with scenario-specific data', () => {

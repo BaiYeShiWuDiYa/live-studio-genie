@@ -271,6 +271,7 @@ describe('right rail updates', () => {
     ['visual', 'visual-adjustment'],
     ['network', 'visual-adjustment'],
     ['request', 'audience-poll'],
+    ['engagement', 'live-goal'],
   ] as const)(
     'maps %s comment feedback to the matching component',
     (category, widgetType) => {

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Check, Pencil, Plus, Save, Trophy, X } from 'lucide-react'
+import { Check, MessageSquareText, Pencil, Plus, Save, Trophy, X } from 'lucide-react'
 import { useStudioStore } from '../../../store/studioStore'
 import type { AtomicPanelProps } from '../types'
 
@@ -44,6 +44,53 @@ export function GoalPanel({ onApplied }: AtomicPanelProps) {
       <label className="atomic-field"><span>目标值</span><input type="number" min={1} value={target} onChange={(event) => setTarget(Math.max(1, Number(event.target.value)))} /></label>
       <div className="atomic-goal-preview"><span><b>{progress}%</b><small>{current.toLocaleString()} / {target.toLocaleString()}</small></span><i><em style={{ width: `${progress}%` }} /></i>{progress >= 100 && <strong><Check size={13} />目标已达成</strong>}</div>
       <ApplyButton label="发布目标" onClick={() => { publish({ label, current: Math.min(current, target), target, supporters: goal.config?.supporters ?? 28 }); onApplied?.('live-goal') }} />
+    </Panel>
+  )
+}
+
+const speakingSuggestions = [
+  '刚进来的朋友晚上好，大家今天最想听哪一首？把歌名打在评论区，我先挑呼声最高的。',
+  '我们来做个简单选择：想听治愈慢歌扣 1，想听热闹快歌扣 2，我看看哪边人更多。',
+  '评论区的朋友帮我出个主意，下一段想听歌、聊天还是小游戏？我按大家的选择来。',
+] as const
+
+export function SpeakingSuggestionPanel({ onApplied }: AtomicPanelProps) {
+  const [selectedIndex, setSelectedIndex] = useState(0)
+  const [script, setScript] = useState<string>(speakingSuggestions[0])
+
+  const selectSuggestion = (index: number) => {
+    setSelectedIndex(index)
+    setScript(speakingSuggestions[index])
+  }
+
+  return (
+    <Panel title="口播建议">
+      <div className="atomic-speaking-options" role="list" aria-label="口播话术选项">
+        {speakingSuggestions.map((suggestion, index) => (
+          <button
+            className={selectedIndex === index ? 'selected' : ''}
+            type="button"
+            role="listitem"
+            key={suggestion}
+            onClick={() => selectSuggestion(index)}
+          >
+            <MessageSquareText size={13} />
+            <span>{suggestion}</span>
+          </button>
+        ))}
+      </div>
+      <textarea
+        className="atomic-speaking-editor"
+        value={script}
+        maxLength={160}
+        rows={3}
+        aria-label="口播建议内容"
+        onChange={(event) => setScript(event.target.value)}
+      />
+      <ApplyButton
+        label="采用这句口播"
+        onClick={() => onApplied?.('speaking-suggestion')}
+      />
     </Panel>
   )
 }

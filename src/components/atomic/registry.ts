@@ -18,6 +18,7 @@ export const atomicComponentRegistry: Readonly<Record<AtomicComponentId, AtomicC
   background: definition('background', '背景', '虚化、虚拟背景与上传', 'basic', ['背景', '杂乱', '场景'], loadBasic, 'BackgroundPanel'),
   effects: definition('effects', '特效', '动态特效、强度与触发方式', 'basic', ['氛围', '特效', '庆祝'], loadBasic, 'EffectsPanel'),
   'audience-poll': definition('audience-poll', '观众投票', '创建选项并查看实时结果', 'interaction', ['评论', '互动', '投票'], loadInteractive, 'PollPanel'),
+  'speaking-suggestion': definition('speaking-suggestion', '口播建议', '根据当前冷场状态生成可直接使用的互动话术', 'interaction', ['口播', '话术', '冷场'], loadInteractive, 'SpeakingSuggestionPanel'),
   'live-goal': definition('live-goal', 'LIVE goal', '设定目标并展示达成进度', 'interaction', ['目标', '点赞', '冲刺'], loadInteractive, 'GoalPanel'),
   'audience-wishes': definition('audience-wishes', '观众心愿', '收集、展示和管理心愿', 'interaction', ['点播', '想看', '心愿'], loadInteractive, 'WishesPanel'),
   'like-ranking': definition('like-ranking', '点赞榜单', '按时间查看点赞排名变化', 'interaction', ['点赞', '榜单', '互动'], loadInteractive, 'LikeRankingPanel'),

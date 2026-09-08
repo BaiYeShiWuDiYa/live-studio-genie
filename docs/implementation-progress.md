@@ -652,6 +652,22 @@ git diff --check
 
 Result: 21 test files and 138 tests passed. Browser regression verified two model-generated rounds, correct user/assistant/component ordering, and the same associations after a full page reload.
 
+### Focused Demo Scenarios
+
+- Kept normal mode as the first menu item and reduced the dedicated demo set to image dimming, low audio, cold comments, and active comments.
+- Kept the existing visual and audio adjustment strategies unchanged.
+- Added an editable speaking-suggestion component for cold comment periods.
+- Added high-density comment thresholds and audience-wishes recall for active comment periods.
+- Kept legacy scenario definitions available for historical report compatibility while removing them from the demo selector.
+
+Validation: 21 test files and 142 tests passed, with production build, lint, and browser checks for both new comment scenarios.
+
+### Normal Comment Theme Rotation
+
+- Rotated normal-mode mock comments through audio, visual, network, content-request, gift-engagement, and positive-feedback windows.
+- Added gift-engagement analysis and LIVE Goal generation so normal mode can surface more than adjustment and poll components.
+- Kept positive windows non-actionable to prevent continuous suggestion spam.
+
 ## Next
 
 1. Add eyebrow controls and face-shape deformation.

@@ -72,6 +72,13 @@ const toneForTrend = (trend: number): LiveSignal['tone'] =>
 const signed = (value: number, suffix = '%') =>
   `${value >= 0 ? '+' : ''}${Math.round(value)}${suffix}`
 
+const isStrategyThresholdTriggered = (
+  value: number,
+  strategy: ReturnType<typeof getAudienceStrategy>,
+) => strategy.monitoring.triggerDirection === 'above'
+  ? value > strategy.monitoring.warningBelow
+  : value < strategy.monitoring.warningBelow
+
 export function buildLiveDiagnostics({
   mediaMetrics,
   audience,
@@ -229,9 +236,14 @@ export function buildLiveDiagnostics({
   const primarySignal = signals.find(
     (signal) => signal.id === strategyConfig.primarySignal,
   )
+  const primarySignalValue =
+    primarySignal?.thresholdValue ?? primarySignal?.score ?? 0
+  const primarySignalTriggered = isStrategyThresholdTriggered(
+    primarySignalValue,
+    strategyConfig,
+  )
   const thresholdTriggeredSignal = strategy !== 'normal' &&
-    (primarySignal?.thresholdValue ?? primarySignal?.score ?? 100) <
-      strategyConfig.monitoring.warningBelow
+    primarySignalTriggered
     ? primarySignal
     : undefined
   const improvements = [
@@ -269,8 +281,18 @@ function createSuggestion(
   const strategyConfig = getAudienceStrategy(strategy)
   const isPrimaryScenarioSignal =
     strategy !== 'normal' && signal.id === strategyConfig.primarySignal
-  const thresholdSeverity = (signal.thresholdValue ?? signal.score) <
-    strategyConfig.monitoring.criticalBelow
+  const primaryScenarioTriggered = isPrimaryScenarioSignal &&
+    isStrategyThresholdTriggered(
+      signal.thresholdValue ?? signal.score,
+      strategyConfig,
+    )
+  const thresholdSeverity = (
+    strategyConfig.monitoring.triggerDirection === 'above'
+      ? (signal.thresholdValue ?? signal.score) >
+        strategyConfig.monitoring.criticalBelow
+      : (signal.thresholdValue ?? signal.score) <
+        strategyConfig.monitoring.criticalBelow
+  )
     ? 96
     : 82
   const severity = resolvedScene === sceneForSignal(signal.id)
@@ -282,7 +304,7 @@ function createSuggestion(
     signalId: signal.id,
     scene: sceneForSignal(signal.id),
     severity,
-    tone: signal.tone,
+    tone: primaryScenarioTriggered ? 'warn' as const : signal.tone,
     metric: `${signal.label} ${signal.trendLabel}`,
   }
   const scenarioAction = isPrimaryScenarioSignal

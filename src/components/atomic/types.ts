@@ -10,6 +10,7 @@ export type AtomicComponentId =
   | 'background'
   | 'effects'
   | 'audience-poll'
+  | 'speaking-suggestion'
   | 'live-goal'
   | 'audience-wishes'
   | 'like-ranking'

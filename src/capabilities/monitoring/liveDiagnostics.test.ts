@@ -177,6 +177,26 @@ describe('live diagnostics', () => {
     expect(scenes).toEqual(['quality', 'interaction', 'troubleshoot'])
   })
 
+  it('treats high comment density as the active-comments trigger', () => {
+    const result = buildLiveDiagnostics({
+      mediaMetrics,
+      audience: mockAudienceEventAdapter.getStrategySnapshot(
+        'active-comments',
+        false,
+        20,
+      ),
+      strategy: 'active-comments',
+    })
+
+    expect(result.improvements[0].id).toBe('comments')
+    expect(result.suggestions[0]).toMatchObject({
+      signalId: 'comments',
+      tone: 'warn',
+      severity: 96,
+    })
+    expect(result.suggestions[0].action).toContain('观众心愿')
+  })
+
   it('turns color cast and cluttered background into targeted diagnoses', () => {
     const colorResult = buildLiveDiagnostics({
       mediaMetrics,

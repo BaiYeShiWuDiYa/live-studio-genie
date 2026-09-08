@@ -1,6 +1,6 @@
 import type { LiveSignalId } from '../../capabilities/monitoring/liveDiagnostics'
 import {
-  audienceStrategies,
+  audienceSceneOptions,
   getAudienceStrategy,
   type AudienceStrategyId,
 } from '../../config/audienceComments'
@@ -30,16 +30,18 @@ export interface IntentFewShotExample {
   componentIds: readonly AtomicComponentId[]
 }
 
-/** 七个典型场景的 few-shot 训练样本，与场景配置保持同步。 */
+/** 演示场景的 few-shot 训练样本，与场景菜单保持同步。 */
 export const scenarioIntentFewShots: readonly IntentFewShotExample[] =
-  audienceStrategies.map((scenario) => ({
-    sceneId: scenario.id,
-    sceneDescription: scenario.description,
-    input: scenario.intent.userUtterances[0],
-    aliases: scenario.intent.userUtterances.slice(1),
-    standardResponse: scenario.intent.standardResponse,
-    componentIds: scenario.componentPriority,
-  }))
+  audienceSceneOptions
+    .filter((scenario) => scenario.id !== 'normal')
+    .map((scenario) => ({
+      sceneId: scenario.id,
+      sceneDescription: scenario.description,
+      input: scenario.intent.userUtterances[0],
+      aliases: scenario.intent.userUtterances.slice(1),
+      standardResponse: scenario.intent.standardResponse,
+      componentIds: scenario.componentPriority,
+    }))
 
 export const defaultIntentFewShots = scenarioIntentFewShots
 
@@ -69,6 +71,7 @@ const intentPatterns: ReadonlyArray<{
   { pattern: /背景|虚化|抠图|布景|杂乱/, componentIds: ['background'] },
   { pattern: /特效|道具|贴纸|庆祝|星光|眼镜/, componentIds: ['effects'] },
   { pattern: /投票|选择题|二选一|让观众选/, componentIds: ['audience-poll'] },
+  { pattern: /口播|话术|冷场|带动评论|抛出话题/, componentIds: ['speaking-suggestion'] },
   { pattern: /目标|冲刺|进度|里程碑/, componentIds: ['live-goal'] },
   { pattern: /心愿|点歌|想看|想听|收集诉求/, componentIds: ['audience-wishes'] },
   { pattern: /点赞榜|点赞排行|谁点赞/, componentIds: ['like-ranking'] },

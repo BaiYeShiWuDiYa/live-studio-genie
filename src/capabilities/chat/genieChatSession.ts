@@ -18,6 +18,7 @@ const atomicComponentIdSchema = z.enum([
   'background',
   'effects',
   'audience-poll',
+  'speaking-suggestion',
   'live-goal',
   'audience-wishes',
   'like-ranking',

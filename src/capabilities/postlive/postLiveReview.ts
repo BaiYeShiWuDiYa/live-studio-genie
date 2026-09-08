@@ -77,9 +77,15 @@ const strategyRecommendations: Record<
   },
   'cold-comments': {
     label: '互动经营',
-    title: '在冷场前主动发布观众心愿',
-    detail: '观众心愿有效带动了评论恢复，下一场建议在互动下滑前提前设置明确的参与目标。',
+    title: '在冷场前准备互动口播',
+    detail: '低门槛口播有效带动了评论恢复，下一场建议在互动下滑前主动抛出明确、容易回答的问题。',
     impact: '预计留存 +8%',
+  },
+  'active-comments': {
+    label: '互动承接',
+    title: '用观众心愿承接活跃评论',
+    detail: '评论活跃时集中展示观众诉求，可以把即时讨论沉淀为后续直播内容。',
+    impact: '延长互动热度',
   },
   'gift-drop': {
     label: '礼物转化',

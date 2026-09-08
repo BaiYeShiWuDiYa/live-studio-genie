@@ -20,6 +20,7 @@ const commentCategorySchema = z.enum([
   'visual',
   'network',
   'request',
+  'engagement',
   'positive',
   'none',
 ])
@@ -109,6 +110,7 @@ const keywordGroups: Array<{
   { category: 'visual', label: '画面反馈', words: ['画面', '背景', '亮', '暗'] },
   { category: 'network', label: '卡顿反馈', words: ['卡', '延迟', '掉线'] },
   { category: 'request', label: '内容点播', words: ['唱', '歌', '点播', '想听'] },
+  { category: 'engagement', label: '礼物互动', words: ['礼物', '助力', '贡献', '榜单'] },
   {
     category: 'positive',
     label: '正向反馈',
