@@ -4350,6 +4350,20 @@
   overflow: visible;
 }
 
+.genie-chat-turn-components {
+  display: grid;
+  gap: 6px;
+  margin-top: 3px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(118, 223, 192, 0.16);
+}
+
+.genie-chat-turn-components > small {
+  color: #88bcb3;
+  font-size: 9px;
+  font-weight: 650;
+}
+
 .genie-chat-component-message .recalled-component-item {
   margin-top: 7px;
 }
