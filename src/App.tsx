@@ -2332,6 +2332,20 @@ function App() {
     setIsSuggestionPreview(true)
   }
 
+  const updateWidgetPreview = (
+    widgetKey: string,
+    widgetSpec: WidgetSpec,
+    update: () => void,
+  ) => {
+    if (
+      previewingWidgetKey !== widgetKey &&
+      previewingWidgetSpecRef.current !== widgetSpec
+    ) {
+      previewWidget(widgetKey, widgetSpec)
+    }
+    update()
+  }
+
   const openCameraEffects = () => {
     studioToolRegistry.execute('studio.reset_camera_effects_preview', {}, studioToolContext)
     setSelectedCanvasWidget(null)
@@ -2839,9 +2853,24 @@ function App() {
                                         updatedWidget,
                                       ),
                                     )}
-                                  onAudioChange={updateAudioPreview}
-                                  onVisualChange={updateVisualPreview}
-                                  onCameraEffectsChange={updateCameraEffectsPreview}
+                                  onAudioChange={(property, value) =>
+                                    updateWidgetPreview(
+                                      widgetKey,
+                                      widgetSpec,
+                                      () => updateAudioPreview(property, value),
+                                    )}
+                                  onVisualChange={(property, value) =>
+                                    updateWidgetPreview(
+                                      widgetKey,
+                                      widgetSpec,
+                                      () => updateVisualPreview(property, value),
+                                    )}
+                                  onCameraEffectsChange={(settings) =>
+                                    updateWidgetPreview(
+                                      widgetKey,
+                                      widgetSpec,
+                                      () => updateCameraEffectsPreview(settings),
+                                    )}
                                 />
                               </div>
                             )
@@ -3422,9 +3451,24 @@ function App() {
                                 updatedWidget,
                               ),
                             )}
-                          onAudioChange={updateAudioPreview}
-                          onVisualChange={updateVisualPreview}
-                          onCameraEffectsChange={updateCameraEffectsPreview}
+                          onAudioChange={(property, value) =>
+                            updateWidgetPreview(
+                              component.componentId,
+                              component.widgetSpec,
+                              () => updateAudioPreview(property, value),
+                            )}
+                          onVisualChange={(property, value) =>
+                            updateWidgetPreview(
+                              component.componentId,
+                              component.widgetSpec,
+                              () => updateVisualPreview(property, value),
+                            )}
+                          onCameraEffectsChange={(settings) =>
+                            updateWidgetPreview(
+                              component.componentId,
+                              component.widgetSpec,
+                              () => updateCameraEffectsPreview(settings),
+                            )}
                         />
                       </div>
                     ))}
