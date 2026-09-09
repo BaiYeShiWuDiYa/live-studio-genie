@@ -96,21 +96,9 @@ export function detectNormalModeUpdates(
 }
 
 export function createNormalAiAnalysisPrompt(
-  diagnostics: LiveDiagnostics,
   audience: AudienceSnapshot,
-  updates: NormalModeUpdateSources,
   candidates: readonly LiveSuggestion[],
 ): string {
-  const updateSources = [
-    updates.monitoring ? '监控指标' : null,
-    updates.comments ? '评论区' : null,
-    updates.visual ? '直播画面' : null,
-  ].filter(Boolean).join('、')
-  const signalSummary = diagnostics.signals
-    .map((signal) =>
-      `${signal.label}: ${signal.value}, 趋势 ${signal.trendLabel}, 状态 ${signal.tone}`,
-    )
-    .join('\n')
   const recentComments = audience.comments
     .slice(-5)
     .map((comment) => comment.text)
@@ -118,21 +106,60 @@ export function createNormalAiAnalysisPrompt(
   const candidateSummary = candidates
     .map((candidate) => `${candidate.metric}: ${candidate.action}`)
     .join('\n')
+  const categoryConstraint = {
+    audio: '本轮只能讨论麦克风、人声或背景音乐音量。',
+    visual: '本轮只能讨论画面亮度、曝光、光线或背景可见度。',
+    network: '本轮只能讨论卡顿、延迟或直播流畅度。',
+    request: '本轮只能讨论点播诉求与观众心愿，不得建议投票。',
+    interaction: '本轮只能讨论评论互动与口播引导。',
+    engagement: '本轮只能讨论礼物互动与助力目标。',
+    positive: '',
+    none: '',
+  }[audience.insight.category]
 
   return [
     '你是 LIVE Studio Genie 的实时分析模块。',
-    `本轮检测到变化来源：${updateSources || '无'}。`,
-    '请结合当前直播画面（如请求附带画面帧）、实时指标和最新评论，判断是否需要给主播新增一条建议。',
-    '不要复述固定模板，不要仅凭单一波动下结论；优先解释画面、数据和评论之间的关联。',
-    '如果没有明确且可执行的新问题，只回复 NO_ACTION。',
+    '只根据直播间实际出现的最新评论判断是否需要给主播新增一条建议。',
+    '不要复述固定模板，不要仅凭单条评论下结论；只有多条评论形成明确共识时才建议。',
+    '内容点播或心愿类反馈应建议展示观众心愿，不要建议发起投票；互动冷场反馈应给出可直接使用的口播建议。',
+    `${categoryConstraint} 严禁夹带当前评论中不存在的其他问题或调整项。`,
+    `本地候选非空表示最近评论中至少有 ${studioRuntimeConfig.suggestion.minimumCommentInsightCount} 条同类反馈，必须给出对应建议和组件；候选为空时才回复 NO_ACTION。`,
     '如果需要建议，用 80 个汉字以内给出自然、具体、可执行的中文建议，并按协议返回一个最相关组件。',
     '返回的组件必须直接执行这条建议，不得返回与建议内容无关的组件。',
-    `当前在线：${audience.viewerCount}，近一分钟进房：${audience.entrantsLastMinute}，10 秒留存：${audience.newViewerRetention}%，评论密度：${audience.commentsPerMinute}/min。`,
     `评论洞察：${audience.insight.label}，优先级 ${audience.insight.priority}，置信度 ${Math.round(audience.insight.confidence * 100)}%，建议触发 ${audience.insight.shouldTrigger ? '是' : '否'}。`,
-    `实时指标：\n${signalSummary}`,
     `最新评论：${recentComments}`,
-    `本地诊断候选仅作事实参考，不得照抄：\n${candidateSummary || '无'}`,
+    `已确认的评论建议候选：\n${candidateSummary || '无'}`,
   ].join('\n')
+}
+
+export function isAiAnalysisRelevant(
+  analysisText: string,
+  category: CommentInsight['category'],
+): boolean {
+  const text = analysisText.trim()
+  if (!text || /^NO_ACTION[。.!！]?$/i.test(text)) return false
+
+  const audio = /麦克风|音量|人声|背景音乐|伴奏|听清|听见/
+  const visual = /画面|亮度|曝光|光线|补光|看清|背景可见/
+  const constraints: Record<CommentInsight['category'], RegExp | null> = {
+    audio,
+    visual,
+    network: /卡顿|延迟|流畅|帧率|掉线/,
+    request: /心愿|点播|想听|想看|诉求/,
+    interaction: /评论|互动|口播|话题|参与|公屏/,
+    engagement: /礼物|助力|目标|进度|贡献/,
+    positive: null,
+    none: null,
+  }
+  const required = constraints[category]
+  if (!required?.test(text)) return false
+  if (
+    (category === 'interaction' || category === 'request') &&
+    (audio.test(text) || visual.test(text))
+  ) {
+    return false
+  }
+  return true
 }
 
 export function createAiAnalyzedSuggestion(
@@ -194,7 +221,7 @@ export function createCommentInsightSuggestion(
   comments: Pick<AudienceComment, 'text'>[],
 ): LiveSuggestion | null {
   if (
-    insight.count === 0 ||
+    insight.count < studioRuntimeConfig.suggestion.minimumCommentInsightCount ||
     insight.category === 'none' ||
     insight.category === 'positive' ||
     !insight.shouldTrigger
@@ -300,10 +327,31 @@ export function createCommentInsightSuggestion(
     }
   }
 
-  const latestRequest = comments
-    .map((comment) => comment.text.trim())
-    .filter(Boolean)
-    .at(-1)
+  if (insight.category === 'interaction') {
+    return {
+      signalId: 'comments',
+      scene: 'interaction',
+      severity: 80,
+      tone: 'warn',
+      metric,
+      action: '评论区持续反馈互动不足，建议用一句低门槛口播重新带动参与。',
+      widget: {
+        version: '1.0',
+        type: 'audience-poll',
+        title: '评论互动引导',
+        detail: '根据最新评论生成容易回应的互动话题。',
+        actionLabel: '生成互动口播',
+        props: {
+          question: '今晚最想聊哪个话题？',
+          options: ['最近的趣事', '接下来的安排'],
+          durationSeconds: 45,
+        },
+      },
+    }
+  }
+
+  const latestRequest = insight.sampleTexts.at(-1)
+    ?? comments.map((comment) => comment.text.trim()).filter(Boolean).at(-1)
 
   return {
     signalId: 'comments',
@@ -312,8 +360,8 @@ export function createCommentInsightSuggestion(
     tone: 'warn',
     metric,
     action: latestRequest
-      ? `观众正在讨论“${truncate(latestRequest, 18)}”，建议发起快速选择互动。`
-      : '观众点播需求集中，建议发起快速选择互动。',
+      ? `观众正在集中提出“${truncate(latestRequest, 18)}”等诉求，建议整理并展示观众心愿。`
+      : '观众点播需求集中，建议整理并展示观众心愿。',
     widget: {
       version: '1.0',
       type: 'audience-poll',

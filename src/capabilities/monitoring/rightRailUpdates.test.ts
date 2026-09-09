@@ -12,6 +12,7 @@ import {
   createNormalModeDetectionSnapshot,
   createCommentInsightSuggestion,
   detectNormalModeUpdates,
+  isAiAnalysisRelevant,
   rightRailUpdateConfig,
   selectSuggestionsForStrategy,
   selectThresholdChangedSuggestions,
@@ -111,8 +112,8 @@ describe('right rail updates', () => {
     ).toEqual(['exposure', 'comments'])
   })
 
-  it('checks right-rail analysis at an exact 5-second interval', () => {
-    expect(rightRailUpdateConfig.normalDetectionIntervalMs).toBe(5_000)
+  it('checks right-rail analysis at an exact 3-second interval', () => {
+    expect(rightRailUpdateConfig.normalDetectionIntervalMs).toBe(3_000)
     expect(studioRuntimeConfig.monitoringDisplay.refreshIntervalMs).toBe(10_000)
   })
 
@@ -203,18 +204,12 @@ describe('right rail updates', () => {
       },
     }
     const prompt = createNormalAiAnalysisPrompt(
-      currentDiagnostics,
       audience,
-      {
-        monitoring: true,
-        comments: true,
-        visual: true,
-        hasUpdates: true,
-      },
       currentDiagnostics.suggestions,
     )
 
-    expect(prompt).toContain('监控指标、评论区、直播画面')
+    expect(prompt).toContain('只根据直播间实际出现的最新评论')
+    expect(prompt).not.toContain('面部曝光: -18')
     expect(prompt).toContain('画面有点暗')
     expect(prompt).toContain('NO_ACTION')
   })
@@ -233,6 +228,21 @@ describe('right rail updates', () => {
       analysisSource: 'ai',
     })
     expect(createAiAnalyzedSuggestion(base, 'NO_ACTION')).toBeNull()
+  })
+
+  it('rejects AI copy that mixes unrelated comment categories', () => {
+    expect(isAiAnalysisRelevant(
+      '评论区有点安静，可以用一句口播引导大家参与。',
+      'interaction',
+    )).toBe(true)
+    expect(isAiAnalysisRelevant(
+      '评论区有点安静，可以口播互动并提高麦克风音量。',
+      'interaction',
+    )).toBe(false)
+    expect(isAiAnalysisRelevant(
+      '观众集中反馈人声偏小，建议提高麦克风音量。',
+      'audio',
+    )).toBe(true)
   })
 
   it('ignores stable and recovered metrics', () => {
@@ -271,6 +281,7 @@ describe('right rail updates', () => {
     ['visual', 'visual-adjustment'],
     ['network', 'visual-adjustment'],
     ['request', 'audience-poll'],
+    ['interaction', 'audience-poll'],
     ['engagement', 'live-goal'],
   ] as const)(
     'maps %s comment feedback to the matching component',
@@ -303,5 +314,16 @@ describe('right rail updates', () => {
       commentInsight('none', '暂无集中反馈', 0),
       [],
     )).toBeNull()
+  })
+
+  it('requires two matching comments before creating a suggestion', () => {
+    expect(createCommentInsightSuggestion(
+      commentInsight('audio', '声音反馈', 1),
+      [],
+    )).toBeNull()
+    expect(createCommentInsightSuggestion(
+      commentInsight('audio', '声音反馈', 2),
+      [],
+    )?.widget.type).toBe('audio-adjustment')
   })
 })

@@ -8,8 +8,16 @@ export const studioRuntimeConfig = {
     maximumCommentIntervalMs: 4_500,
     /** 评论间隔的确定性波动系数，使 Mock 节奏更接近真实直播间。 */
     commentIntervalJitter: [0.88, 1.08, 0.96, 1.14, 0.92] as const,
+    /** 评论转冷场景的演示生成密度，仅影响出评速度，不改变监控指标。 */
+    coldDemoCommentsPerMinute: 20,
     /** 开播后保持正常评论的预热时长，单位为毫秒。 */
     strategyWarmupDurationMs: 15_000,
+    /** 正常演示场景开播后的中性评论阶段时长，单位为毫秒。 */
+    normalDemoOpeningDurationMs: 5_000,
+    /** 正常演示场景声音问题阶段的持续时长，单位为毫秒。 */
+    normalDemoAudioIssueDurationMs: 10_000,
+    /** 正常演示场景声音问题后持续中性评论的时长，单位为毫秒。 */
+    normalDemoNeutralCommentDurationMs: 10_000,
     /** 接纳策略建议后展示正向反馈评论的时长，单位为毫秒。 */
     strategyRecoveryDurationMs: 10_000,
     /** 左侧实时评论区每次保留的评论数量。 */
@@ -29,7 +37,7 @@ export const studioRuntimeConfig = {
   },
   suggestion: {
     /** 正常模式检查监控、评论和画面变化的周期，单位为毫秒。 */
-    normalDetectionIntervalMs: 5_000,
+    normalDetectionIntervalMs: 3_000,
     /** 右侧 Genie 建议队列同步周期，单位为毫秒。 */
     syncIntervalMs: 60_000,
     /** 指标趋势变化达到该值时触发即时更新。 */
@@ -38,6 +46,8 @@ export const studioRuntimeConfig = {
     metricUpdateCooldownMs: 5_000,
     /** 评论变化后的分析延迟，保证在三秒响应要求内完成聚合。 */
     commentAnalysisDelayMs: 1_200,
+    /** 评论洞察召回组件前所需的同类评论数量。 */
+    minimumCommentInsightCount: 2,
     /** 同类评论洞察再次触发的最短间隔。 */
     commentCategoryCooldownMs: 8_000,
     /** 采纳组件后，同类型建议再次出现前的最短等待时间。 */

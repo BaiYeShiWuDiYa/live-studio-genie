@@ -4,6 +4,7 @@ import {
   analyzeCommentKeywords,
   audienceEventSchema,
   getAudienceCommentIntervalMs,
+  getNormalDemoStrategy,
   mockAudienceEventAdapter,
   resolveAudienceStrategy,
 } from './audienceEvents'
@@ -69,6 +70,28 @@ describe('audience events', () => {
       shouldTrigger: true,
     })
   })
+
+  it.each([
+    ['dim-light', 'visual'],
+    ['low-audio', 'audio'],
+    ['cold-comments', 'interaction'],
+    ['active-comments', 'request'],
+  ] as const)(
+    'forms an actionable %s consensus from the first two %s demo comments',
+    (strategyId, category) => {
+      const comments = [1, 2].map((tick) =>
+        mockAudienceEventAdapter
+          .getStrategySnapshot(strategyId, false, tick)
+          .comments.at(-1)!,
+      )
+
+      expect(analyzeCommentKeywords(comments)).toMatchObject({
+        category,
+        count: 2,
+        shouldTrigger: true,
+      })
+    },
+  )
 
   it('returns a validated deterministic mock snapshot', () => {
     const first = mockAudienceEventAdapter.getSnapshot('interaction', false, 3)
@@ -182,6 +205,27 @@ describe('audience events', () => {
     expect(resolveAudienceStrategy('dim-light', warmupDuration)).toBe('dim-light')
   })
 
+  it('progresses the normal demo from warmup to audio issue to active interaction', () => {
+    const openingSeconds =
+      studioRuntimeConfig.audience.normalDemoOpeningDurationMs /
+      studioRuntimeConfig.audience.refreshIntervalMs
+    const activeSeconds =
+      openingSeconds +
+      studioRuntimeConfig.audience.normalDemoAudioIssueDurationMs /
+        studioRuntimeConfig.audience.refreshIntervalMs
+    const neutralEndSeconds =
+      activeSeconds +
+      studioRuntimeConfig.audience.normalDemoNeutralCommentDurationMs /
+        studioRuntimeConfig.audience.refreshIntervalMs
+
+    expect(getNormalDemoStrategy(openingSeconds - 1)).toBe('normal')
+    expect(getNormalDemoStrategy(openingSeconds)).toBe('low-audio')
+    expect(getNormalDemoStrategy(activeSeconds - 1)).toBe('low-audio')
+    expect(getNormalDemoStrategy(activeSeconds)).toBe('normal')
+    expect(getNormalDemoStrategy(neutralEndSeconds - 1)).toBe('normal')
+    expect(getNormalDemoStrategy(neutralEndSeconds)).toBe('active-comments')
+  })
+
   it('uses the configured comment pool for each explicit strategy', () => {
     const snapshot = mockAudienceEventAdapter.getStrategySnapshot(
       'color-cast',
@@ -279,23 +323,15 @@ describe('audience events', () => {
     )).toBe(true)
   })
 
-  it('cycles normal comments through distinct actionable themes', () => {
-    const categories = [11, 23, 35, 47, 59, 71].map((tick) =>
-      mockAudienceEventAdapter.getStrategySnapshot(
-        'normal',
-        false,
-        tick,
-      ).insight.category,
-    )
-
-    expect(categories).toEqual([
-      'audio',
-      'visual',
-      'network',
-      'request',
-      'engagement',
-      'positive',
-    ])
+  it('keeps normal comments focused on natural audience interaction', () => {
+    expect(audienceCommentsByStrategy.normal.length).toBeGreaterThan(80)
+    expect(audienceCommentsByStrategy.normal.every((text) =>
+      !/声音|麦克风|音量|画面|背景|卡顿|延迟|掉线|礼物|助力|贡献榜|点歌|想听|想看|心愿|来一首|下一首|再来一首|唱一首/.test(text),
+    )).toBe(true)
+    expect(audienceCommentsByStrategy.normal.every((text) => {
+      const category = analyzeAudienceComment(text).category
+      return category === 'none' || category === 'positive'
+    })).toBe(true)
   })
 
   it('simulates reduced gifts and entrants with scenario-specific data', () => {

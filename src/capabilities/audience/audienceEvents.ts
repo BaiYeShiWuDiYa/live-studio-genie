@@ -20,6 +20,7 @@ const commentCategorySchema = z.enum([
   'visual',
   'network',
   'request',
+  'interaction',
   'engagement',
   'positive',
   'none',
@@ -108,10 +109,52 @@ const keywordGroups: Array<{
   label: string
   words: string[]
 }> = [
-  { category: 'audio', label: '声音反馈', words: ['声音', '听不清', '音量', '麦克风'] },
-  { category: 'visual', label: '画面反馈', words: ['画面', '背景', '亮', '暗'] },
+  {
+    category: 'audio',
+    label: '声音反馈',
+    words: ['声音', '听不清', '音量', '麦克风', '人声', '耳机', 'BGM', '背景音乐'],
+  },
+  {
+    category: 'visual',
+    label: '画面反馈',
+    words: [
+      '画面',
+      '背景',
+      '亮',
+      '暗',
+      '光线',
+      '曝光',
+      '灯',
+      '补光灯',
+      '色温',
+      '肤色',
+      '颜色',
+      '白平衡',
+      '虚化',
+      '杂物',
+      '主体',
+    ],
+  },
   { category: 'network', label: '卡顿反馈', words: ['卡', '延迟', '掉线'] },
-  { category: 'request', label: '内容点播', words: ['唱', '歌', '点播', '想听'] },
+  {
+    category: 'request',
+    label: '内容点播',
+    words: [
+      '点歌',
+      '想听',
+      '想看',
+      '心愿',
+      '来一首',
+      '下一首',
+      '再来一首',
+      '唱一首',
+    ],
+  },
+  {
+    category: 'interaction',
+    label: '互动反馈',
+    words: ['评论区', '看评论', '看弹幕', '互动', '怎么参与', '潜水', '选择题', '问大家'],
+  },
   { category: 'engagement', label: '礼物互动', words: ['礼物', '助力', '贡献', '榜单'] },
   {
     category: 'positive',
@@ -269,6 +312,32 @@ export function resolveAudienceStrategy(
     : selectedStrategy
 }
 
+/** 正常场景的演示阶段：先热场，再暴露声音问题，最后承接互动热度。 */
+export function getNormalDemoStrategy(
+  elapsedSeconds: number,
+): AudienceStrategyId {
+  const elapsedMs = elapsedSeconds * studioRuntimeConfig.audience.refreshIntervalMs
+  if (elapsedMs < studioRuntimeConfig.audience.normalDemoOpeningDurationMs) {
+    return 'normal'
+  }
+  if (
+    elapsedMs <
+    studioRuntimeConfig.audience.normalDemoOpeningDurationMs +
+      studioRuntimeConfig.audience.normalDemoAudioIssueDurationMs
+  ) {
+    return 'low-audio'
+  }
+  if (
+    elapsedMs <
+    studioRuntimeConfig.audience.normalDemoOpeningDurationMs +
+      studioRuntimeConfig.audience.normalDemoAudioIssueDurationMs +
+      studioRuntimeConfig.audience.normalDemoNeutralCommentDurationMs
+  ) {
+    return 'normal'
+  }
+  return 'active-comments'
+}
+
 export function getAudienceCommentIntervalMs(
   commentsPerMinute: number,
   tick: number,
@@ -286,7 +355,7 @@ export function getAudienceCommentIntervalMs(
 
 function buildSnapshot(
   strategyId: AudienceStrategyId,
-  applied: boolean,
+  _applied: boolean,
   tick: number,
   phase: AudienceCommentPhase = 'issue',
   startedAt = 0,
@@ -320,14 +389,8 @@ function buildSnapshot(
       type: 'comment',
       userName: audienceUserNames[userIndex],
       source: 'viewer',
-      text: phase === 'issue' && applied && strategyId === 'cold-comments' && index === config.visibleCommentCount - 1
-        ? '选 2，来首炸场的'
-        : sourceComments[sourceIndex],
-      analysis: analyzeAudienceComment(
-        phase === 'issue' && applied && strategyId === 'cold-comments' && index === config.visibleCommentCount - 1
-          ? '选 2，来首炸场的'
-          : sourceComments[sourceIndex],
-      ),
+      text: sourceComments[sourceIndex],
+      analysis: analyzeAudienceComment(sourceComments[sourceIndex]),
       occurredAt: Math.max(
         0,
         latestCommentAt -

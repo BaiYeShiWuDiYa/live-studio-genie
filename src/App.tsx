@@ -63,6 +63,7 @@ import {
   analyzeAudienceComment,
   analyzeCommentKeywords,
   getAudienceCommentIntervalMs,
+  getNormalDemoStrategy,
   mockAudienceEventAdapter,
   resolveAudienceStrategy,
   type AudienceComment,
@@ -83,9 +84,8 @@ import {
   createNormalModeDetectionSnapshot,
   createCommentInsightSuggestion,
   detectNormalModeUpdates,
+  isAiAnalysisRelevant,
   rightRailUpdateConfig,
-  selectSuggestionsForStrategy,
-  selectThresholdChangedSuggestions,
   type NormalModeDetectionSnapshot,
 } from './capabilities/monitoring/rightRailUpdates'
 import {
@@ -101,7 +101,6 @@ import {
   summarizeLiveSessionMetrics,
 } from './capabilities/postlive/liveSessionMetrics'
 import {
-  appendNewSuggestions,
   appendTriggeredSuggestion,
   getWidgetUiType,
   keepLatestUniqueBy,
@@ -389,6 +388,20 @@ function getAtomicUiType(componentId: AtomicComponentId): string {
   return `atomic:${componentId}`
 }
 
+function getAiCommentComponentIds(
+  suggestion: QueuedSuggestion,
+): AtomicComponentId[] {
+  if (
+    suggestion.analysisSource !== 'ai' ||
+    suggestion.signalId !== 'comments'
+  ) {
+    return []
+  }
+  return suggestion.triggerKey === 'interaction'
+    ? ['speaking-suggestion']
+    : ['audience-wishes']
+}
+
 function getActiveWidgetCooldownTypes(
   cooldowns: Map<string, number>,
   now = Date.now(),
@@ -503,7 +516,6 @@ function App() {
   )
   const [scene, setScene] = useState<Scene>('quality')
   const [demoStrategy, setDemoStrategy] = useState<AudienceStrategyId>('normal')
-  const [strategyRevision, setStrategyRevision] = useState(0)
   const [strategyMenuOpen, setStrategyMenuOpen] = useState(false)
   const [isPk, setIsPk] = useState(false)
   const [applied, setApplied] = useState(false)
@@ -586,6 +598,7 @@ function App() {
   const [audienceTick, setAudienceTick] = useState(0)
   const [liveStartedAt, setLiveStartedAt] = useState(0)
   const [latestAudienceCommentAt, setLatestAudienceCommentAt] = useState(0)
+  const [commentAnalysisStartIndex, setCommentAnalysisStartIndex] = useState(0)
   const [strategyWarmupComplete, setStrategyWarmupComplete] = useState(false)
   const [strategyCommentState, setStrategyCommentState] =
     useState<StrategyCommentState>('issue')
@@ -705,27 +718,40 @@ function App() {
   const isLiveSettingsWorkspace = view === 'live' && isEditingLiveSettings
   const isPreliveWorkspace = view === 'prelive' || isLiveSettingsWorkspace
   const isLiveWorkspace = view === 'live' && !isEditingLiveSettings
-  const activeAudienceStrategy = view === 'live' && strategyCommentState !== 'normal'
-    ? resolveAudienceStrategy(
-        demoStrategy,
-        strategyWarmupComplete
-          ? studioRuntimeConfig.audience.strategyWarmupDurationMs
-          : 0,
-      )
-    : demoStrategy
+  const normalDemoStrategy =
+    demoStrategy === 'normal' && view === 'live'
+      ? getNormalDemoStrategy(liveTick)
+      : demoStrategy
+  const activeAudienceStrategy = demoStrategy === 'normal'
+    ? normalDemoStrategy
+    : view === 'live' && strategyCommentState !== 'normal'
+      ? resolveAudienceStrategy(
+          demoStrategy,
+          strategyWarmupComplete
+            ? studioRuntimeConfig.audience.strategyWarmupDurationMs
+            : 0,
+        )
+      : demoStrategy
   const commentStrategy = strategyCommentState === 'normal'
-    ? 'normal'
+    ? demoStrategy === 'normal'
+      ? normalDemoStrategy
+      : 'normal'
     : activeAudienceStrategy
   const commentPhase = strategyCommentState === 'recovery'
     ? 'recovery'
     : 'issue'
   const diagnosticStrategy = strategyCommentState === 'issue'
     ? activeAudienceStrategy
-    : 'normal'
+    : demoStrategy === 'normal'
+      ? normalDemoStrategy
+      : 'normal'
   const selectedStrategy = getAudienceStrategy(demoStrategy)
-  const commentCadencePerMinute = getAudienceStrategy(
-    commentPhase === 'recovery' ? 'normal' : commentStrategy,
-  ).audienceMetrics.commentsPerMinute
+  const commentCadencePerMinute = commentStrategy === 'cold-comments' &&
+    commentPhase === 'issue'
+    ? studioRuntimeConfig.audience.coldDemoCommentsPerMinute
+    : getAudienceStrategy(
+        commentPhase === 'recovery' ? 'normal' : commentStrategy,
+      ).audienceMetrics.commentsPerMinute
   const audienceCommentContextRef = useRef<{
     strategy: AudienceStrategyId
     applied: boolean
@@ -739,6 +765,7 @@ function App() {
     startedAt: liveStartedAt,
     elapsedSeconds: liveTick,
   })
+  const audienceCommentCountRef = useRef(0)
   useEffect(() => {
     audienceCommentContextRef.current = {
       strategy: commentStrategy,
@@ -752,12 +779,17 @@ function App() {
     const latestComment = snapshot.comments.at(-1)
     if (!latestComment) return
     setAudienceCommentHistory((history) => {
-      if (history.length === 0) return [latestComment]
+      if (history.length === 0) {
+        audienceCommentCountRef.current = 1
+        return [latestComment]
+      }
       if (history.some((comment) => comment.id === latestComment.id)) {
         return history
       }
-      return [...history, latestComment]
+      const nextHistory = [...history, latestComment]
         .sort((left, right) => left.occurredAt - right.occurredAt)
+      audienceCommentCountRef.current = nextHistory.length
+      return nextHistory
     })
   }, [])
   const generatedAudienceSnapshot = useMemo(
@@ -783,15 +815,24 @@ function App() {
       view,
     ],
   )
-  const audienceSnapshot = useMemo(
-    () => view === 'live'
-      ? {
-          ...generatedAudienceSnapshot,
-          comments: audienceCommentHistory,
-        }
-      : generatedAudienceSnapshot,
-    [audienceCommentHistory, generatedAudienceSnapshot, view],
-  )
+  const audienceSnapshot = useMemo(() => {
+    if (view !== 'live') return generatedAudienceSnapshot
+
+    return {
+      ...generatedAudienceSnapshot,
+      comments: audienceCommentHistory,
+      insight: analyzeCommentKeywords(
+        audienceCommentHistory
+          .slice(commentAnalysisStartIndex)
+          .slice(-studioRuntimeConfig.audience.visibleCommentCount),
+      ),
+    }
+  }, [
+    audienceCommentHistory,
+    commentAnalysisStartIndex,
+    generatedAudienceSnapshot,
+    view,
+  ])
   const analysisAudienceSnapshot = useMemo(() => {
     if (hostComments.length === 0) return audienceSnapshot
 
@@ -800,7 +841,7 @@ function App() {
     return {
       ...audienceSnapshot,
       comments,
-      insight: analyzeCommentKeywords(hostComments.slice(-1)),
+      insight: audienceSnapshot.insight,
     }
   }, [audienceSnapshot, hostComments])
   const diagnostics = useMemo(() => buildLiveDiagnostics({
@@ -825,12 +866,9 @@ function App() {
   )
   const suggestionQueueRef = useRef(suggestionQueue)
   const latestDiagnosticsRef = useRef(diagnostics)
-  const previousDiagnosticsRef = useRef<LiveDiagnostics | null>(null)
   const latestAudienceRef = useRef(audienceSnapshot)
-  const lastMetricUpdateAtRef = useRef(0)
   const normalModeDetectionRef =
     useRef<NormalModeDetectionSnapshot | null>(null)
-  const strategyActivatedRef = useRef(false)
   const dismissedSignalIdsRef = useRef(new Set<LiveSuggestion['signalId']>())
   const widgetSuggestionCooldownsRef = useRef(new Map<string, number>())
   const removalTimeoutsRef = useRef(new Map<string, number>())
@@ -847,7 +885,9 @@ function App() {
     (component) => getWidgetUiType(component.widgetSpec.type),
   )
   const aiSuggestionComponents = suggestionComponents.filter(
-    (component) => component.suggestion.analysisSource === 'ai',
+    (component) =>
+      component.suggestion.analysisSource === 'ai' &&
+      component.suggestion.signalId !== 'comments',
   )
   const chatWidgetComponents = keepLatestUniqueBy(
     chatWidgetSpecs.map((widgetSpec, widgetIndex) => ({
@@ -859,6 +899,11 @@ function App() {
   const visibleSuggestionQueue = suggestionQueue.filter(
     (suggestion) => !hiddenSuggestionIds.has(suggestion.queueId),
   )
+  const appliedSuggestionCount = suggestionQueue.filter(
+    (suggestion) =>
+      suggestion.widgets.length === 0 ||
+      hiddenSuggestionIds.has(suggestion.queueId),
+  ).length
   const recalledComponents = [
     ...(agentWidgetSpec
       ? [{
@@ -881,16 +926,16 @@ function App() {
     }))
   const triggeredRecalledComponents = keepLatestUniqueBy(
     suggestionQueue
-      .flatMap((suggestion, suggestionIndex) =>
-        suggestion.analysisSource === 'ai'
-          ? []
-          :
-        recallAtomicComponents({
-          source: suggestion.source,
-          text: `${suggestion.metric} ${suggestion.action}`,
-          signalIds: [suggestion.signalId],
-          strategyId: demoStrategy,
-        }).componentIds.map((componentId) => ({
+      .flatMap((suggestion, suggestionIndex) => {
+        const componentIds = suggestion.analysisSource === 'ai'
+          ? getAiCommentComponentIds(suggestion)
+          : recallAtomicComponents({
+              source: suggestion.source,
+              text: `${suggestion.metric} ${suggestion.action}`,
+              signalIds: [suggestion.signalId],
+              strategyId: activeAudienceStrategy,
+            }).componentIds
+        return componentIds.map((componentId) => ({
           key: `${suggestion.queueId}-${componentId}`,
           componentId,
           metric: suggestion.metric,
@@ -899,8 +944,8 @@ function App() {
             : '监控指标触发',
           suggestionNumber: suggestionIndex + 1,
           suggestionId: suggestion.queueId,
-        })),
-      )
+        }))
+      })
       .filter((candidate) => !dismissedAtomicComponents.has(candidate.key)),
     (component) => getAtomicUiType(component.componentId),
   )
@@ -994,53 +1039,7 @@ function App() {
   ])
 
   useEffect(() => {
-    const previous = previousDiagnosticsRef.current
-    previousDiagnosticsRef.current = diagnostics
-    if (
-      view !== 'live' ||
-      demoStrategy === 'normal' ||
-      strategyWarmupActive ||
-      !previous
-    ) {
-      return
-    }
-
-    const now = Date.now()
-    if (
-      now - lastMetricUpdateAtRef.current <
-      rightRailUpdateConfig.metricUpdateCooldownMs
-    ) {
-      return
-    }
-
-    const changedSuggestions = selectSuggestionsForStrategy(
-      selectThresholdChangedSuggestions(
-        previous,
-        diagnostics,
-        rightRailUpdateConfig.metricTrendDeltaThreshold,
-      ),
-      demoStrategy,
-    )
-    if (changedSuggestions.length === 0) return
-
-    const currentQueue = suggestionQueueRef.current
-    const nextQueue = appendNewSuggestions(
-      currentQueue,
-      changedSuggestions,
-      dismissedSignalIdsRef.current,
-      now,
-      getActiveWidgetCooldownTypes(widgetSuggestionCooldownsRef.current, now),
-    )
-    if (nextQueue === currentQueue) return
-
-    suggestionQueueRef.current = nextQueue
-    setSelectedCanvasWidget(null)
-    setSuggestionQueue(nextQueue)
-    lastMetricUpdateAtRef.current = now
-  }, [demoStrategy, diagnostics, strategyWarmupActive, view])
-
-  useEffect(() => {
-    if (view !== 'live' || demoStrategy !== 'normal') {
+    if (view !== 'live') {
       normalModeDetectionRef.current = null
       latestNormalAiSuggestionRef.current = null
       lastNormalAiTriggerRef.current = null
@@ -1071,19 +1070,9 @@ function App() {
       if (!updates.hasUpdates) return
       const candidates: Array<{
         suggestion: LiveSuggestion
-        source: 'monitor' | 'comment'
+        source: 'comment'
         triggerKey: string
       }> = []
-      if (updates.monitoring || updates.visual) {
-        currentDiagnostics.suggestions
-          .filter((suggestion) => suggestion.tone !== 'good')
-          .forEach((suggestion) => candidates.push({
-            suggestion,
-            source: 'monitor',
-            triggerKey: `monitor:${suggestion.signalId}`,
-          }))
-      }
-
       if (updates.comments) {
         const commentSuggestion = createCommentInsightSuggestion(
           audience.insight,
@@ -1111,9 +1100,7 @@ function App() {
           return false
         }
         const lastTrigger = lastNormalAiTriggerRef.current
-        const cooldown = candidate.source === 'comment'
-          ? rightRailUpdateConfig.commentCategoryCooldownMs
-          : rightRailUpdateConfig.metricUpdateCooldownMs
+        const cooldown = rightRailUpdateConfig.commentCategoryCooldownMs
         return !lastTrigger ||
           lastTrigger.key !== candidate.triggerKey ||
           Date.now() - lastTrigger.at >= cooldown
@@ -1133,29 +1120,46 @@ function App() {
       const controller = new AbortController()
       normalAiAnalysisAbortRef.current = controller
       try {
-        const studioState = useStudioStore.getState()
-        const result = await askGenie([
+        const analysisPrompt = [
           createNormalAiAnalysisPrompt(
-            currentDiagnostics,
             audience,
-            updates,
             availableCandidates.map((candidate) => candidate.suggestion),
           ),
           widgetProtocol,
-        ].join('\n'), {
+        ].join('\n')
+        const requestOptions = {
           signal: controller.signal,
           instruction: '',
-          imageDataUrl: captureStudioFrame(videoRef),
-          cameraEffects: studioState.cameraEffects,
-          recommendedCameraEffects: recommendCameraEffects(
-            studioState.cameraEffects,
-            studioState.mediaMetrics.brightness.score,
-          ),
-        })
+        }
+        let result = await askGenie(analysisPrompt, requestOptions)
+        if (
+          !isAiAnalysisRelevant(
+            result.text,
+            audience.insight.category,
+          )
+        ) {
+          result = await askGenie([
+            analysisPrompt,
+            `上一版回复偏离“${audience.insight.label}”，请严格按当前评论类别重新生成，不得提及其他问题。`,
+          ].join('\n'), requestOptions)
+        }
+        if (
+          !isAiAnalysisRelevant(
+            result.text,
+            audience.insight.category,
+          )
+        ) {
+          setNormalAiActivity('no-action')
+          return
+        }
         const analyzedSuggestion = createAiAnalyzedSuggestion(
           selected.suggestion,
           result.text,
-          result.widget,
+          result.widget &&
+            getWidgetUiType(result.widget.type) ===
+              getWidgetUiType(selected.suggestion.widget.type)
+            ? result.widget
+            : selected.suggestion.widget,
         )
         if (analyzedSuggestion) {
           latestNormalAiSuggestionRef.current = analyzedSuggestion
@@ -1185,28 +1189,7 @@ function App() {
           !(error instanceof GenieRequestError) ||
           error.code !== 'cancelled'
         ) {
-          latestNormalAiSuggestionRef.current = {
-            ...selected.suggestion,
-            analysisSource: 'rules',
-          }
-          lastNormalAiTriggerRef.current = {
-            key: selected.triggerKey,
-            at: Date.now(),
-          }
-          const currentQueue = suggestionQueueRef.current
-          const nextQueue = appendTriggeredSuggestion(
-            currentQueue,
-            latestNormalAiSuggestionRef.current,
-            selected.source,
-            selected.triggerKey,
-            Date.now(),
-            getActiveWidgetCooldownTypes(widgetSuggestionCooldownsRef.current),
-          )
-          if (nextQueue !== currentQueue) {
-            suggestionQueueRef.current = nextQueue
-            setSuggestionQueue(nextQueue)
-          }
-          setNormalAiActivity('updated')
+          setNormalAiActivity('no-action')
         }
       } finally {
         if (normalAiAnalysisAbortRef.current === controller) {
@@ -1277,85 +1260,6 @@ function App() {
     document.addEventListener('pointerdown', closeOnOutsideClick)
     return () => document.removeEventListener('pointerdown', closeOnOutsideClick)
   }, [strategyMenuOpen])
-
-  useEffect(() => {
-    if (view !== 'live') {
-      strategyActivatedRef.current = false
-      return
-    }
-    if (demoStrategy === 'normal') {
-      strategyActivatedRef.current = true
-      return
-    }
-    if (strategyWarmupActive || strategyActivatedRef.current) return
-
-    const currentQueue = suggestionQueueRef.current
-    const strategySuggestions = selectSuggestionsForStrategy(
-      latestDiagnosticsRef.current.suggestions,
-      demoStrategy,
-    )
-    const nextQueue = appendNewSuggestions(
-      currentQueue,
-      strategySuggestions,
-      dismissedSignalIdsRef.current,
-      Date.now(),
-      getActiveWidgetCooldownTypes(widgetSuggestionCooldownsRef.current),
-    )
-    if (nextQueue !== currentQueue) {
-      suggestionQueueRef.current = nextQueue
-      setSelectedCanvasWidget(null)
-      setSuggestionQueue(nextQueue)
-    }
-    strategyActivatedRef.current = true
-  }, [
-    activeAudienceStrategy,
-    demoStrategy,
-    strategyRevision,
-    strategyWarmupActive,
-    view,
-  ])
-
-  useEffect(() => {
-    if (view !== 'live' || demoStrategy === 'normal') return
-
-    let nextSyncAt = Date.now() + studioRuntimeConfig.suggestion.syncIntervalMs
-    let timeoutId = 0
-    const synchronizeSuggestions = () => {
-      const incoming = selectSuggestionsForStrategy(
-        latestDiagnosticsRef.current.suggestions,
-        demoStrategy,
-      )
-      const activeSignalIds = new Set(incoming.map((suggestion) => suggestion.signalId))
-      dismissedSignalIdsRef.current.forEach((signalId) => {
-        if (!activeSignalIds.has(signalId)) {
-          dismissedSignalIdsRef.current.delete(signalId)
-        }
-      })
-      setSuggestionQueue((queue) =>
-        appendNewSuggestions(
-          queue,
-          incoming,
-          dismissedSignalIdsRef.current,
-          Date.now(),
-          getActiveWidgetCooldownTypes(widgetSuggestionCooldownsRef.current),
-        ),
-      )
-
-      do {
-        nextSyncAt += studioRuntimeConfig.suggestion.syncIntervalMs
-      } while (nextSyncAt <= Date.now())
-      timeoutId = window.setTimeout(
-        synchronizeSuggestions,
-        Math.max(0, nextSyncAt - Date.now()),
-      )
-    }
-
-    timeoutId = window.setTimeout(
-      synchronizeSuggestions,
-      Math.max(0, nextSyncAt - Date.now()),
-    )
-    return () => window.clearTimeout(timeoutId)
-  }, [demoStrategy, view])
 
   useEffect(() => {
     return () => stopMediaStream(mediaStream)
@@ -1553,6 +1457,9 @@ function App() {
       strategyRecoveryTimeoutRef.current = null
     }
     setDemoStrategy(strategyId)
+    setCommentAnalysisStartIndex(audienceCommentCountRef.current)
+    lastNormalAiTriggerRef.current = null
+    normalAiAnalysisAbortRef.current?.abort()
     setAudienceTick(nextAudienceTick)
     setLatestAudienceCommentAt(occurredAt)
     appendAudienceComments(
@@ -1566,7 +1473,6 @@ function App() {
         occurredAt,
       ),
     )
-    setStrategyRevision((revision) => revision + 1)
     setStrategyCommentState('issue')
     setStrategyWarmupComplete(true)
     setNormalAiActivity('idle')
@@ -1595,9 +1501,6 @@ function App() {
     removalTimeoutsRef.current.clear()
     dismissedSignalIdsRef.current.clear()
     widgetSuggestionCooldownsRef.current.clear()
-    lastMetricUpdateAtRef.current = 0
-    previousDiagnosticsRef.current = null
-    strategyActivatedRef.current = false
     applyVisualSettings(strategy.visualSettings)
     applyAudioSettings(strategy.audioSettings)
     setCanvasNotice({
@@ -1606,7 +1509,15 @@ function App() {
     })
   }
 
+  const resetLiveInteractionWidgets = () => {
+    hidePoll()
+    hideLiveGoal()
+    hideAudienceWishes()
+    setSelectedLiveComponent(null)
+  }
+
   const beginPrelive = (theme: StreamThemeId, topic?: string) => {
+    resetLiveInteractionWidgets()
     const finalTopic = topic?.trim() || getStreamTheme(theme).defaultTopic
     setStreamType(theme)
     setStreamTopic(finalTopic)
@@ -1659,6 +1570,7 @@ function App() {
 
   const restoreLastLiveConfig = () => {
     if (!lastLiveConfig) return
+    resetLiveInteractionWidgets()
     const { theme, savedConfig } = lastLiveConfig
     setStreamType(theme)
     setStreamTopic(savedConfig.topic)
@@ -2010,9 +1922,11 @@ function App() {
       view !== 'live' ||
       strategyWarmupActive ||
       strategyCommentState !== 'issue' ||
-      demoStrategy === 'normal' ||
       !suggestion ||
-      !doesSuggestionResolveStrategy(demoStrategy, suggestion.signalId)
+      !doesSuggestionResolveStrategy(
+        activeAudienceStrategy,
+        suggestion.signalId,
+      )
     ) {
       return false
     }
@@ -2021,8 +1935,10 @@ function App() {
       window.clearTimeout(strategyRecoveryTimeoutRef.current)
     }
     setStrategyCommentState('recovery')
+    setCommentAnalysisStartIndex(audienceCommentCountRef.current)
     strategyRecoveryTimeoutRef.current = window.setTimeout(() => {
       setStrategyCommentState('normal')
+      setCommentAnalysisStartIndex(audienceCommentCountRef.current)
       strategyRecoveryTimeoutRef.current = null
     }, studioRuntimeConfig.audience.strategyRecoveryDurationMs)
     return true
@@ -2199,6 +2115,8 @@ function App() {
     const startedAt = Math.round(performance.timeOrigin + event.timeStamp)
     setLiveStartedAt(startedAt)
     setLatestAudienceCommentAt(startedAt)
+    audienceCommentCountRef.current = 0
+    setCommentAnalysisStartIndex(0)
     liveSessionMetricsRef.current =
       createLiveSessionMetricsAccumulator(mediaMetrics)
     setStrategyWarmupComplete(false)
@@ -2222,9 +2140,6 @@ function App() {
     removalTimeoutsRef.current.clear()
     dismissedSignalIdsRef.current.clear()
     widgetSuggestionCooldownsRef.current.clear()
-    lastMetricUpdateAtRef.current = 0
-    previousDiagnosticsRef.current = null
-    strategyActivatedRef.current = false
     setApplied(false)
     setPreviewingWidgetKey(null)
     setAppliedWidgetKeys(new Set())
@@ -2675,9 +2590,7 @@ function App() {
       strategyLabel: selectedStrategy.label,
       durationSeconds: Math.max(liveTick, elapsedSeconds),
       audience: audienceSnapshot,
-      appliedSuggestionCount: suggestionQueue.filter(
-        (suggestion) => suggestion.widgets.length === 0,
-      ).length,
+      appliedSuggestionCount,
       monitoring: summarizeLiveSessionMetrics(
         liveSessionMetricsRef.current,
       ),
@@ -2691,7 +2604,7 @@ function App() {
     setIsEditingLiveSettings(false)
     setIsPk(false)
     stopScreenShare()
-    hidePoll()
+    resetLiveInteractionWidgets()
     backgroundMusicRef.current?.close()
     backgroundMusicRef.current = null
     setIsBackgroundMusicPlaying(false)
@@ -2744,6 +2657,9 @@ function App() {
     setShowGoliveReadyDialog(false)
     setIsEditingLiveSettings(false)
     setIsGenieChatOpen(false)
+    setCanvasNotice(null)
+    setLiveAdjustment(null)
+    setApplied(false)
     cameraAttemptedRef.current = false
     setView(nextView)
   }
@@ -3226,7 +3142,7 @@ function App() {
               </div>
             </div>
           )}
-          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} strategy={view === 'live' && strategyCommentState === 'issue' ? demoStrategy : 'normal'} liveAdjustment={liveAdjustment} previewMode={previewMode} liveStageMode={liveStageMode} isPreviewing={isSuggestionPreview} audience={audienceSnapshot} isLive={isLiveWorkspace} preliveTitle={streamTopic} preliveLayout={preliveLayout} stageBackgroundUrl={stageBackgroundUrl} bandLayout={bandLayoutActive} gameLayout={gameLayout} gameCameraOffset={gameCameraOffset} onGameCameraOffsetChange={setGameCameraOffset} selectedLiveComponent={selectedLiveComponent} liveComponentOffsets={liveComponentOffsets} onLiveComponentOffsetChange={(component, offset) => setLiveComponentOffsets((current) => ({ ...current, [component]: offset }))} onSelectLiveComponent={selectLiveComponent} onDeleteLiveComponent={deleteLiveComponent} chatWidgets={canvasWidgetsAvailable ? {
+          <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} strategy={view === 'live' ? activeAudienceStrategy : 'normal'} liveAdjustment={liveAdjustment} previewMode={previewMode} liveStageMode={liveStageMode} isPreviewing={isSuggestionPreview} audience={audienceSnapshot} isLive={isLiveWorkspace} preliveTitle={streamTopic} preliveLayout={preliveLayout} stageBackgroundUrl={stageBackgroundUrl} bandLayout={bandLayoutActive} gameLayout={gameLayout} gameCameraOffset={gameCameraOffset} onGameCameraOffsetChange={setGameCameraOffset} selectedLiveComponent={selectedLiveComponent} liveComponentOffsets={liveComponentOffsets} onLiveComponentOffsetChange={(component, offset) => setLiveComponentOffsets((current) => ({ ...current, [component]: offset }))} onSelectLiveComponent={selectLiveComponent} onDeleteLiveComponent={deleteLiveComponent} chatWidgets={canvasWidgetsAvailable ? {
             text: chatTextEnabled ? chatTextValue : '',
             goalVisible: chatGoalEnabled,
             goal: {
@@ -3315,7 +3231,7 @@ function App() {
                       ? '上下文已同步'
                       : demoStrategy === 'normal'
                         ? {
-                            idle: 'AI 每 5 秒后台分析',
+                            idle: 'AI 每 3 秒分析评论',
                             queued: '新评论待分析',
                             analyzing: 'AI 正在分析评论',
                             updated: 'AI 已生成新建议',
@@ -3373,9 +3289,7 @@ function App() {
                   <div>
                     <span>改进建议</span>
                     <small>
-                      {demoStrategy === 'normal'
-                        ? 'AI 综合画面 · 指标 · 评论'
-                        : '典型场景规则'}
+                      AI 实时分析评论区
                     </small>
                   </div>
                   {chatMessages.length > 0 && (
@@ -3694,7 +3608,7 @@ function App() {
             <div className="end-live-summary">
               <span>直播时长<b>{formatDuration(liveTick)}</b></span>
               <span>当前观看<b>{audienceSnapshot.viewerCount.toLocaleString()}</b></span>
-              <span>已采纳建议<b>{suggestionQueue.filter((suggestion) => suggestion.widgets.length === 0).length}</b></span>
+              <span>已采纳建议<b>{appliedSuggestionCount}</b></span>
             </div>
             <div className="end-live-dialog-actions">
               <button type="button" onClick={() => setShowEndLiveConfirm(false)}>继续直播</button>
