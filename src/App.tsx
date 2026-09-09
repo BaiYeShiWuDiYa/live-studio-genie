@@ -167,10 +167,10 @@ type PreliveLayout = 'portrait' | 'three-quarter' | 'stage' | 'game-vertical' | 
 type GoalKind = StreamGoalKind
 
 const stageBackgrounds = [
-  { id: 'warm-stage', name: '暖光舞台', url: '/stage-backgrounds/warm-stage.svg' },
-  { id: 'neon-live', name: '霓虹现场', url: '/stage-backgrounds/neon-live.svg' },
-  { id: 'retro-vinyl', name: '复古唱片', url: '/stage-backgrounds/retro-vinyl.svg' },
-  { id: 'dream-stars', name: '梦幻星光', url: '/stage-backgrounds/dream-stars.svg' },
+  { id: 'warm-stage', name: '暖光舞台', url: `${import.meta.env.BASE_URL}stage-backgrounds/warm-stage.svg` },
+  { id: 'neon-live', name: '霓虹现场', url: `${import.meta.env.BASE_URL}stage-backgrounds/neon-live.svg` },
+  { id: 'retro-vinyl', name: '复古唱片', url: `${import.meta.env.BASE_URL}stage-backgrounds/retro-vinyl.svg` },
+  { id: 'dream-stars', name: '梦幻星光', url: `${import.meta.env.BASE_URL}stage-backgrounds/dream-stars.svg` },
 ] as const
 
 const goalKindOptions: ReadonlyArray<{ id: GoalKind; label: string; defaultTitle: string; target: number }> = [

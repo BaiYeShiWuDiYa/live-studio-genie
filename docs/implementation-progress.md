@@ -668,7 +668,6 @@ Validation: 21 test files and 142 tests passed, with production build, lint, and
 - Added gift-engagement analysis and LIVE Goal generation so normal mode can surface more than adjustment and poll components.
 - Kept positive windows non-actionable to prevent continuous suggestion spam.
 
-
 ### 直播链路与建议体验修复
 
 - 移除 GO LIVE 时自动发布投票的硬编码逻辑，仅继承播前真实配置的画布状态。
@@ -695,6 +694,24 @@ git diff --check
 结果：21 个测试文件、147 项测试通过；浏览器已验证开播无自动投票、返回播前无弹层、历史对话不自动打开、评论节奏切换和 AI Widget 编辑。
 
 本轮补充改动通过 147 项现有单元测试、生产构建、Lint（0 warning）和 `git diff --check`；按演示阶段要求未新增或执行 UI 自动化测试。
+
+### GitHub Pages 部署
+
+- 增加 GitHub Actions 工作流，在 `main` 更新后自动构建并发布 `dist`。
+- 为 Pages 仓库子路径增加可配置的 Vite `base`。
+- 修正舞台背景和 MediaPipe 模型的运行时路径，使其在本地根路径和 Pages 子路径均可加载。
+- 保持 Genie AK 仅由本地 Vite 代理读取，不向静态构建注入密钥。
+
+验证：
+
+```bash
+VITE_BASE_PATH=/live-studio-genie/ npm run build
+npm test
+npm run lint
+git diff --check
+```
+
+结果：21 个测试文件、157 项测试通过；Pages 子路径生产构建和 Lint 通过。静态预览已确认入口、favicon、舞台背景及 MediaPipe 模型均返回 200。
 
 ## Next
 

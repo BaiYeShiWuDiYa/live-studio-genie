@@ -76,6 +76,24 @@ npm run build
 npm run lint
 ```
 
+## GitHub Pages 部署
+
+仓库内置 `.github/workflows/deploy-pages.yml`。首次部署前，在 GitHub 仓库中打开：
+
+```text
+Settings → Pages → Build and deployment → Source → GitHub Actions
+```
+
+保存后，推送到 `main` 会自动构建并发布到：
+
+```text
+https://baiyeshiwudiya.github.io/live-studio-genie/
+```
+
+也可以在仓库的 `Actions` 页面手动运行 `Deploy to GitHub Pages`。
+
+GitHub Pages 仅托管静态文件，不会运行 `vite.config.ts` 中的 Genie 代理，也不能安全保存 `GENIE_MODEL_AK`。Pages 版本可体验工作台、浏览器媒体能力和 Mock 场景；如需开放 Genie 对话，必须将 `/api/genie/chat` 单独部署到可信服务端，不能把 AK 写入前端变量或 GitHub Pages 构建配置。
+
 ## 项目结构
 
 ```text

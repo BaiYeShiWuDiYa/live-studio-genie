@@ -20,8 +20,8 @@ import { studioRuntimeConfig } from '../../config/studioRuntime'
 import { useStudioStore } from '../../store/studioStore'
 
 const WASM_ROOT = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
-const MODEL_PATH = '/mediapipe/models/selfie_segmenter_landscape.tflite'
-const FACE_MODEL_PATH = '/mediapipe/models/face_landmarker.task'
+const MODEL_PATH = `${import.meta.env.BASE_URL}mediapipe/models/selfie_segmenter_landscape.tflite`
+const FACE_MODEL_PATH = `${import.meta.env.BASE_URL}mediapipe/models/face_landmarker.task`
 
 const framingMeasuringMetric: MediaMetric = {
   score: 0,
