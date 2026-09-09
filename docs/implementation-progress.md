@@ -719,6 +719,7 @@ git diff --check
 - 增加 Node 生产服务，同域提供前端静态资源、SPA 回退、`/api/genie/chat` 和 `/healthz`。
 - 增加 `build.sh` 与 `npm run build:goofy`，SCM 构建输出自包含的 `output/`，运行时不依赖 `node_modules`。
 - 兼容 Goofy Node 默认的 `node bootstrap.js` 启动入口和 Node 18 运行时。
+- 兼容 Goofy FaaS 的动态应用挂载目录，静态资源会从模块目录、工作目录和 `_GOOFY_LITE_APP_ROOT` 中解析。
 - AK 仅通过 Goofy Node Channel 的运行时环境变量注入，不进入 Vite 构建产物。
 - 配置内部 SCM 仓库 `tiktok/live-studio-genie` 和部署分支 `feat/live-studio-genie`。
 

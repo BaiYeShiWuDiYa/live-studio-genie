@@ -1,6 +1,6 @@
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer, type ServerResponse } from "node:http";
-import { extname, resolve, sep } from "node:path";
+import { dirname, extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defaultModelBaseUrl, handleGenieChat } from "./genieProxy.js";
 
@@ -47,9 +47,22 @@ function sendFile(response: ServerResponse, filePath: string, method?: string) {
 }
 
 export function createStudioServer(options: StudioServerOptions = {}) {
-  const publicRoot =
-    options.publicRoot || fileURLToPath(new URL("./public/", import.meta.url));
-  const indexPath = resolve(publicRoot, "index.html");
+  const moduleRoot = dirname(fileURLToPath(import.meta.url));
+  const goofyAppRoot = process.env._GOOFY_LITE_APP_ROOT;
+  const publicRoots = [
+    options.publicRoot,
+    resolve(moduleRoot, "public"),
+    resolve(process.cwd(), "public"),
+    process.env.PWD ? resolve(process.env.PWD, "public") : undefined,
+    goofyAppRoot ? resolve("/", goofyAppRoot, "public") : undefined,
+    goofyAppRoot ? resolve(process.cwd(), goofyAppRoot, "public") : undefined,
+  ].filter(
+    (root, index, roots): root is string =>
+      Boolean(root) && roots.indexOf(root) === index,
+  );
+  const indexPath = publicRoots
+    .map((root) => resolve(root, "index.html"))
+    .find((candidate) => existsSync(candidate));
 
   return createServer(async (request, response) => {
     response.setHeader("X-Content-Type-Options", "nosniff");
@@ -61,7 +74,14 @@ export function createStudioServer(options: StudioServerOptions = {}) {
       if (url.pathname === "/healthz") {
         response.statusCode = 200;
         response.setHeader("Content-Type", "application/json; charset=utf-8");
-        response.end(JSON.stringify({ status: "ok" }));
+        response.end(
+          JSON.stringify({
+            status: "ok",
+            staticAssetsReady: publicRoots.some((root) =>
+              existsSync(resolve(root, "assets")),
+            ),
+          }),
+        );
         return;
       }
 
@@ -84,20 +104,24 @@ export function createStudioServer(options: StudioServerOptions = {}) {
       }
 
       const relativePath = decodeURIComponent(url.pathname).replace(/^\/+/, "");
-      const candidate = resolve(publicRoot, relativePath || "index.html");
-      const isInsidePublicRoot =
-        candidate === publicRoot || candidate.startsWith(`${publicRoot}${sep}`);
+      const candidate = publicRoots
+        .map((root) => ({
+          filePath: resolve(root, relativePath || "index.html"),
+          root,
+        }))
+        .find(
+          ({ filePath, root }) =>
+            (filePath === root || filePath.startsWith(`${root}${sep}`)) &&
+            existsSync(filePath) &&
+            statSync(filePath).isFile(),
+        )?.filePath;
 
-      if (
-        isInsidePublicRoot &&
-        existsSync(candidate) &&
-        statSync(candidate).isFile()
-      ) {
+      if (candidate) {
         sendFile(response, candidate, request.method);
         return;
       }
 
-      if (existsSync(indexPath)) {
+      if (indexPath) {
         sendFile(response, indexPath, request.method);
         return;
       }

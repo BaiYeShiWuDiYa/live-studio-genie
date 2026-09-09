@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,12 +8,17 @@ import { createStudioServer } from "./index.js";
 const cleanup: Array<() => void> = [];
 
 afterEach(() => {
-  cleanup.splice(0).reverse().forEach((dispose) => dispose());
+  cleanup
+    .splice(0)
+    .reverse()
+    .forEach((dispose) => dispose());
 });
 
 async function startTestServer(apiKey?: string) {
   const publicRoot = mkdtempSync(join(tmpdir(), "live-studio-genie-"));
   writeFileSync(join(publicRoot, "index.html"), "<h1>Studio</h1>");
+  mkdirSync(join(publicRoot, "assets"));
+  writeFileSync(join(publicRoot, "assets", "app.js"), "window.ready = true;");
   const server = createStudioServer({ publicRoot, apiKey });
 
   await new Promise<void>((resolve) => {
@@ -35,11 +40,18 @@ describe("production server", () => {
 
     const health = await fetch(`${origin}/healthz`);
     expect(health.status).toBe(200);
-    await expect(health.json()).resolves.toEqual({ status: "ok" });
+    await expect(health.json()).resolves.toEqual({
+      status: "ok",
+      staticAssetsReady: true,
+    });
 
     const page = await fetch(`${origin}/studio`);
     expect(page.status).toBe(200);
     await expect(page.text()).resolves.toContain("Studio");
+
+    const asset = await fetch(`${origin}/assets/app.js`);
+    expect(asset.headers.get("content-type")).toContain("text/javascript");
+    await expect(asset.text()).resolves.toContain("window.ready");
   });
 
   it("keeps the model key server-side", async () => {
