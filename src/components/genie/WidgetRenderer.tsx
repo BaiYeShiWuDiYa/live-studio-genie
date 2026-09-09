@@ -385,7 +385,7 @@ function VisualAdjustmentWidget({ spec, applied, isPreviewing, onVisualChange }:
   const settings = applied || isPreviewing ? visualSettings : spec.props.settings
   return (
     <div className="adjustments">
-      <Adjustment label="补光" min={-40} max={60} value={`${withSign(Math.round((settings.brightness - 1) * 100))}%`} onChange={(value) => onVisualChange('brightness', value)} />
+      <Adjustment label="亮度" min={-40} max={60} value={`${withSign(Math.round((settings.brightness - 1) * 100))}%`} onChange={(value) => onVisualChange('brightness', value)} />
       <Adjustment label="对比度" min={-40} max={60} value={`${withSign(Math.round((settings.contrast - 1) * 100))}%`} onChange={(value) => onVisualChange('contrast', value)} />
       <Adjustment label="暖色" max={60} value={`${withSign(Math.round(settings.warmth * 100))}%`} onChange={(value) => onVisualChange('warmth', value)} />
     </div>

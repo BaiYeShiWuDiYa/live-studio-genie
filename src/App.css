@@ -576,8 +576,10 @@
 }
 
 .strategy-dim-light .host-stage::after {
-  background: rgba(3, 5, 10, 0.42);
-  box-shadow: inset 0 0 110px rgba(0, 0, 0, 0.78);
+  background: rgb(3, 5, 10);
+  box-shadow: inset 0 0 110px rgb(0, 0, 0);
+  opacity: var(--strategy-dim-overlay-opacity, 0.42);
+  transition: opacity 180ms ease;
 }
 
 .strategy-color-cast .host-stage::after {

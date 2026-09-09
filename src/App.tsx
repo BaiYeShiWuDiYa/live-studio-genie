@@ -3746,6 +3746,17 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
     (state) => state.audienceWishesState.status !== 'hidden',
   )
   const showAudiencePreview = isLive && liveStageMode === 'preview' && !isPk
+  const dimLightOverlayOpacity = Math.max(
+    0,
+    Math.min(0.42, (1 - visualSettings.brightness) * 1.1),
+  )
+  const dimLightBrightnessScore = Math.round(Math.max(
+    0,
+    Math.min(
+      100,
+      26 + (visualSettings.brightness - 0.62) * 100,
+    ),
+  ))
   const previewStyle = {
     '--studio-video-filter': [
       `brightness(${visualSettings.brightness})`,
@@ -3753,6 +3764,7 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
       `sepia(${visualSettings.warmth})`,
       `saturate(${1 + visualSettings.warmth * 0.35})`,
     ].join(' '),
+    '--strategy-dim-overlay-opacity': dimLightOverlayOpacity,
   } as CSSProperties
 
   useEffect(() => {
@@ -3928,7 +3940,7 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
         </>
       )}
     </div>
-    {strategy === 'dim-light' && <div className="stage-hint"><Lightbulb size={14} />亮度 26/100</div>}
+    {strategy === 'dim-light' && <div className="stage-hint"><Lightbulb size={14} />亮度 {dimLightBrightnessScore}/100</div>}
     {strategy === 'color-cast' && <div className="stage-hint"><Palette size={14} />暖色偏移 +58</div>}
     {strategy === 'cluttered-background' && <div className="stage-hint"><PanelsTopLeft size={14} />背景干扰 72%</div>}
     {strategy === 'low-audio' && <div className="audio-meter"><AudioLines size={15} /><span>音频峰值偏低</span><i /><i /><i /><i /></div>}
