@@ -67,6 +67,12 @@ npm run lint
 
 # 本地预览生产构建
 npm run preview
+
+# 生成 Goofy Node 部署产物
+npm run build:goofy
+
+# 启动 Goofy 生产服务，默认监听 8080
+npm start
 ```
 
 提交前至少执行：
@@ -94,6 +100,38 @@ https://baiyeshiwudiya.github.io/live-studio-genie/
 
 GitHub Pages 仅托管静态文件，不会运行 `vite.config.ts` 中的 Genie 代理，也不能安全保存 `GENIE_MODEL_AK`。Pages 版本可体验工作台、浏览器媒体能力和 Mock 场景；如需开放 Genie 对话，必须将 `/api/genie/chat` 单独部署到可信服务端，不能把 AK 写入前端变量或 GitHub Pages 构建配置。
 
+## Goofy Deploy 部署
+
+公司内完整体验使用 Goofy Deploy Node 项目，代码源配置为：
+
+```text
+仓库：https://code.byted.org/tiktok/live-studio-genie
+分支：feat/live-studio-genie
+Node.js：20.19+
+SCM 构建命令：bash build.sh
+SCM 产物目录：output
+启动命令：npm start
+服务端口：PORT 环境变量，默认 8080
+健康检查：/healthz
+```
+
+`build.sh` 使用 `bnpm.byted.org` 安装依赖，并生成自包含的 `output/`。该目录包含前端静态文件、Node 服务和运行时 `package.json`，不需要携带 `node_modules`。
+
+Goofy Channel 创建后，通过运行时环境变量注入 AK。先预览，再确认写入：
+
+```bash
+chmod 600 .env
+bytedcli goofy deploy update-channel-bff-env \
+  --channel-id <channel_id> \
+  --bff-env-file .env
+bytedcli goofy deploy update-channel-bff-env \
+  --channel-id <channel_id> \
+  --bff-env-file .env \
+  --yes
+```
+
+`.env` 禁止提交。`GENIE_MODEL_AK` 只在 Node 运行时读取，不会进入浏览器构建产物。
+
 ## 项目结构
 
 ```text
@@ -101,7 +139,12 @@ src/
   App.tsx              主工作台、播前流程、直播控制台与交互状态
   App.css              工作台视觉样式
   services/genie.ts    前端 Genie 请求封装
-vite.config.ts         开发环境 Agent 同源代理，密钥仅在服务端读取
+server/
+  genieProxy.ts        开发与生产共用的 Genie 服务端代理
+  index.ts             Goofy Node 服务、静态资源和健康检查
+scripts/build-goofy.mjs
+                       生成自包含的 output 部署产物
+vite.config.ts         开发环境 Agent 同源代理
 ```
 
 ## 演示路径
@@ -122,4 +165,4 @@ vite.config.ts         开发环境 Agent 同源代理，密钥仅在服务端�
 
 - 不要提交 `.env`、密钥或本地调试文件。
 - 提交信息采用简短格式，例如：`feat: refine genie chat ui`。
-- 保持 Agent 请求经过 `vite.config.ts` 的同源代理，不能将 AK 暴露给浏览器端代码。
+- 保持 Agent 请求经过同源服务端代理，不能将 AK 暴露给浏览器端代码。

@@ -713,6 +713,26 @@ git diff --check
 
 结果：21 个测试文件、157 项测试通过；Pages 子路径生产构建和 Lint 通过。静态预览已确认入口、favicon、舞台背景及 MediaPipe 模型均返回 200。
 
+### Goofy Node 一体部署
+
+- 将 Genie 代理从 Vite 开发插件抽成开发和生产共用的服务端处理器。
+- 增加 Node 生产服务，同域提供前端静态资源、SPA 回退、`/api/genie/chat` 和 `/healthz`。
+- 增加 `build.sh` 与 `npm run build:goofy`，SCM 构建输出自包含的 `output/`，运行时不依赖 `node_modules`。
+- AK 仅通过 Goofy Node Channel 的运行时环境变量注入，不进入 Vite 构建产物。
+- 配置内部 SCM 仓库 `tiktok/live-studio-genie` 和部署分支 `feat/live-studio-genie`。
+
+验证：
+
+```bash
+npm test
+npm run lint
+npm run build:goofy
+PORT=4187 npm start
+curl http://127.0.0.1:4187/healthz
+```
+
+结果：22 个测试文件、159 项测试通过；Lint、Goofy 生产构建和生产进程冒烟测试通过。`output/` 约 6.4 MB，健康检查、SPA 回退和未配置 AK 的保护响应均符合预期。
+
 ## Next
 
 1. Add eyebrow controls and face-shape deformation.
