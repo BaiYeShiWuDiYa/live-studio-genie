@@ -735,6 +735,16 @@ curl http://127.0.0.1:4187/healthz
 
 结果：22 个测试文件、159 项测试通过；Lint、Goofy 生产构建和生产进程冒烟测试通过。`output/` 约 6.4 MB，健康检查、SPA 回退和未配置 AK 的保护响应均符合预期。
 
+部署结果：
+
+- Goofy 项目 ID：`313746`
+- 服务树节点：`goofy_deploy.node_project.313746`
+- Channel ID：`6018736`
+- FaaS PSM：`tiktok.live_studio.genie`
+- 内网测试域名：`https://dgdbxmr4.fn.bytedance.net`
+- 生产容器 ModelHub 地址使用 `aidp-i18ntt-sg.byteintl.net`，办公网地址 `tiktok-row.net` 会被 ROW Operations Gateway 拒绝。
+- 首次上线 SCM 版本 `1.0.0.2`，部署工单 `32618781` 成功；健康检查、静态资源 MIME 类型和真实 Genie 请求均验证通过。
+
 ## Next
 
 1. Add eyebrow controls and face-shape deformation.

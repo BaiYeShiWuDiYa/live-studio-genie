@@ -132,6 +132,7 @@ bytedcli goofy deploy update-channel-bff-env \
 ```
 
 `.env` 禁止提交。`GENIE_MODEL_AK` 只在 Node 运行时读取，不会进入浏览器构建产物。
+Goofy/FaaS 生产容器使用 `https://aidp-i18ntt-sg.byteintl.net`；`tiktok-row.net` 仅用于办公网络本地开发。
 
 ## 项目结构
 
