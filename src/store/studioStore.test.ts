@@ -24,6 +24,25 @@ describe('studioStore live canvas widgets', () => {
     expect(state.committedLiveGoalState.status).toBe('hidden')
   })
 
+  it('starts a published live goal from zero and completes it without regressing', () => {
+    const store = useStudioStore.getState()
+    store.publishLiveGoal({
+      label: '本场点赞目标',
+      current: 320,
+      target: 1000,
+      supporters: 8,
+    })
+
+    expect(useStudioStore.getState().liveGoalState.config?.current).toBe(0)
+
+    store.syncLiveGoalProgress(480)
+    store.syncLiveGoalProgress(120)
+    expect(useStudioStore.getState().liveGoalState.config?.current).toBe(480)
+
+    store.completeLiveGoal()
+    expect(useStudioStore.getState().liveGoalState.config?.current).toBe(1000)
+  })
+
   it('removes published poll and audience wishes widgets', () => {
     const store = useStudioStore.getState()
     store.publishPoll({

@@ -297,6 +297,7 @@ interface CanvasCustomWidgetProps {
   onSelect: () => void
   offset: WidgetOffset
   onOffsetChange: (offset: WidgetOffset) => void
+  onDelete?: () => void
   editable?: boolean
 }
 
@@ -306,6 +307,7 @@ export function CanvasCustomWidget({
   onSelect,
   offset,
   onOffsetChange,
+  onDelete,
   editable = true,
 }: CanvasCustomWidgetProps) {
   const isLeaderboard = widget.kind === 'leaderboard'
@@ -319,6 +321,7 @@ export function CanvasCustomWidget({
       offset={offset}
       onSelect={onSelect}
       onOffsetChange={onOffsetChange}
+      onDelete={onDelete}
       style={{ ['--custom-widget-color' as string]: widget.color }}
     >
       {isLeaderboard ? (

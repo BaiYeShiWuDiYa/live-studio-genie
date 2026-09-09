@@ -90,6 +90,8 @@ interface StudioState {
   undoLiveGoal: () => void
   hideLiveGoal: () => void
   advanceLiveGoal: (amount: number) => void
+  syncLiveGoalProgress: (current: number) => void
+  completeLiveGoal: () => void
   previewAudienceWishes: (config: AudienceWishesConfig) => void
   publishAudienceWishes: (config: AudienceWishesConfig) => void
   hideAudienceWishes: () => void
@@ -266,7 +268,7 @@ export const useStudioStore = create<StudioState>((set) => ({
     const validatedConfig = liveGoalConfigSchema.parse(config)
     set((state) => {
       const activeGoal: LiveGoalState = {
-        config: validatedConfig,
+        config: { ...validatedConfig, current: 0 },
         status: 'active',
       }
       return {
@@ -306,6 +308,31 @@ export const useStudioStore = create<StudioState>((set) => ({
           state.liveGoalState.config.current + Math.max(0, Math.round(amount)),
         ),
         supporters: state.liveGoalState.config.supporters + 1,
+      }
+      const liveGoalState: LiveGoalState = { config, status: 'active' }
+      return { liveGoalState, committedLiveGoalState: liveGoalState }
+    })
+  },
+  syncLiveGoalProgress: (current) => {
+    set((state) => {
+      if (state.liveGoalState.status !== 'active' || !state.liveGoalState.config) return state
+      const config = {
+        ...state.liveGoalState.config,
+        current: Math.min(
+          state.liveGoalState.config.target,
+          Math.max(state.liveGoalState.config.current, Math.round(current)),
+        ),
+      }
+      const liveGoalState: LiveGoalState = { config, status: 'active' }
+      return { liveGoalState, committedLiveGoalState: liveGoalState }
+    })
+  },
+  completeLiveGoal: () => {
+    set((state) => {
+      if (state.liveGoalState.status !== 'active' || !state.liveGoalState.config) return state
+      const config = {
+        ...state.liveGoalState.config,
+        current: state.liveGoalState.config.target,
       }
       const liveGoalState: LiveGoalState = { config, status: 'active' }
       return { liveGoalState, committedLiveGoalState: liveGoalState }

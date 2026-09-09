@@ -163,7 +163,7 @@ import { useStudioStore } from './store/studioStore'
 type AppView = 'onboarding' | 'prelive' | 'live' | 'postlive'
 type Scene = StudioScene
 type StreamKind = 'music' | 'chat' | 'game' | 'show'
-type PreliveTask = 'layout' | 'visual' | 'content'
+type PreliveTask = 'layout' | 'widgets' | 'visual' | 'content'
 type PreliveLayout = 'portrait' | 'three-quarter' | 'stage' | 'game-vertical' | 'game-landscape'
 type GoalKind = StreamGoalKind
 
@@ -222,7 +222,8 @@ const sceneNoticeNames: Record<Scene, string> = {
 }
 
 const preliveTasks: Array<{ id: PreliveTask; title: string; detail: string; action: string; priority: string }> = [
-  { id: 'layout', title: '选择直播布局', detail: '根据直播类型确认画面布局，并检查画面源。', action: '确认画布方案', priority: '必须完成' },
+  { id: 'layout', title: '选择直播间布局', detail: '根据直播类型确认画面布局，并检查画面源。', action: '确认布局方案', priority: '必须完成' },
+  { id: 'widgets', title: '添加画布小组件', detail: '画布中小组件建议不能超过3个', action: '保存小组件设置', priority: '建议优化' },
   { id: 'visual', title: '人像美化', detail: '默认应用「清透日常」预设，可在美颜、美妆分类中微调，所有处理均在本地完成。', action: '应用美化方案', priority: '必须完成' },
   { id: 'content', title: '直播信息与内容', detail: '选择聊天主题，并完善开播前 15 分钟的内容脚本。', action: '保存内容方案', priority: '建议优化' },
 ]
@@ -280,9 +281,9 @@ function getLiveTitleRecommendations(streamType: StreamKind, topic: string): str
   ]
 }
 
-const chatLayoutTaskTitle = '选择直播布局'
+const chatLayoutTaskTitle = '选择直播间布局'
 const showLayoutTaskTitle = '直播布局调整'
-const chatLayoutTaskDetail = '已为你默认全屏摄像头画布（单人竖屏 · 9:16），可勾选画布小组件并在画布中拖动位置'
+const chatLayoutTaskDetail = '已为你默认全屏摄像头画布（单人竖屏 · 9:16），确认后可继续添加画布小组件'
 const musicLayoutTaskDetail = '根据你的表演形式，选择适合的画面布局'
 const defaultChatText = 'Good things will happen today ❤️'
 const defaultGoalTitle = 'follower goal'
@@ -569,6 +570,7 @@ function App() {
   const [agentWidgetSpec, setAgentWidgetSpec] = useState<WidgetSpec | null>(
     restoredChatSession.widgets.at(-1) ?? null,
   )
+  const [beautyToolSpec, setBeautyToolSpec] = useState<WidgetSpec | null>(null)
   const [showClearChatConfirm, setShowClearChatConfirm] = useState(false)
   const [genieError, setGenieError] = useState('')
   const [genieRequestStatus, setGenieRequestStatus] = useState<GenieRequestStatus>('idle')
@@ -667,9 +669,11 @@ function App() {
   const resetLiveGoalPreview = useStudioStore((state) => state.resetLiveGoalPreview)
   const undoLiveGoal = useStudioStore((state) => state.undoLiveGoal)
   const hideLiveGoal = useStudioStore((state) => state.hideLiveGoal)
+  const completeLiveGoal = useStudioStore((state) => state.completeLiveGoal)
   const hideAudienceWishes = useStudioStore(
     (state) => state.hideAudienceWishes,
   )
+  const liveGoalState = useStudioStore((state) => state.liveGoalState)
   const microphoneGainDb = useStudioStore((state) => state.audioSettings.microphoneGainDb)
   const backgroundMusicGainDb = useStudioStore((state) => state.audioSettings.backgroundMusicGainDb)
   const committedMicrophoneGainDb = useStudioStore((state) => state.committedAudioSettings.microphoneGainDb)
@@ -831,6 +835,7 @@ function App() {
   const dismissedSignalIdsRef = useRef(new Set<LiveSuggestion['signalId']>())
   const widgetSuggestionCooldownsRef = useRef(new Map<string, number>())
   const removalTimeoutsRef = useRef(new Map<string, number>())
+  const beautyToolCardRef = useRef<HTMLDivElement>(null)
   const suggestionComponents = keepLatestUniqueBy(
     suggestionQueue.flatMap((suggestion) =>
       suggestion.widgets.map((widgetSpec, widgetIndex) => ({
@@ -1745,9 +1750,10 @@ function App() {
   const deleteCanvasWidget = (widget: CanvasWidgetKind) => {
     if (widget === 'text') setChatTextEnabled(false)
     if (widget === 'goal') setChatGoalEnabled(false)
+    if (widget === 'custom') setCustomCanvasWidget(null)
     setSelectedCanvasWidget((current) => current === widget ? null : current)
     setCanvasNotice({
-      name: `已删除${widget === 'text' ? '文字源' : '目标源'}`,
+      name: `已删除${widget === 'text' ? '文字源' : widget === 'goal' ? '目标源' : '自定义组件'}`,
       detail: '组件已从当前直播画面移除。',
     })
   }
@@ -1798,6 +1804,7 @@ function App() {
       onCustomWidgetPromptChange={setCustomWidgetPrompt}
       customWidget={customCanvasWidget}
       onCustomWidgetChange={setCustomCanvasWidget}
+      onDeleteCustomWidget={() => deleteCanvasWidget('custom')}
       onGenerateCustomWidget={() => {
         const widget = createCustomCanvasWidget(customWidgetPrompt)
         if (!widget) return
@@ -2401,10 +2408,17 @@ function App() {
     studioToolRegistry.execute('studio.reset_camera_effects_preview', {}, studioToolContext)
     setSelectedCanvasWidget(null)
     setSelectedLiveComponent(null)
-    setAgentWidgetSpec(getCameraEffectsWidgetSpec())
+    setIsGenieChatOpen(false)
+    setBeautyToolSpec(getCameraEffectsWidgetSpec())
     setApplied(false)
     setIsSuggestionPreview(false)
     setLiveAdjustment(null)
+    window.setTimeout(() => {
+      beautyToolCardRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+      })
+    }, 0)
   }
 
   const togglePollWidget = () => {
@@ -2660,6 +2674,7 @@ function App() {
   }
 
   const confirmEndLive = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    completeLiveGoal()
     const endedAt = Math.round(performance.timeOrigin + event.timeStamp)
     const elapsedSeconds = liveStartedAt > 0
       ? Math.round((endedAt - liveStartedAt) / 1000)
@@ -3225,7 +3240,11 @@ function App() {
           <LivePreview videoRef={videoRef} cameraEnabled={cameraEnabled} displayStream={displayStream} layoutEditing={isLayoutEditing && previewMode === 'studio'} isPk={isPk} applied={applied} scene={scene} strategy={view === 'live' && strategyCommentState === 'issue' ? demoStrategy : 'normal'} liveAdjustment={liveAdjustment} previewMode={previewMode} liveStageMode={liveStageMode} isPreviewing={isSuggestionPreview} audience={audienceSnapshot} isLive={isLiveWorkspace} preliveTitle={streamTopic} preliveLayout={preliveLayout} stageBackgroundUrl={stageBackgroundUrl} bandLayout={bandLayoutActive} gameLayout={gameLayout} gameCameraOffset={gameCameraOffset} onGameCameraOffsetChange={setGameCameraOffset} selectedLiveComponent={selectedLiveComponent} liveComponentOffsets={liveComponentOffsets} onLiveComponentOffsetChange={(component, offset) => setLiveComponentOffsets((current) => ({ ...current, [component]: offset }))} onSelectLiveComponent={selectLiveComponent} onDeleteLiveComponent={deleteLiveComponent} chatWidgets={canvasWidgetsAvailable ? {
             text: chatTextEnabled ? chatTextValue : '',
             goalVisible: chatGoalEnabled,
-            goal: { label: chatGoalTitle, current: 0, target: chatGoalTarget },
+            goal: {
+              label: liveGoalState.config?.label ?? chatGoalTitle,
+              current: isLiveWorkspace ? liveGoalState.config?.current ?? 0 : 0,
+              target: liveGoalState.config?.target ?? chatGoalTarget,
+            },
             textStyle: chatTextStyle,
             selectedWidget: selectedCanvasWidget,
             onSelectWidget: selectCanvasWidget,
@@ -3238,13 +3257,14 @@ function App() {
             customWidget: customCanvasWidget,
             customWidgetOffset,
             onCustomWidgetOffsetChange: setCustomWidgetOffset,
+            onDeleteCustomWidget: () => deleteCanvasWidget('custom'),
           } : null} />
           {(cameraError || displayError || backgroundMusicError) && <p className="camera-warning">{displayError || cameraError || backgroundMusicError}</p>}
           <div className="stage-controls">
             <button type="button" className="control-button" onClick={enableCamera}><Camera size={18} /><span>{cameraEnabled ? '摄像头已连接' : '开启摄像头'}</span></button>
             <button type="button" className={`control-button ${isMicMuted ? 'active-control' : ''}`} onClick={() => setIsMicMuted((muted) => !muted)}><Mic size={18} /><span>{isMicMuted ? '麦克风已静音' : '麦克风'}</span></button>
             <button type="button" className={`control-button ${isBackgroundMusicPlaying ? 'active-control' : ''}`} onClick={toggleBackgroundMusic}><Music2 size={18} /><span>{isBackgroundMusicPlaying ? '停止 BGM' : '播放 BGM'}</span></button>
-            <button type="button" className={`control-button ${activeWidgetSpec.type === 'camera-effects' ? 'active-control' : ''}`} onClick={openCameraEffects}><WandSparkles size={18} /><span>美化工具</span></button>
+            <button type="button" className={`control-button ${beautyToolSpec ? 'active-control' : ''}`} onClick={openCameraEffects}><WandSparkles size={18} /><span>美化工具</span></button>
             <button type="button" className={`control-button ${displayStream ? 'active-control' : ''}`} onClick={toggleScreenShare}><MonitorUp size={18} /><span>{displayStream ? '停止投屏' : '游戏投屏'}</span></button>
             <button type="button" className={`control-button ${isLayoutEditing ? 'active-control' : ''}`} disabled={!displayStream} onClick={() => setIsLayoutEditing((editing) => !editing)}><LayoutTemplate size={18} /><span>{isLayoutEditing ? '锁定布局' : '编辑布局'}</span></button>
             {displayStream && isLayoutEditing && <button type="button" className="control-button" onClick={resetCameraLayerLayout}><RotateCcw size={18} /><span>重置布局</span></button>}
@@ -3523,6 +3543,26 @@ function App() {
                         />
                       </div>
                     ))}
+                  {liveRightRailMode === 'overview' && beautyToolSpec && (
+                    <div
+                      ref={beautyToolCardRef}
+                      className="recalled-component-item agent-recalled-component"
+                    >
+                      <WidgetRenderer
+                        spec={beautyToolSpec}
+                        applied={false}
+                        isPreviewing={isSuggestionPreview}
+                        onPreview={() => previewSuggestion(beautyToolSpec)}
+                        onApply={() => applySuggestion(beautyToolSpec)}
+                        onUndo={() => undoSuggestion(beautyToolSpec)}
+                        onRefresh={() => setBeautyToolSpec(getCameraEffectsWidgetSpec())}
+                        onSpecChange={setBeautyToolSpec}
+                        onAudioChange={updateAudioPreview}
+                        onVisualChange={updateVisualPreview}
+                        onCameraEffectsChange={updateCameraEffectsPreview}
+                      />
+                    </div>
+                  )}
                   {liveComponentCount === 0 && (
                     <div className="component-empty-state">
                       <LayoutTemplate size={18} />
@@ -3582,7 +3622,7 @@ function App() {
                       customChatTopic={customChatTopic}
                       isChatCompanion={isChatCompanion}
                       canvasWidgetPanel={
-                        canvasWidgetsAvailable && preliveTasks[preliveTaskIndex].id === 'layout'
+                        canvasWidgetsAvailable && preliveTasks[preliveTaskIndex].id === 'widgets'
                           ? renderCanvasWidgetPanel(null)
                           : null
                       }
@@ -3786,6 +3826,7 @@ type ChatCanvasWidgets = {
   customWidget: CustomCanvasWidget | null
   customWidgetOffset: WidgetOffset
   onCustomWidgetOffsetChange: (offset: WidgetOffset) => void
+  onDeleteCustomWidget: () => void
 }
 
 function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, isPk, applied, scene, strategy, liveAdjustment, previewMode, liveStageMode, isPreviewing, audience, isLive, preliveTitle, preliveLayout, stageBackgroundUrl, bandLayout, gameLayout, gameCameraOffset, onGameCameraOffsetChange, selectedLiveComponent, liveComponentOffsets, onLiveComponentOffsetChange, onSelectLiveComponent, onDeleteLiveComponent, chatWidgets }: { videoRef: React.RefObject<HTMLVideoElement>; cameraEnabled: boolean; displayStream: MediaStream | null; layoutEditing: boolean; isPk: boolean; applied: boolean; scene: Scene; strategy: AudienceStrategyId; liveAdjustment: LiveAdjustment | null; previewMode: PreviewMode; liveStageMode: LiveStageMode; isPreviewing: boolean; audience: AudienceSnapshot; isLive: boolean; preliveTitle: string; preliveLayout: PreliveLayout; stageBackgroundUrl: string | null; bandLayout: boolean; gameLayout: 'vertical' | 'landscape' | null; gameCameraOffset: WidgetOffset; onGameCameraOffsetChange: (offset: WidgetOffset) => void; selectedLiveComponent: LiveCanvasComponentId | null; liveComponentOffsets: Record<LiveCanvasComponentId, WidgetOffset>; onLiveComponentOffsetChange: (component: LiveCanvasComponentId, offset: WidgetOffset) => void; onSelectLiveComponent: (component: LiveCanvasComponentId | null) => void; onDeleteLiveComponent: (component: LiveCanvasComponentId) => void; chatWidgets: ChatCanvasWidgets | null }) {
@@ -3977,7 +4018,8 @@ function LivePreview({ videoRef, cameraEnabled, displayStream, layoutEditing, is
               onSelect={() => chatWidgets.onSelectWidget('custom')}
               offset={chatWidgets.customWidgetOffset}
               onOffsetChange={chatWidgets.onCustomWidgetOffsetChange}
-              editable={!showAudiencePreview}
+              onDelete={chatWidgets.onDeleteCustomWidget}
+              editable={!showAudiencePreview || isLive}
             />
           )}
         </>
@@ -4087,6 +4129,7 @@ function CanvasWidgetPanel({
   onCustomWidgetPromptChange,
   customWidget,
   onCustomWidgetChange,
+  onDeleteCustomWidget,
   onGenerateCustomWidget,
 }: {
   selectedWidget: CanvasWidgetKind | null
@@ -4110,6 +4153,7 @@ function CanvasWidgetPanel({
   onCustomWidgetPromptChange: (prompt: string) => void
   customWidget: CustomCanvasWidget | null
   onCustomWidgetChange: (widget: CustomCanvasWidget | null) => void
+  onDeleteCustomWidget: () => void
   onGenerateCustomWidget: () => void
 }) {
   if (selectedWidget === 'text') {
@@ -4261,6 +4305,14 @@ function CanvasWidgetPanel({
           </div>
         </div>
         <small className="chat-widget-tip">参数调整会实时同步到画布，也可在画布中拖动组件调整位置</small>
+        <button
+          type="button"
+          className="live-component-delete-button"
+          onClick={onDeleteCustomWidget}
+        >
+          <Trash2 size={13} />
+          从画面删除
+        </button>
       </div>
     )
   }
@@ -4551,7 +4603,7 @@ function PreliveTaskCard({
             <Sparkles size={14} />
             <span><b>已推荐全屏摄像头布局</b><small>单人竖屏 · 9:16，最适合聊天陪伴</small></span>
           </div>
-          <small className="chat-widget-tip">在下方「互动组件」中勾选文字源、目标源；点击画布中的组件即可编辑内容与样式，并可拖动调整位置</small>
+          <small className="chat-widget-tip">确认布局后，可在下一步添加画布小组件并调整位置</small>
         </div>
       ) : isMusicLayout ? (
         <div className="music-layout-picker">
@@ -4592,7 +4644,7 @@ function PreliveTaskCard({
         </div>
       )
     )}
-    {task.id === 'layout' && canvasWidgetPanel}
+    {task.id === 'widgets' && canvasWidgetPanel}
     {task.id === 'visual' && (
       <div className="prelive-beauty-panel">
         <CameraEffectsWidget

@@ -68,10 +68,8 @@ export const studioRuntimeConfig = {
     countdownIntervalMs: 1_000,
   },
   liveGoal: {
-    /** LIVE Goal 自动增长周期，单位为毫秒。 */
-    autoAdvanceIntervalMs: 3_000,
-    /** LIVE Goal 每次自动增长的分值。 */
-    autoAdvanceAmount: 120,
+    /** 用于本地演示的目标完成时长，单位为毫秒。 */
+    targetDurationMs: 30 * 60 * 1_000,
     /** 点击模拟礼物时增加的 LIVE Goal 分值。 */
     manualGiftAmount: 250,
   },
