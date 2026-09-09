@@ -3633,7 +3633,7 @@
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
-  scrollbar-color: rgba(118, 223, 192, 0.55) transparent;
+  scrollbar-color: transparent transparent;
 }
 
 .prototype-comment-list::-webkit-scrollbar {
@@ -3646,6 +3646,15 @@
 
 .prototype-comment-list::-webkit-scrollbar-thumb {
   border-radius: 999px;
+  background: transparent;
+  transition: background 160ms ease;
+}
+
+.prototype-comment-list:hover {
+  scrollbar-color: rgba(118, 223, 192, 0.55) transparent;
+}
+
+.prototype-comment-list:hover::-webkit-scrollbar-thumb {
   background: rgba(118, 223, 192, 0.55);
 }
 
@@ -3678,9 +3687,10 @@
 .prototype-comment .avatar-3 { background: linear-gradient(145deg, #7b7f99, #27202d); }
 .prototype-comment .avatar-4 { background: linear-gradient(145deg, #e4a0bf, #8d5478); }
 .prototype-comment span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
 }
 .prototype-comment b {
   margin-right: 3px;
@@ -6759,16 +6769,30 @@
 }
 
 .live-chat-panel.is-live .live-chat-comment-list {
-  height: auto;
-  max-height: none;
+  height: 100%;
+  max-height: 100%;
   margin-top: 0;
+  overflow-y: auto;
+}
+
+.live-chat-panel.is-live .live-chat-devices.is-monitoring {
+  flex: 0 0 clamp(68px, 7vw, 96px);
+  height: clamp(68px, 7vw, 96px);
+  align-content: start;
+  overflow: hidden;
+}
+
+.live-chat-panel.is-live .live-chat-gifts {
+  flex: 0 0 clamp(120px, 12vw, 170px);
+  height: clamp(120px, 12vw, 170px);
+  overflow: hidden;
 }
 
 .live-chat-comment-content {
   min-height: 100%;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .live-chat-input {

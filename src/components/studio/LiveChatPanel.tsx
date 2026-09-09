@@ -32,16 +32,29 @@ export function LiveChatPanel({
   const [draft, setDraft] = useState('')
   const commentListRef = useRef<HTMLDivElement>(null)
   const stickToBottomRef = useRef(true)
+  const programmaticScrollUntilRef = useRef(0)
   const comments = [...audience.comments, ...hostComments]
     .sort((left, right) => left.occurredAt - right.occurredAt)
   const lastCommentId = comments.at(-1)?.id
 
   useEffect(() => {
     const list = commentListRef.current
-    if (list && stickToBottomRef.current) {
-      list.scrollTop = list.scrollHeight
-    }
-  }, [lastCommentId, isLive])
+    if (!list || !isLive || !stickToBottomRef.current) return
+
+    const frame = requestAnimationFrame(() => {
+      if (!stickToBottomRef.current) return
+      programmaticScrollUntilRef.current = performance.now() + 120
+      list.scrollTop = Math.max(0, list.scrollHeight - list.clientHeight)
+      requestAnimationFrame(() => {
+        if (stickToBottomRef.current) {
+          programmaticScrollUntilRef.current = performance.now() + 120
+          list.scrollTop = Math.max(0, list.scrollHeight - list.clientHeight)
+        }
+      })
+    })
+
+    return () => cancelAnimationFrame(frame)
+  }, [comments.length, isLive, lastCommentId])
 
   const submitComment = () => {
     const text = draft.trim()
@@ -125,8 +138,11 @@ export function LiveChatPanel({
             tabIndex={0}
             onScroll={(event) => {
               const list = event.currentTarget
+              if (performance.now() < programmaticScrollUntilRef.current) return
+              const distanceFromBottom =
+                list.scrollHeight - list.scrollTop - list.clientHeight
               stickToBottomRef.current =
-                list.scrollHeight - list.scrollTop - list.clientHeight < 24
+                distanceFromBottom <= 24 || list.scrollHeight <= list.clientHeight
             }}
           >
             <div className="live-chat-comment-content">

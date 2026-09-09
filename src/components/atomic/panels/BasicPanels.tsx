@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import {
   Check,
   Gamepad2,
@@ -9,7 +9,7 @@ import {
   Music2,
   RadioTower,
   Sparkles,
-  Upload,
+  X,
 } from 'lucide-react'
 import { Adjustment } from '../../genie/Adjustment'
 import {
@@ -147,7 +147,6 @@ export function MakeupPanel({ onApplied }: AtomicPanelProps) {
 }
 
 export function BackgroundPanel({ onApplied }: AtomicPanelProps) {
-  const inputRef = useRef<HTMLInputElement>(null)
   const settings = useStudioStore((state) => state.cameraEffects)
   const preview = useStudioStore((state) => state.previewCameraEffects)
   const apply = useStudioStore((state) => state.applyCameraEffects)
@@ -188,11 +187,6 @@ export function BackgroundPanel({ onApplied }: AtomicPanelProps) {
           )
         })}
       </div>
-      <input ref={inputRef} type="file" accept="image/*" hidden onChange={(event) => {
-        const file = event.target.files?.[0]
-        if (file) update({ backgroundMode: 'image', backgroundImageUrl: URL.createObjectURL(file), backgroundPreset: null })
-      }} />
-      <button className="atomic-secondary-button" type="button" onClick={() => inputRef.current?.click()}><Upload size={14} />上传背景</button>
       <ApplyButton onClick={() => { apply(settings); onApplied?.('background') }} />
     </Panel>
   )
@@ -202,16 +196,19 @@ export function EffectsPanel({ onApplied }: AtomicPanelProps) {
   const settings = useStudioStore((state) => state.cameraEffects)
   const preview = useStudioStore((state) => state.previewCameraEffects)
   const apply = useStudioStore((state) => state.applyCameraEffects)
-  const [intensity, setIntensity] = useState(50)
-  const [trigger, setTrigger] = useState('持续')
 
   return (
     <Panel title="特效面板">
       <div className="atomic-icon-grid" role="group" aria-label="特效">
         {([
+          ['none', '关闭', X],
           ['sparkles', '星光', Sparkles],
           ['glasses', '眼镜', Glasses],
+          ['sunglasses', '墨镜', Glasses],
           ['heart-sticker', '爱心', Heart],
+          ['cheek-stars', '星星贴', Sparkles],
+          ['butterfly-sticker', '蝴蝶贴', Heart],
+          ['lightning-sticker', '闪电贴', Sparkles],
         ] as const).map(([id, label, Icon]) => (
           <button
             type="button"
@@ -225,8 +222,6 @@ export function EffectsPanel({ onApplied }: AtomicPanelProps) {
           </button>
         ))}
       </div>
-      <Adjustment label="特效强度" max={100} value={`${intensity}%`} onChange={setIntensity} />
-      <label className="atomic-field"><span>触发方式</span><select value={trigger} onChange={(event) => setTrigger(event.target.value)}><option>持续</option><option>收到礼物</option><option>点赞里程碑</option></select></label>
       <ApplyButton onClick={() => { apply(settings); onApplied?.('effects') }} />
     </Panel>
   )

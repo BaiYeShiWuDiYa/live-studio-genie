@@ -254,10 +254,15 @@ export function CameraEffectsWidget({
           {activeSection === 'bundle' && <p className="effect-section-label">人脸道具</p>}
         <div className="effect-mode-control prop-modes" role="group" aria-label="道具方案">
           {([
+            ['none', '关闭', X],
             ['sparkles', '星光', Sparkles],
             ['glasses', '眼镜', Glasses],
+            ['sunglasses', '墨镜', Glasses],
             ['heart-sticker', '爱心', Heart],
-          ] as const).map(([faceEffect, label]) => (
+            ['cheek-stars', '星星贴', Sparkles],
+            ['butterfly-sticker', '蝴蝶贴', Heart],
+            ['lightning-sticker', '闪电贴', Sparkles],
+          ] as const).map(([faceEffect, label, Icon]) => (
             <button
               type="button"
               className={settings.faceEffect === faceEffect ? 'selected' : ''}
@@ -266,11 +271,7 @@ export function CameraEffectsWidget({
               aria-label={label}
               onClick={() => update({ faceEffect })}
             >
-              {faceEffect === 'sparkles'
-                ? <Sparkles size={16} />
-                : faceEffect === 'glasses'
-                  ? <Glasses size={16} />
-                  : <Heart size={16} />}
+              <Icon size={16} />
             </button>
           ))}
         </div>

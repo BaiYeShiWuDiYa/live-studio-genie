@@ -565,7 +565,7 @@
 
 .effect-mode-control.background-modes,
 .effect-mode-control.prop-modes {
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
 }
 
 .effect-mode-control button {

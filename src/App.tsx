@@ -752,13 +752,12 @@ function App() {
     const latestComment = snapshot.comments.at(-1)
     if (!latestComment) return
     setAudienceCommentHistory((history) => {
-      if (history.length === 0) return snapshot.comments
+      if (history.length === 0) return [latestComment]
       if (history.some((comment) => comment.id === latestComment.id)) {
         return history
       }
       return [...history, latestComment]
         .sort((left, right) => left.occurredAt - right.occurredAt)
-        .slice(-studioRuntimeConfig.audience.visibleCommentCount)
     })
   }, [])
   const generatedAudienceSnapshot = useMemo(
@@ -785,7 +784,7 @@ function App() {
     ],
   )
   const audienceSnapshot = useMemo(
-    () => view === 'live' && audienceCommentHistory.length > 0
+    () => view === 'live'
       ? {
           ...generatedAudienceSnapshot,
           comments: audienceCommentHistory,
@@ -2213,17 +2212,7 @@ function App() {
     setIsPk(selectedStrategy.scene === 'pk')
     setSuggestionQueue([])
     setHostComments([])
-    setAudienceCommentHistory(
-      mockAudienceEventAdapter.getStrategySnapshot(
-        'normal',
-        applied,
-        0,
-        'issue',
-        startedAt,
-        0,
-        startedAt,
-      ).comments,
-    )
+    setAudienceCommentHistory([])
     setNormalAiActivity('idle')
     setHiddenSuggestionIds(new Set())
     setIsGenieChatOpen(false)

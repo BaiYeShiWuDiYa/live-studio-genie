@@ -59,7 +59,7 @@ export const studioRuntimeConfig = {
     /** 人像分割推理的最小时间间隔，单位为毫秒。 */
     segmentationIntervalMs: 90,
     /** 人脸关键点推理的最小时间间隔，单位为毫秒。 */
-    faceLandmarkIntervalMs: 120,
+    faceLandmarkIntervalMs: 66,
     /** 人像构图指标发布周期，单位为毫秒。 */
     framingMetricIntervalMs: 600,
   },

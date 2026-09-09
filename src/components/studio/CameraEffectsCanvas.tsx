@@ -86,6 +86,9 @@ function getFaceLandmarker(): Promise<FaceLandmarker> {
           },
           runningMode: 'VIDEO',
           numFaces: 1,
+          minFaceDetectionConfidence: 0.6,
+          minFacePresenceConfidence: 0.55,
+          minTrackingConfidence: 0.55,
           outputFaceBlendshapes: false,
           outputFacialTransformationMatrixes: false,
         })
@@ -106,9 +109,31 @@ export function CameraEffectsCanvas({ videoRef }: CameraEffectsCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const faceLandmarksRef = useRef<NormalizedLandmark[] | null>(null)
   const settings = useStudioStore((state) => state.cameraEffects)
+  const settingsRef = useRef(settings)
+  const backgroundImageRef = useRef<HTMLImageElement | null>(null)
   const updateMetric = useStudioStore((state) => state.updateMediaMetric)
   const resetMetric = useStudioStore((state) => state.resetMediaMetric)
   const active = isCameraEffectActive(settings)
+
+  useEffect(() => {
+    settingsRef.current = settings
+  }, [settings])
+
+  useEffect(() => {
+    const imageUrl = settings.backgroundImageUrl
+    backgroundImageRef.current = null
+    if (!imageUrl) return
+
+    let disposed = false
+    const image = new Image()
+    image.onload = () => {
+      if (!disposed) backgroundImageRef.current = image
+    }
+    image.src = imageUrl
+    return () => {
+      disposed = true
+    }
+  }, [settings.backgroundImageUrl])
 
   useEffect(() => {
     const video = videoRef.current
@@ -137,8 +162,10 @@ export function CameraEffectsCanvas({ videoRef }: CameraEffectsCanvasProps) {
       ) {
         try {
           const result = faceLandmarker.detectForVideo(video, timestamp)
-          faceLandmarksRef.current =
-            result.faceLandmarks[0]?.map((landmark) => ({ ...landmark })) ?? null
+          const detectedLandmarks = result.faceLandmarks[0] ?? null
+          faceLandmarksRef.current = detectedLandmarks
+            ? smoothFaceLandmarks(faceLandmarksRef.current, detectedLandmarks)
+            : null
         } catch {
           faceLandmarksRef.current = null
         }
@@ -173,29 +200,35 @@ export function CameraEffectsCanvas({ videoRef }: CameraEffectsCanvasProps) {
 
     const personCanvas = document.createElement('canvas')
     const maskCanvas = document.createElement('canvas')
+    const smoothingCanvas = document.createElement('canvas')
+    const skinMaskCanvas = document.createElement('canvas')
+    const skinLayerCanvas = document.createElement('canvas')
+    const geometryCanvas = document.createElement('canvas')
     const personContext = personCanvas.getContext('2d')
     const maskContext = maskCanvas.getContext('2d')
-    if (!personContext || !maskContext) return
+    const smoothingContext = smoothingCanvas.getContext('2d')
+    const skinMaskContext = skinMaskCanvas.getContext('2d')
+    const skinLayerContext = skinLayerCanvas.getContext('2d')
+    const geometryContext = geometryCanvas.getContext('2d')
+    if (
+      !personContext ||
+      !maskContext ||
+      !smoothingContext ||
+      !skinMaskContext ||
+      !skinLayerContext ||
+      !geometryContext
+    ) {
+      return
+    }
 
     let animationFrame = 0
     let disposed = false
     let segmenter: ImageSegmenter | null = null
+    let segmenterLoading = false
+    let segmenterUnavailable = false
     let lastSegmentAt = 0
-    let latestMask: MPMask | null = null
-    let backgroundImage: HTMLImageElement | null = null
-
-    if (settings.backgroundMode !== 'none') {
-      void getSegmenter().then((instance) => {
-        if (!disposed) segmenter = instance
-      })
-    }
-    if (settings.backgroundImageUrl) {
-      const image = new Image()
-      image.onload = () => {
-        if (!disposed) backgroundImage = image
-      }
-      image.src = settings.backgroundImageUrl
-    }
+    let hasSegmentationMask = false
+    let previousMaskPixels: Uint8ClampedArray | null = null
 
     const draw = (timestamp: number) => {
       if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
@@ -212,16 +245,47 @@ export function CameraEffectsCanvas({ videoRef }: CameraEffectsCanvasProps) {
 
       resizeCanvas(canvas, width, height)
       resizeCanvas(personCanvas, width, height)
+      resizeCanvas(smoothingCanvas, width, height)
+      resizeCanvas(skinMaskCanvas, width, height)
+      resizeCanvas(skinLayerCanvas, width, height)
+      resizeCanvas(geometryCanvas, width, height)
 
+      const currentSettings = settingsRef.current
       if (
-        settings.backgroundMode !== 'none' &&
+        currentSettings.backgroundMode !== 'none' &&
+        !segmenter &&
+        !segmenterLoading &&
+        !segmenterUnavailable
+      ) {
+        segmenterLoading = true
+        void getSegmenter()
+          .then((instance) => {
+            if (!disposed) segmenter = instance
+          })
+          .catch(() => {
+            if (!disposed) segmenterUnavailable = true
+          })
+          .finally(() => {
+            segmenterLoading = false
+          })
+      }
+      if (
+        currentSettings.backgroundMode !== 'none' &&
         segmenter &&
         timestamp - lastSegmentAt >=
           studioRuntimeConfig.cameraEffects.segmentationIntervalMs
       ) {
-        latestMask?.close()
         const result = segmenter.segmentForVideo(video, timestamp)
-        latestMask = result.confidenceMasks?.[0]?.clone() ?? null
+        const mask = result.confidenceMasks?.[0]
+        if (mask) {
+          previousMaskPixels = updateMaskCanvas(
+            maskCanvas,
+            maskContext,
+            mask,
+            previousMaskPixels,
+          )
+          hasSegmentationMask = true
+        }
         result.confidenceMasks?.forEach((mask) => mask.close())
         lastSegmentAt = timestamp
       }
@@ -231,13 +295,20 @@ export function CameraEffectsCanvas({ videoRef }: CameraEffectsCanvasProps) {
         personCanvas,
         personContext,
         maskCanvas,
-        maskContext,
-        mask: latestMask,
+        smoothingCanvas,
+        smoothingContext,
+        skinMaskCanvas,
+        skinMaskContext,
+        skinLayerCanvas,
+        skinLayerContext,
+        geometryCanvas,
+        geometryContext,
+        hasSegmentationMask,
         faceLandmarks: faceLandmarksRef.current,
-        backgroundImage,
+        backgroundImage: backgroundImageRef.current,
         width,
         height,
-        settings,
+        settings: currentSettings,
       })
       animationFrame = requestAnimationFrame(draw)
     }
@@ -246,9 +317,8 @@ export function CameraEffectsCanvas({ videoRef }: CameraEffectsCanvasProps) {
     return () => {
       disposed = true
       cancelAnimationFrame(animationFrame)
-      latestMask?.close()
     }
-  }, [active, settings, videoRef])
+  }, [active, videoRef])
 
   if (!active) return null
   return <canvas ref={canvasRef} className="camera-feed camera-effects-canvas" aria-label="美化后摄像头画面" />
@@ -260,8 +330,15 @@ function drawProcessedFrame({
   personCanvas,
   personContext,
   maskCanvas,
-  maskContext,
-  mask,
+  smoothingCanvas,
+  smoothingContext,
+  skinMaskCanvas,
+  skinMaskContext,
+  skinLayerCanvas,
+  skinLayerContext,
+  geometryCanvas,
+  geometryContext,
+  hasSegmentationMask,
   faceLandmarks,
   backgroundImage,
   width,
@@ -273,8 +350,15 @@ function drawProcessedFrame({
   personCanvas: HTMLCanvasElement
   personContext: CanvasRenderingContext2D
   maskCanvas: HTMLCanvasElement
-  maskContext: CanvasRenderingContext2D
-  mask: MPMask | null
+  smoothingCanvas: HTMLCanvasElement
+  smoothingContext: CanvasRenderingContext2D
+  skinMaskCanvas: HTMLCanvasElement
+  skinMaskContext: CanvasRenderingContext2D
+  skinLayerCanvas: HTMLCanvasElement
+  skinLayerContext: CanvasRenderingContext2D
+  geometryCanvas: HTMLCanvasElement
+  geometryContext: CanvasRenderingContext2D
+  hasSegmentationMask: boolean
   faceLandmarks: NormalizedLandmark[] | null
   backgroundImage: HTMLImageElement | null
   width: number
@@ -283,20 +367,41 @@ function drawProcessedFrame({
 }) {
   context.clearRect(0, 0, width, height)
   const filter = [
-    `brightness(${1 + settings.exposure / 100 + settings.whitening / 500})`,
-    `contrast(${1 + settings.contrast / 100 + settings.clarity / 500})`,
+    `brightness(${1 + settings.exposure / 100})`,
+    `contrast(${1 + settings.contrast / 100})`,
     `sepia(${settings.warmth / 160})`,
-    `saturate(${1 + settings.warmth / 180 + settings.saturation / 100 + settings.rosiness / 600})`,
-    `blur(${settings.smoothness * 0.008}px)`,
+    `saturate(${1 + settings.warmth / 180 + settings.saturation / 100})`,
   ].join(' ')
 
-  if (settings.backgroundMode === 'none' || !mask) {
+  if (settings.backgroundMode === 'none' || !hasSegmentationMask) {
     context.filter = filter
     context.drawImage(video, 0, 0, width, height)
     context.filter = 'none'
-    drawSkinTone(context, faceLandmarks, settings, width, height)
-    drawMakeup(context, faceLandmarks, settings, width, height)
-    drawFaceEffect(context, faceLandmarks, settings.faceEffect, width, height)
+    const renderedLandmarks = drawFaceGeometry(
+      context,
+      geometryCanvas,
+      geometryContext,
+      faceLandmarks,
+      settings,
+      width,
+      height,
+    )
+    drawSkinSmoothing(
+      context,
+      smoothingCanvas,
+      smoothingContext,
+      skinMaskCanvas,
+      skinMaskContext,
+      skinLayerCanvas,
+      skinLayerContext,
+      renderedLandmarks,
+      settings,
+      width,
+      height,
+    )
+    drawSkinTone(context, renderedLandmarks, settings, width, height)
+    drawMakeup(context, renderedLandmarks, settings, width, height)
+    drawFaceEffect(context, renderedLandmarks, settings.faceEffect, width, height)
     return
   }
 
@@ -321,12 +426,6 @@ function drawProcessedFrame({
     context.filter = 'none'
   }
 
-  const maskPixels = createAlphaMask(mask.getAsFloat32Array())
-  resizeCanvas(maskCanvas, mask.width, mask.height)
-  const imageData = maskContext.createImageData(mask.width, mask.height)
-  imageData.data.set(maskPixels)
-  maskContext.putImageData(imageData, 0, 0)
-
   personContext.clearRect(0, 0, width, height)
   personContext.filter = filter
   personContext.drawImage(video, 0, 0, width, height)
@@ -335,9 +434,52 @@ function drawProcessedFrame({
   personContext.drawImage(maskCanvas, 0, 0, width, height)
   personContext.globalCompositeOperation = 'source-over'
   context.drawImage(personCanvas, 0, 0)
-  drawSkinTone(context, faceLandmarks, settings, width, height)
-  drawMakeup(context, faceLandmarks, settings, width, height)
-  drawFaceEffect(context, faceLandmarks, settings.faceEffect, width, height)
+  const renderedLandmarks = drawFaceGeometry(
+    context,
+    geometryCanvas,
+    geometryContext,
+    faceLandmarks,
+    settings,
+    width,
+    height,
+  )
+  drawSkinSmoothing(
+    context,
+    smoothingCanvas,
+    smoothingContext,
+    skinMaskCanvas,
+    skinMaskContext,
+    skinLayerCanvas,
+    skinLayerContext,
+    renderedLandmarks,
+    settings,
+    width,
+    height,
+  )
+  drawSkinTone(context, renderedLandmarks, settings, width, height)
+  drawMakeup(context, renderedLandmarks, settings, width, height)
+  drawFaceEffect(context, renderedLandmarks, settings.faceEffect, width, height)
+}
+
+function updateMaskCanvas(
+  canvas: HTMLCanvasElement,
+  context: CanvasRenderingContext2D,
+  mask: MPMask,
+  previousPixels: Uint8ClampedArray | null,
+): Uint8ClampedArray {
+  resizeCanvas(canvas, mask.width, mask.height)
+  const pixels = createAlphaMask(mask.getAsFloat32Array())
+  if (previousPixels?.length === pixels.length) {
+    for (let offset = 3; offset < pixels.length; offset += 4) {
+      pixels[offset] = Math.round(
+        previousPixels[offset] * 0.58 + pixels[offset] * 0.42,
+      )
+    }
+  }
+  const imageData = context.createImageData(mask.width, mask.height)
+  imageData.data.set(pixels)
+  context.putImageData(imageData, 0, 0)
+  return pixels
 }
 
 function drawVirtualBackground(
@@ -513,6 +655,395 @@ function drawImageCover(
   )
 }
 
+const FACE_OVAL = [
+  10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288,
+  397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136,
+  172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109,
+]
+const LEFT_EYE = [33, 160, 158, 133, 153, 144]
+const RIGHT_EYE = [362, 385, 387, 263, 373, 380]
+
+function drawFaceGeometry(
+  context: CanvasRenderingContext2D,
+  geometryCanvas: HTMLCanvasElement,
+  geometryContext: CanvasRenderingContext2D,
+  landmarks: NormalizedLandmark[] | null,
+  settings: CameraEffects,
+  width: number,
+  height: number,
+): NormalizedLandmark[] | null {
+  if (
+    !landmarks ||
+    (settings.slimFace === 0 && settings.bigEyes === 0)
+  ) {
+    return landmarks
+  }
+
+  const leftFace = landmarks[234]
+  const rightFace = landmarks[454]
+  const forehead = landmarks[10]
+  const chin = landmarks[152]
+  if (!leftFace || !rightFace || !forehead || !chin) return landmarks
+
+  const faceLeft = Math.min(leftFace.x, rightFace.x) * width
+  const faceRight = Math.max(leftFace.x, rightFace.x) * width
+  const faceTop = Math.min(forehead.y, chin.y) * height
+  const faceBottom = Math.max(forehead.y, chin.y) * height
+  const faceWidth = faceRight - faceLeft
+  const faceHeight = faceBottom - faceTop
+  if (faceWidth < 2 || faceHeight < 2) return landmarks
+
+  const transformed = landmarks.map((landmark) => ({ ...landmark }))
+  if (settings.slimFace > 0) {
+    geometryContext.clearRect(0, 0, width, height)
+    geometryContext.drawImage(context.canvas, 0, 0)
+    const outerLeft = Math.max(0, faceLeft - faceWidth * 0.38)
+    const outerRight = Math.min(width, faceRight + faceWidth * 0.38)
+    const top = Math.max(0, faceTop - faceHeight * 0.08)
+    const bottom = Math.min(height, faceBottom + faceHeight * 0.08)
+    const rowCount = 22
+
+    for (let row = 0; row < rowCount; row += 1) {
+      const sourceY = top + ((bottom - top) * row) / rowCount
+      const nextY = top + ((bottom - top) * (row + 1)) / rowCount
+      const stripHeight = Math.max(1, nextY - sourceY + 0.6)
+      const middleY = (sourceY + nextY) / 2
+      const inset = getSlimFaceInset(
+        middleY,
+        faceTop,
+        faceBottom,
+        faceWidth,
+        settings.slimFace,
+      )
+      const targetLeft = faceLeft + inset
+      const targetRight = faceRight - inset
+
+      drawHorizontalWarpSection(
+        context,
+        geometryCanvas,
+        outerLeft,
+        faceLeft,
+        outerLeft,
+        targetLeft,
+        sourceY,
+        stripHeight,
+      )
+      drawHorizontalWarpSection(
+        context,
+        geometryCanvas,
+        faceLeft,
+        faceRight,
+        targetLeft,
+        targetRight,
+        sourceY,
+        stripHeight,
+      )
+      drawHorizontalWarpSection(
+        context,
+        geometryCanvas,
+        faceRight,
+        outerRight,
+        targetRight,
+        outerRight,
+        sourceY,
+        stripHeight,
+      )
+    }
+
+    transformed.forEach((landmark) => {
+      const x = landmark.x * width
+      const y = landmark.y * height
+      landmark.x = mapSlimFaceX(
+        x,
+        y,
+        outerLeft,
+        faceLeft,
+        faceRight,
+        outerRight,
+        faceTop,
+        faceBottom,
+        faceWidth,
+        settings.slimFace,
+      ) / width
+    })
+  }
+
+  if (settings.bigEyes > 0) {
+    geometryContext.clearRect(0, 0, width, height)
+    geometryContext.drawImage(context.canvas, 0, 0)
+    for (const indices of [LEFT_EYE, RIGHT_EYE]) {
+      magnifyEye(
+        context,
+        geometryCanvas,
+        transformed,
+        indices,
+        settings.bigEyes,
+        width,
+        height,
+      )
+      magnifyLandmarksAroundEye(
+        transformed,
+        indices,
+        settings.bigEyes,
+        width,
+        height,
+      )
+    }
+  }
+
+  return transformed
+}
+
+function getSlimFaceInset(
+  y: number,
+  faceTop: number,
+  faceBottom: number,
+  faceWidth: number,
+  intensity: number,
+) {
+  const progress = Math.min(
+    1,
+    Math.max(0, (y - faceTop) / Math.max(1, faceBottom - faceTop)),
+  )
+  const verticalWeight = Math.sin(Math.PI * progress) *
+    Math.min(1, Math.max(0, (progress - 0.18) / 0.32))
+  return faceWidth * 0.055 * (intensity / 100) * verticalWeight
+}
+
+function mapSlimFaceX(
+  x: number,
+  y: number,
+  outerLeft: number,
+  faceLeft: number,
+  faceRight: number,
+  outerRight: number,
+  faceTop: number,
+  faceBottom: number,
+  faceWidth: number,
+  intensity: number,
+) {
+  const inset = getSlimFaceInset(
+    y,
+    faceTop,
+    faceBottom,
+    faceWidth,
+    intensity,
+  )
+  if (x <= faceLeft) {
+    const progress = (x - outerLeft) / Math.max(1, faceLeft - outerLeft)
+    return x + inset * Math.min(1, Math.max(0, progress))
+  }
+  if (x >= faceRight) {
+    const progress = (outerRight - x) / Math.max(1, outerRight - faceRight)
+    return x - inset * Math.min(1, Math.max(0, progress))
+  }
+  const progress = (x - faceLeft) / Math.max(1, faceRight - faceLeft)
+  return faceLeft + inset + progress * (faceWidth - inset * 2)
+}
+
+function drawHorizontalWarpSection(
+  context: CanvasRenderingContext2D,
+  source: HTMLCanvasElement,
+  sourceLeft: number,
+  sourceRight: number,
+  targetLeft: number,
+  targetRight: number,
+  y: number,
+  height: number,
+) {
+  const sourceWidth = sourceRight - sourceLeft
+  const targetWidth = targetRight - targetLeft
+  if (sourceWidth <= 0 || targetWidth <= 0) return
+  context.drawImage(
+    source,
+    sourceLeft,
+    y,
+    sourceWidth,
+    height,
+    targetLeft,
+    y,
+    targetWidth,
+    height,
+  )
+}
+
+function magnifyEye(
+  context: CanvasRenderingContext2D,
+  source: HTMLCanvasElement,
+  landmarks: NormalizedLandmark[],
+  indices: number[],
+  intensity: number,
+  width: number,
+  height: number,
+) {
+  const points = indices.map((index) => landmarks[index])
+  if (points.some((point) => !point)) return
+  const xs = points.map((point) => point.x * width)
+  const ys = points.map((point) => point.y * height)
+  const centerX = (Math.min(...xs) + Math.max(...xs)) / 2
+  const centerY = (Math.min(...ys) + Math.max(...ys)) / 2
+  const radiusX = Math.max(2, (Math.max(...xs) - Math.min(...xs)) * 0.82)
+  const radiusY = Math.max(2, radiusX * 0.62)
+  const scale = 1 + intensity * 0.0018
+  const targetRadiusX = radiusX * scale
+  const targetRadiusY = radiusY * scale
+
+  context.save()
+  context.beginPath()
+  context.ellipse(
+    centerX,
+    centerY,
+    targetRadiusX,
+    targetRadiusY,
+    0,
+    0,
+    Math.PI * 2,
+  )
+  context.clip()
+  context.drawImage(
+    source,
+    centerX - radiusX,
+    centerY - radiusY,
+    radiusX * 2,
+    radiusY * 2,
+    centerX - targetRadiusX,
+    centerY - targetRadiusY,
+    targetRadiusX * 2,
+    targetRadiusY * 2,
+  )
+  context.restore()
+}
+
+function magnifyLandmarksAroundEye(
+  landmarks: NormalizedLandmark[],
+  indices: number[],
+  intensity: number,
+  width: number,
+  height: number,
+) {
+  const eyePoints = indices.map((index) => landmarks[index])
+  if (eyePoints.some((point) => !point)) return
+  const centerX = eyePoints.reduce((sum, point) => sum + point.x, 0) /
+    eyePoints.length
+  const centerY = eyePoints.reduce((sum, point) => sum + point.y, 0) /
+    eyePoints.length
+  const eyeWidth = Math.max(
+    ...eyePoints.map((point) => Math.abs(point.x - centerX) * width),
+  ) * 1.7
+  const radius = Math.max(0.001, eyeWidth / width)
+  const scaleDelta = intensity * 0.0018
+
+  landmarks.forEach((landmark) => {
+    const dx = landmark.x - centerX
+    const dy = (landmark.y - centerY) * (height / width)
+    const distance = Math.hypot(dx, dy)
+    if (distance >= radius) return
+    const weight = (1 - distance / radius) ** 2
+    landmark.x = centerX + dx * (1 + scaleDelta * weight)
+    landmark.y = centerY +
+      (landmark.y - centerY) * (1 + scaleDelta * weight)
+  })
+}
+
+function smoothFaceLandmarks(
+  previous: NormalizedLandmark[] | null,
+  detected: NormalizedLandmark[],
+): NormalizedLandmark[] {
+  if (!previous || previous.length !== detected.length) {
+    return detected.map((landmark) => ({ ...landmark }))
+  }
+
+  const anchors = [1, 10, 33, 152, 234, 263, 454]
+  const movement = anchors.reduce((total, index) => {
+    const before = previous[index]
+    const after = detected[index]
+    if (!before || !after) return total
+    return total + Math.hypot(after.x - before.x, after.y - before.y)
+  }, 0) / anchors.length
+  const alpha = Math.min(0.88, Math.max(0.34, 0.34 + movement * 24))
+
+  return detected.map((landmark, index) => {
+    const before = previous[index]
+    if (!before) return { ...landmark }
+    return {
+      ...landmark,
+      x: before.x + (landmark.x - before.x) * alpha,
+      y: before.y + (landmark.y - before.y) * alpha,
+      z: before.z + (landmark.z - before.z) * alpha,
+    }
+  })
+}
+
+function drawSkinSmoothing(
+  context: CanvasRenderingContext2D,
+  smoothingCanvas: HTMLCanvasElement,
+  smoothingContext: CanvasRenderingContext2D,
+  skinMaskCanvas: HTMLCanvasElement,
+  skinMaskContext: CanvasRenderingContext2D,
+  skinLayerCanvas: HTMLCanvasElement,
+  skinLayerContext: CanvasRenderingContext2D,
+  landmarks: NormalizedLandmark[] | null,
+  settings: CameraEffects,
+  width: number,
+  height: number,
+) {
+  if (
+    !landmarks ||
+    (settings.smoothness === 0 && settings.clarity === 0)
+  ) {
+    return
+  }
+
+  skinMaskContext.clearRect(0, 0, width, height)
+  skinMaskContext.save()
+  skinMaskContext.filter = `blur(${Math.max(1.5, width * 0.0022)}px)`
+  skinMaskContext.fillStyle = '#fff'
+  traceFaceSkinPath(skinMaskContext, landmarks, width, height)
+  skinMaskContext.fill('evenodd')
+  skinMaskContext.restore()
+
+  smoothingContext.clearRect(0, 0, width, height)
+  smoothingContext.filter = settings.smoothness > 0
+    ? `blur(${0.7 + settings.smoothness * 0.018}px)`
+    : 'none'
+  smoothingContext.drawImage(context.canvas, 0, 0, width, height)
+  smoothingContext.filter = 'none'
+
+  skinLayerContext.clearRect(0, 0, width, height)
+  skinLayerContext.drawImage(smoothingCanvas, 0, 0, width, height)
+  skinLayerContext.globalCompositeOperation = 'destination-in'
+  skinLayerContext.drawImage(skinMaskCanvas, 0, 0, width, height)
+  skinLayerContext.globalCompositeOperation = 'source-over'
+
+  if (settings.smoothness > 0) {
+    context.save()
+    context.globalAlpha = Math.min(0.72, settings.smoothness / 125)
+    context.drawImage(skinLayerCanvas, 0, 0)
+    context.restore()
+  }
+  if (settings.clarity > 0) {
+    context.save()
+    context.globalCompositeOperation = 'soft-light'
+    context.globalAlpha = Math.min(0.3, settings.clarity / 330)
+    context.filter = `contrast(${1 + settings.clarity / 180})`
+    context.drawImage(skinLayerCanvas, 0, 0)
+    context.restore()
+  }
+}
+
+function traceFaceSkinPath(
+  context: CanvasRenderingContext2D,
+  landmarks: NormalizedLandmark[],
+  width: number,
+  height: number,
+) {
+  context.beginPath()
+  traceLandmarkPath(context, landmarks, FACE_OVAL, width, height)
+  traceLandmarkPath(context, landmarks, LEFT_EYE, width, height)
+  traceLandmarkPath(context, landmarks, RIGHT_EYE, width, height)
+  traceLandmarkPath(context, landmarks, LIPS_OUTER, width, height)
+}
+
 // Landmark regions and compositing approach adapted from simple-makeup-filter (MIT).
 const LIPS_OUTER = [
   61, 185, 40, 39, 37, 0, 267, 269, 270, 409,
@@ -601,14 +1132,10 @@ function drawMakeup(
     (right.x - left.x) * width,
   )
 
-  context.save()
-  context.globalCompositeOperation = 'multiply'
   drawLipstick(context, landmarks, settings, width, height, faceWidth)
   drawBlush(context, landmarks, settings, width, height, faceWidth, roll)
   drawEyeshadow(context, landmarks, settings, width, height, faceWidth, roll)
   drawEyeliner(context, landmarks, settings, width, height, faceWidth)
-  context.restore()
-
   drawHighlight(context, landmarks, settings, width, height, faceWidth)
 }
 
@@ -621,6 +1148,8 @@ function drawLipstick(
   faceWidth: number,
 ) {
   if (settings.lipstickIntensity === 0) return
+  context.save()
+  context.globalCompositeOperation = 'multiply'
   context.filter = `blur(${Math.max(0.8, faceWidth * 0.005)}px)`
   context.fillStyle = hexToRgba(
     settings.lipstickColor,
@@ -631,6 +1160,28 @@ function drawLipstick(
   traceLandmarkPath(context, landmarks, LIPS_INNER, width, height)
   context.fill('evenodd')
   context.filter = 'none'
+  context.restore()
+
+  const lowerLip = landmarks[17]
+  const upperLip = landmarks[0]
+  if (!lowerLip || !upperLip) return
+  context.save()
+  context.globalCompositeOperation = 'screen'
+  context.globalAlpha = Math.min(0.18, settings.lipstickIntensity / 520)
+  context.fillStyle = '#fff1e8'
+  context.filter = `blur(${Math.max(0.8, faceWidth * 0.004)}px)`
+  context.beginPath()
+  context.ellipse(
+    ((lowerLip.x + upperLip.x) * 0.5) * width,
+    ((lowerLip.y + upperLip.y) * 0.5) * height + faceWidth * 0.012,
+    faceWidth * 0.085,
+    faceWidth * 0.018,
+    0,
+    0,
+    Math.PI * 2,
+  )
+  context.fill()
+  context.restore()
 }
 
 function drawBlush(
@@ -664,6 +1215,7 @@ function drawBlush(
     const radius = faceWidth * 0.15
     const alpha = settings.blushIntensity / 260
     context.save()
+    context.globalCompositeOperation = 'soft-light'
     context.translate(centerX, centerY)
     context.rotate(roll)
     context.scale(1.55, 1)
@@ -689,6 +1241,8 @@ function drawEyeshadow(
   roll: number,
 ) {
   if (settings.eyeshadowIntensity === 0) return
+  context.save()
+  context.globalCompositeOperation = 'multiply'
   const upX = Math.sin(roll)
   const upY = -Math.cos(roll)
   const lift = faceWidth * 0.055
@@ -728,6 +1282,7 @@ function drawEyeshadow(
     context.fill()
   }
   context.filter = 'none'
+  context.restore()
 }
 
 function drawEyeliner(
@@ -739,6 +1294,8 @@ function drawEyeliner(
   faceWidth: number,
 ) {
   if (settings.eyelinerIntensity === 0) return
+  context.save()
+  context.globalCompositeOperation = 'source-over'
   const left = landmarks[234]
   const right = landmarks[454]
   const nose = landmarks[1]
@@ -790,6 +1347,7 @@ function drawEyeliner(
     context.closePath()
     context.fill()
   }
+  context.restore()
 }
 
 function drawHighlight(
