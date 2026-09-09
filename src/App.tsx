@@ -144,6 +144,7 @@ import {
   type CanvasTextStyle,
   type WidgetOffset,
 } from './capabilities/widgets/canvasWidgets'
+import { classifyCustomWidgetIntent, type VectorStickerId } from './capabilities/widgets/customWidgetIntent'
 import { LiveChatPanel } from './components/studio/LiveChatPanel'
 import { AtomicRecallCard } from './components/atomic/AtomicRecallCard'
 import { recallAtomicComponents } from './components/atomic/intentRecall'
@@ -312,7 +313,9 @@ type CustomCanvasWidget = {
   detail: string
   color: string
   size: CustomWidgetSize
-  kind: 'banner' | 'leaderboard'
+  kind: 'text' | 'sticker' | 'leaderboard' | 'image'
+  sticker?: VectorStickerId
+  imageUrl?: string
   leaderboardType?: LeaderboardType
   entries?: LeaderboardEntry[]
 }
@@ -320,6 +323,7 @@ type CustomCanvasWidget = {
 function createCustomCanvasWidget(prompt: string): CustomCanvasWidget | null {
   const normalized = prompt.trim()
   if (!normalized) return null
+  const classification = classifyCustomWidgetIntent(normalized)
   const createLeaderboard = (type: LeaderboardType): CustomCanvasWidget => ({
     prompt: normalized,
     title: type === 'likes' ? 'Top likers' : 'Top gifters',
@@ -341,23 +345,40 @@ function createCustomCanvasWidget(prompt: string): CustomCanvasWidget | null {
         ],
   })
 
-  if (/点赞(?:榜|榜单|排行(?:榜)?|排名)|赞榜|like(?:\s*(?:榜|排行|ranking))?|top\s*likes?/i.test(normalized)) {
-    return createLeaderboard('likes')
+  if (classification.intent === 'leaderboard') {
+    return createLeaderboard(classification.leaderboardType ?? 'likes')
   }
-  if (/送礼(?:榜|榜单|排行(?:榜)?|排名)|礼物(?:榜|榜单|排行(?:榜)?|排名)|gift(?:\s*(?:榜|排行|ranking))?|top\s*gifters?/i.test(normalized)) {
-    return createLeaderboard('gifts')
+  if (classification.intent === 'sticker') {
+    return {
+      prompt: normalized,
+      title: '矢量贴纸',
+      detail: normalized.slice(0, 24),
+      color: '#ffcf70',
+      size: 'large',
+      kind: 'sticker',
+      sticker: classification.sticker ?? 'sparkle',
+    }
   }
-
-  if (/关注|点赞|订阅|助力/.test(normalized)) {
-    return { prompt: normalized, title: '点个关注，一起聊聊', detail: '你的关注是今天的直播动力', color: '#ff5c82', size: 'regular', kind: 'banner' }
+  if (classification.intent === 'image') {
+    const imagePrompt = encodeURIComponent(`A polished ${normalized.slice(0, 80)} for a livestream overlay, clear subject, vibrant studio lighting, no text, square composition`)
+    return {
+      prompt: normalized,
+      title: normalized.slice(0, 24),
+      detail: '图片组件',
+      color: '#78aaff',
+      size: 'regular',
+      kind: 'image',
+      imageUrl: `https://copilot-cn.bytedance.net/api/ide/v1/text_to_image?prompt=${imagePrompt}&image_size=square`,
+    }
   }
-  if (/福利|抽奖|限时|倒计时/.test(normalized)) {
-    return { prompt: normalized, title: '限时互动福利', detail: '参与评论互动，解锁本场惊喜', color: '#f4b95f', size: 'regular', kind: 'banner' }
+  return {
+    prompt: normalized,
+    title: normalized.slice(0, 28),
+    detail: '文字源',
+    color: '#e8efff',
+    size: 'regular',
+    kind: 'text',
   }
-  if (/提问|问答|话题|聊天/.test(normalized)) {
-    return { prompt: normalized, title: '评论区聊聊', detail: normalized.slice(0, 28), color: '#6edbc0', size: 'regular', kind: 'banner' }
-  }
-  return { prompt: normalized, title: normalized.slice(0, 16), detail: '点击评论区，一起参与互动', color: '#78aaff', size: 'regular', kind: 'banner' }
 }
 type LiveCanvasComponentId = Extract<
   AtomicComponentId,
@@ -4335,11 +4356,11 @@ function CanvasWidgetPanel({
       <div className="custom-widget-generator">
         <label>
           <span>自定义组件</span>
-          <input value={customWidgetPrompt} maxLength={60} placeholder="例如：生成一个限时福利提醒组件" onChange={(event) => onCustomWidgetPromptChange(event.target.value)} />
+          <input value={customWidgetPrompt} maxLength={60} placeholder="例如：我想要一个火箭贴纸" onChange={(event) => onCustomWidgetPromptChange(event.target.value)} />
         </label>
         <button type="button" disabled={!customWidgetPrompt.trim()} onClick={onGenerateCustomWidget}>生成组件</button>
       </div>
-      <small className="chat-widget-tip">勾选后在画布中展示；点击列表项或画布中的组件即可编辑，拖动可调整位置</small>
+      <small className="chat-widget-tip">支持文字源、贴纸、排行榜、图片；生成后可编辑并拖动调整位置</small>
     </div>
   )
 }
