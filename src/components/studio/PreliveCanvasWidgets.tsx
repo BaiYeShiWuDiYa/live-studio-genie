@@ -6,6 +6,7 @@ import {
   defaultCanvasTextStyle,
   type WidgetOffset,
 } from '../../capabilities/widgets/canvasWidgets'
+import type { VectorStickerId } from '../../capabilities/widgets/customWidgetIntent'
 
 interface DraggableWidgetProps {
   className: string
@@ -284,7 +285,9 @@ interface CanvasCustomWidgetProps {
     detail: string
     color: string
     size: 'compact' | 'regular' | 'large'
-    kind: 'banner' | 'leaderboard'
+    kind: 'text' | 'sticker' | 'leaderboard' | 'image'
+    sticker?: VectorStickerId
+    imageUrl?: string
     leaderboardType?: 'likes' | 'gifts'
     entries?: Array<{
       id: string
@@ -301,6 +304,48 @@ interface CanvasCustomWidgetProps {
   editable?: boolean
 }
 
+function CanvasVectorSticker({ sticker = 'sparkle' }: { sticker?: VectorStickerId }) {
+  if (sticker === 'rocket') {
+    return (
+      <svg className="canvas-sticker" viewBox="0 0 96 96" role="img" aria-label="火箭贴纸">
+        <path fill="#f4f8ff" d="M57 12c16 8 23 25 22 46L51 86c-20-1-34-10-41-26 21-1 38-9 47-25Z" />
+        <path fill="var(--custom-widget-color)" d="M61 18c12 9 17 22 17 38L60 74 42 56c16-8 22-20 19-38Z" />
+        <circle cx="61" cy="39" r="8" fill="#1d2a44" />
+        <path fill="#ff796b" d="M42 62 29 79l19-8 8-8Z" />
+        <path fill="#78e6d5" d="m31 57-14 6 14 9 9-9Z" />
+        <path fill="#ffc45e" d="M28 70c-7 3-13 11-14 18 8-1 15-7 18-14Z" />
+      </svg>
+    )
+  }
+
+  if (sticker === 'heart') {
+    return (
+      <svg className="canvas-sticker" viewBox="0 0 96 96" role="img" aria-label="爱心贴纸">
+        <path fill="var(--custom-widget-color)" d="M48 82 17 52C3 38 12 14 31 14c8 0 14 4 17 10 4-6 10-10 17-10 20 0 29 24 15 38Z" />
+        <path fill="#fff1f5" d="M29 25c-7 1-11 8-9 15 1 3 4 3 5 0 2-6 6-10 12-11 3 0 3-4-1-4Z" />
+      </svg>
+    )
+  }
+
+  if (sticker === 'gift') {
+    return (
+      <svg className="canvas-sticker" viewBox="0 0 96 96" role="img" aria-label="礼物贴纸">
+        <path fill="#ff7a91" d="M16 42h64v42H16z" />
+        <path fill="#ffb8c5" d="M12 34h72v16H12z" />
+        <path fill="var(--custom-widget-color)" d="M42 34h12v50H42zM18 20c11-9 23-5 30 14H20c-8-4-9-10-2-14Zm60 0c7 4 6 10-2 14H48c7-19 19-23 30-14Z" />
+      </svg>
+    )
+  }
+
+  return (
+    <svg className="canvas-sticker" viewBox="0 0 96 96" role="img" aria-label="星光贴纸">
+      <path fill="var(--custom-widget-color)" d="m48 8 8 28 28 8-28 8-8 28-8-28-28-8 28-8Z" />
+      <path fill="#f4f8ff" d="m74 52 4 14 14 4-14 4-4 14-4-14-14-4 14-4Z" />
+      <path fill="#ff8ba0" d="m23 58 3 10 10 3-10 3-3 10-3-10-10-3 10-3Z" />
+    </svg>
+  )
+}
+
 export function CanvasCustomWidget({
   widget,
   selected,
@@ -311,11 +356,20 @@ export function CanvasCustomWidget({
   editable = true,
 }: CanvasCustomWidgetProps) {
   const isLeaderboard = widget.kind === 'leaderboard'
+  const isSticker = widget.kind === 'sticker'
+  const isImage = widget.kind === 'image'
+  const ariaLabel = isLeaderboard
+    ? `${widget.detail}组件`
+    : isSticker
+      ? '贴纸组件'
+      : isImage
+        ? '图片组件'
+        : '文字源组件'
 
   return (
     <DraggableWidget
-      className={`canvas-custom-widget ${isLeaderboard ? 'canvas-leaderboard-widget' : ''} size-${widget.size}`}
-      ariaLabel={isLeaderboard ? `${widget.detail}组件` : '自定义画布组件'}
+      className={`canvas-custom-widget ${isLeaderboard ? 'canvas-leaderboard-widget' : ''} ${isSticker ? 'canvas-sticker-widget' : ''} ${isImage ? 'canvas-image-widget' : ''} ${widget.kind === 'text' ? 'canvas-intent-text-widget' : ''} size-${widget.size}`}
+      ariaLabel={ariaLabel}
       selected={editable && selected}
       editable={editable}
       offset={offset}
@@ -337,6 +391,10 @@ export function CanvasCustomWidget({
             ))}
           </div>
         </>
+      ) : isSticker ? (
+        <CanvasVectorSticker sticker={widget.sticker} />
+      ) : isImage ? (
+        <img src={widget.imageUrl} alt={widget.title || '直播图片组件'} />
       ) : (
         <>
           <b>{widget.title}</b>
