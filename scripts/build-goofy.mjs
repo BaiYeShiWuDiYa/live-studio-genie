@@ -1,11 +1,5 @@
 import { build } from "esbuild";
-import {
-  chmodSync,
-  cpSync,
-  mkdirSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { chmodSync, cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
@@ -21,8 +15,13 @@ await build({
   format: "esm",
   outfile: resolve(output, "server.mjs"),
   platform: "node",
-  target: "node20",
+  target: "node18",
 });
+
+writeFileSync(
+  resolve(output, "bootstrap.js"),
+  'import { startServer } from "./server.mjs";\nstartServer();\n',
+);
 
 writeFileSync(
   resolve(output, "package.json"),

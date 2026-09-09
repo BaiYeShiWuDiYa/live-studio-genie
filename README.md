@@ -110,7 +110,8 @@ GitHub Pages 仅托管静态文件，不会运行 `vite.config.ts` 中的 Genie 
 Node.js：20.19+
 SCM 构建命令：bash build.sh
 SCM 产物目录：output
-启动命令：npm start
+Goofy 启动入口：node bootstrap.js
+本地启动命令：npm start
 服务端口：PORT 环境变量，默认 8080
 健康检查：/healthz
 ```

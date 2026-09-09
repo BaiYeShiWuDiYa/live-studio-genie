@@ -112,7 +112,7 @@ export function createStudioServer(options: StudioServerOptions = {}) {
   });
 }
 
-function startServer() {
+export function startServer() {
   const port = Number.parseInt(process.env.PORT || "8080", 10);
   const server = createStudioServer();
 
